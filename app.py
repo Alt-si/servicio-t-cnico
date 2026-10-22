@@ -22,7 +22,7 @@ app.secret_key = os.environ.get("SECRET_KEY") or _clave_secreta.read_text().stri
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("INSECURE_COOKIES") != "1",
-    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14, MAX_CONTENT_LENGTH=4 * 1024 * 1024)
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14, MAX_CONTENT_LENGTH=64 * 1024 * 1024)
 core.crear_cuentas()
 
 # --------------------------------------------------------------------------- seguridad
@@ -612,6 +612,59 @@ def configuracion():
         return redirect(url_for("configuracion"))
     return render_template("configuracion.html", codigo_defecto=core.codigo_por_defecto(cid),
                            rec_email=core.leer_config(cid, "rec_email", ""))
+
+
+@app.route("/configuracion/respaldo")
+@login_requerido
+def respaldo():
+    import tempfile, zipfile
+    with tempfile.TemporaryDirectory() as tmp:
+        base = os.path.join(tmp, "base.db")
+        core.exportar_base(g.cuenta["id"], base)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(base, "base.db")
+    nombre = "respaldo_%s.zip" % time.strftime("%Y-%m-%d_%H%M")
+    return Response(buf.getvalue(), mimetype="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@app.route("/configuracion/cargar", methods=["POST"])
+@login_requerido
+def cargar_base():
+    import tempfile, zipfile
+    if not core.codigo_es_valido(g.cuenta["id"], request.form.get("codigo")):
+        flash("Código de validación incorrecto: no se cargó nada.", "error")
+        return redirect(url_for("configuracion"))
+    archivo = request.files.get("archivo")
+    if not archivo or not archivo.filename:
+        flash("Elegí el archivo a cargar.", "error")
+        return redirect(url_for("configuracion"))
+    nombre = archivo.filename.lower()
+    if nombre.endswith(".rar"):
+        flash("Los archivos .rar no se pueden abrir acá. Comprimilo como .zip o subí directamente el archivo .db.", "error")
+        return redirect(url_for("configuracion"))
+    with tempfile.TemporaryDirectory() as tmp:
+        ruta = os.path.join(tmp, "entrada.db")
+        try:
+            if nombre.endswith(".zip"):
+                with zipfile.ZipFile(archivo.stream) as z:
+                    dbs = [n for n in z.namelist() if n.lower().endswith(".db") and not n.endswith("/")]
+                    if not dbs:
+                        raise ValueError("El .zip no contiene ningún archivo .db.")
+                    with z.open(dbs[0]) as o, open(ruta, "wb") as f:
+                        f.write(o.read(60 * 1024 * 1024))
+            else:
+                archivo.save(ruta)
+            resumen = core.importar_base(g.cuenta["id"], ruta)
+        except zipfile.BadZipFile:
+            flash("El .zip está dañado.", "error")
+            return redirect(url_for("configuracion"))
+        except ValueError as e:
+            flash(str(e), "error")
+            return redirect(url_for("configuracion"))
+    flash("Base cargada: " + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in resumen.items()) + ".", "ok")
+    return redirect(url_for("configuracion"))
 
 
 @app.route("/logo")

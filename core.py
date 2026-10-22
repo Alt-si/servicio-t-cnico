@@ -351,3 +351,55 @@ def codigo_por_defecto(cuenta_id):
 def registrar_evento(con, orden_id, estado, nota):
     con.execute("INSERT INTO historial_ordenes (orden_id, fecha, estado, nota) VALUES (?,?,?,?)",
                 (orden_id, ahora(), estado, nota))
+
+
+# ---------------------------------------------------------------- respaldo / carga de base
+TABLAS_DATOS = ("clientes", "equipos", "ordenes", "historial_ordenes")
+
+
+def exportar_base(cuenta_id, destino):
+    """Copia consistente de la base del comercio (API de backup de SQLite)."""
+    origen = conectar(cuenta_id)
+    try:
+        dst = sqlite3.connect(destino)
+        with dst:
+            origen.backup(dst)
+        dst.close()
+    finally:
+        origen.close()
+
+
+def importar_base(cuenta_id, ruta):
+    """Reemplaza los datos del comercio con los de otra base SQLite (respaldo web o agenda de escritorio).
+    Solo se copian las columnas que existen en ambas. Devuelve {tabla: filas}. Lanza ValueError si no sirve."""
+    try:
+        src = sqlite3.connect(f"file:{ruta}?mode=ro", uri=True)
+        tablas = {r[0] for r in src.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    except sqlite3.Error:
+        raise ValueError("El archivo no es una base de datos válida.")
+    if "clientes" not in tablas:
+        src.close()
+        raise ValueError("El archivo no contiene la tabla de clientes: no parece una base de este sistema.")
+    # copia de seguridad de lo que había
+    previa = ruta_base(cuenta_id).with_name(f"{cuenta_id}.previa.db")
+    exportar_base(cuenta_id, previa)
+    dst = conectar(cuenta_id)
+    resumen = {}
+    try:
+        with dst:
+            for tabla in reversed(TABLAS_DATOS):
+                dst.execute(f"DELETE FROM {tabla}")
+            for tabla in TABLAS_DATOS:
+                if tabla not in tablas:
+                    continue
+                cols_d = [r[1] for r in dst.execute(f"PRAGMA table_info({tabla})")]
+                cols = [r[1] for r in src.execute(f"PRAGMA table_info({tabla})") if r[1] in cols_d]
+                filas = src.execute(f"SELECT {','.join(cols)} FROM {tabla}").fetchall()
+                dst.executemany(f"INSERT INTO {tabla} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", filas)
+                resumen[tabla] = len(filas)
+            if "config" in tablas:
+                for clave, valor in src.execute("SELECT clave, valor FROM config WHERE clave LIKE 'marca_%'"):
+                    dst.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (clave, valor))
+    finally:
+        src.close()
+    return resumen

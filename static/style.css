@@ -62,3 +62,5 @@ tbody.clientes tr{border-bottom:1px solid var(--bd)}
 :root[data-theme=dark] .e-scrap{background:#991b1b;color:#ffffff}
 .e-equipo-comprado{background:#9ca3af;color:#111827}
 :root[data-theme=dark] .e-equipo-comprado{background:#4b5563;color:#f3f4f6}
+
+tr.rec-vencido{background:#dc2626;color:#fff}tr.rec-hoy{background:#f97316;color:#fff}tr.rec-hecho{opacity:.55}

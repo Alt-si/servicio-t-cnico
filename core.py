@@ -33,8 +33,17 @@ COLOR_POR_DEFECTO = "#2f5bea"
 
 
 # ---------------------------------------------------------------- utilidades
+ZONA = os.environ.get("APP_TZ", "America/Argentina/Buenos_Aires")
+
+
+def ahora_dt():
+    """Hora local del comercio (el servidor suele estar en UTC)."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo(ZONA)).replace(tzinfo=None)
+
+
 def ahora():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return ahora_dt().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def fmt_fecha(txt, con_hora=False):
@@ -293,6 +302,11 @@ def crear_base(cuenta_id):
                 id INTEGER PRIMARY KEY AUTOINCREMENT, orden_id INTEGER NOT NULL,
                 fecha TEXT NOT NULL, estado TEXT, nota TEXT
             );
+            CREATE TABLE IF NOT EXISTS recordatorios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha_hora TEXT NOT NULL, descripcion TEXT NOT NULL,
+                hecho INTEGER NOT NULL DEFAULT 0, avisado INTEGER NOT NULL DEFAULT 0, creado TEXT
+            );
             CREATE TABLE IF NOT EXISTS config (clave TEXT PRIMARY KEY, valor TEXT);
             CREATE INDEX IF NOT EXISTS ix_equipos_cliente ON equipos(cliente_id);
             CREATE INDEX IF NOT EXISTS ix_ordenes_cliente ON ordenes(cliente_id);
@@ -403,3 +417,27 @@ def importar_base(cuenta_id, ruta):
     finally:
         src.close()
     return resumen
+
+
+# ---------------------------------------------------------------- recordatorios
+DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+
+
+def clasificar_recordatorio(fecha_hora, hecho=0):
+    """(estado, texto corto): vencido, hoy, manana, proximo o hecho."""
+    from datetime import timedelta
+    try:
+        dt = datetime.strptime(fecha_hora, "%Y-%m-%d %H:%M")
+    except (TypeError, ValueError):
+        return "proximo", fecha_hora or ""
+    largo = f"{DIAS[dt.weekday()].capitalize()} {dt.strftime('%d/%m/%Y')}"
+    if hecho:
+        return "hecho", f"{largo}  {dt.strftime('%H:%M')}"
+    n = ahora_dt()
+    if dt < n:
+        return "vencido", f"VENCIDO · {largo}  {dt.strftime('%H:%M')}"
+    if dt.date() == n.date():
+        return "hoy", "HOY · " + dt.strftime("%H:%M")
+    if dt.date() == (n + timedelta(days=1)).date():
+        return "manana", "Mañana · " + dt.strftime("%H:%M")
+    return "proximo", f"{largo}  ·  {dt.strftime('%H:%M')}"

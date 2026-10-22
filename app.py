@@ -25,6 +25,9 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14, MAX_CONTENT_LENGTH=64 * 1024 * 1024)
 core.crear_cuentas()
 
+_bases_listas = set()
+
+
 # --------------------------------------------------------------------------- seguridad
 _intentos = {}          # (ip, mail) -> [instantes de intentos fallidos]
 
@@ -62,6 +65,9 @@ def antes():
         if not g.cuenta or not g.cuenta["activa"]:
             session.clear()
             g.cuenta = None
+        elif g.cuenta["id"] not in _bases_listas:
+            core.crear_base(g.cuenta["id"])      # agrega tablas nuevas a comercios existentes
+            _bases_listas.add(g.cuenta["id"])
 
 
 @app.after_request
@@ -665,6 +671,87 @@ def cargar_base():
             return redirect(url_for("configuracion"))
     flash("Base cargada: " + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in resumen.items()) + ".", "ok")
     return redirect(url_for("configuracion"))
+
+
+# --------------------------------------------------------------------------- recordatorios
+def _fecha_hora(d):
+    from datetime import datetime as _dt
+    try:
+        return _dt.strptime(f"{d.get('fecha')} {d.get('hora')}", "%Y-%m-%d %H:%M").strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return None
+
+
+@app.route("/recordatorios")
+@login_requerido
+def recordatorios():
+    filtro = request.args.get("ver", "pendientes")
+    sql = "SELECT * FROM recordatorios"
+    sql += {"pendientes": " WHERE hecho=0 ORDER BY fecha_hora ASC", "hechos": " WHERE hecho=1 ORDER BY fecha_hora DESC"}.get(
+        filtro, " ORDER BY hecho ASC, fecha_hora ASC")
+    with db() as con:
+        filas = con.execute(sql).fetchall()
+    items = []
+    for f in filas:
+        estado, texto = core.clasificar_recordatorio(f["fecha_hora"], f["hecho"])
+        items.append(dict(id=f["id"], fecha_hora=f["fecha_hora"], descripcion=f["descripcion"], estado=estado, texto=texto))
+    base = core.ahora_dt()
+    return render_template("recordatorios.html", items=items, filtro=filtro,
+                           hoy=base.strftime("%Y-%m-%d"), hora_defecto=(base.replace(minute=0, second=0) + __import__("datetime").timedelta(hours=1)).strftime("%H:%M"))
+
+
+@app.route("/api/recordatorio", methods=["POST"])
+@login_requerido
+def api_recordatorio_guardar():
+    d = request.get_json(force=True, silent=True) or {}
+    desc = (d.get("descripcion") or "").strip()
+    fh = _fecha_hora(d)
+    if not desc:
+        return error("Escribí la descripción del recordatorio.")
+    if not fh:
+        return error("Fecha u hora inválida.")
+    with db() as con:
+        if d.get("id"):
+            con.execute("UPDATE recordatorios SET fecha_hora=?, descripcion=?, avisado=0 WHERE id=?", (fh, desc, d["id"]))
+        else:
+            con.execute("INSERT INTO recordatorios (fecha_hora, descripcion, creado) VALUES (?,?,?)", (fh, desc, core.ahora()))
+    return jsonify(ok=True)
+
+
+@app.route("/api/recordatorio/<int:rid>/<accion>", methods=["POST"])
+@login_requerido
+def api_recordatorio_accion(rid, accion):
+    from datetime import timedelta
+    with db() as con:
+        if accion == "alternar":
+            con.execute("UPDATE recordatorios SET hecho = 1 - hecho WHERE id=?", (rid,))
+        elif accion == "hecho":
+            con.execute("UPDATE recordatorios SET hecho=1 WHERE id=?", (rid,))
+        elif accion == "posponer":
+            nuevo = (core.ahora_dt() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M")
+            con.execute("UPDATE recordatorios SET fecha_hora=?, avisado=0 WHERE id=?", (nuevo, rid))
+        elif accion == "eliminar":
+            con.execute("DELETE FROM recordatorios WHERE id=?", (rid,))
+        else:
+            return error("Acción desconocida.", 404)
+    return jsonify(ok=True)
+
+
+@app.route("/api/recordatorios/avisos")
+@login_requerido
+def api_recordatorios_avisos():
+    """Recordatorios cuya hora llegó y no se avisaron; se marcan como avisados. Además, cuántos hay vencidos/de hoy."""
+    ahora_txt = core.ahora_dt().strftime("%Y-%m-%d %H:%M")
+    with db() as con:
+        vencidos = con.execute("SELECT id, fecha_hora, descripcion FROM recordatorios WHERE hecho=0 AND avisado=0 AND fecha_hora<=? "
+                               "ORDER BY fecha_hora LIMIT 3", (ahora_txt,)).fetchall()
+        for f in vencidos:
+            con.execute("UPDATE recordatorios SET avisado=1 WHERE id=?", (f["id"],))
+        pendientes = con.execute("SELECT COUNT(*) FROM recordatorios WHERE hecho=0 AND fecha_hora<=?",
+                                 (ahora_txt[:10] + " 23:59",)).fetchone()[0]
+    return jsonify(ok=True, pendientes=pendientes, avisos=[
+        dict(id=f["id"], cuando=core.clasificar_recordatorio(f["fecha_hora"])[1].replace("VENCIDO · ", ""), descripcion=f["descripcion"])
+        for f in vencidos])
 
 
 @app.route("/logo")

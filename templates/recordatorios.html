@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row" style="margin-bottom:6px"><h1 style="margin:0">Recordatorios <span class="mut" style="font-size:14px">({{ items|length }})</span></h1>
+    <button class="btn pri der" onclick="recForm()">+ Nuevo recordatorio</button></div>
+  <p class="mut">Avisos con fecha y hora: cuando llega el momento aparece una ventana con sonido en cualquier pantalla del sistema que esté abierta.</p>
+  <div class="filtros">{% for k, t in (('pendientes','Pendientes'),('hechos','Hechos'),('todos','Todos')) %}
+    <a class="btn {{ 'sel' if filtro==k }}" href="?ver={{ k }}">{{ t }}</a>{% endfor %}</div>
+  <div class="tabla-wrap"><table>
+    <thead><tr><th>Cuándo</th><th>Descripción</th><th>Estado</th><th></th></tr></thead><tbody class="clientes">
+    {% for r in items %}<tr class="rec-{{ r.estado }}"><td style="white-space:nowrap">{{ r.texto }}</td><td style="white-space:pre-wrap">{{ r.descripcion }}</td>
+      <td>{{ {'vencido':'Vencido','hoy':'Hoy','manana':'Mañana','proximo':'Pendiente','hecho':'Hecho'}[r.estado] }}</td>
+      <td style="white-space:nowrap">
+        <button class="btn" data-a="alternar" data-id="{{ r.id }}">{{ 'Reabrir' if r.estado=='hecho' else 'Hecho' }}</button>
+        <button class="btn" onclick='recForm({{ {"id": r.id, "fecha_hora": r.fecha_hora, "descripcion": r.descripcion}|tojson }})'>Editar</button>
+        <button class="btn" data-a="eliminar" data-id="{{ r.id }}">Eliminar</button></td></tr>
+    {% else %}<tr><td colspan="4" class="mut">No hay recordatorios.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}
+{% block js %}<script>
+const HOY="{{ hoy }}", HORA="{{ hora_defecto }}";
+document.querySelectorAll('[data-a]').forEach(b=>b.onclick=async()=>{
+  if(b.dataset.a==='eliminar' && !await confirmar('¿Eliminar este recordatorio?')) return;
+  const j=await api(`/api/recordatorio/${b.dataset.id}/${b.dataset.a}`,{}); if(j.ok) location.reload(); else aviso(j.error)});
+function recForm(r){
+  r=r||{}; const [f,h]=(r.fecha_hora||(HOY+' '+HORA)).split(' ');
+  const c=modal(`<h2>${r.id?'Editar':'Nuevo'} recordatorio</h2><div id="r-err" class="msg error" style="display:none"></div>
+    <div class="grid"><div><label>Fecha</label><input type="date" id="r-f" value="${f}"></div><div><label>Hora (24 h)</label><input type="time" id="r-h" value="${h}"></div></div>
+    <label>Descripción</label><textarea id="r-d">${esc(r.descripcion||'')}</textarea>
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="r-ok">Guardar recordatorio</button><button class="btn" id="r-no">Cancelar</button></div>`);
+  $('#r-no',c).onclick=cerrar;
+  $('#r-ok',c).onclick=async()=>{const j=await api('/api/recordatorio',{id:r.id,fecha:$('#r-f',c).value,hora:$('#r-h',c).value,descripcion:$('#r-d',c).value});
+    if(j.ok) location.reload(); else {const e=$('#r-err',c); e.textContent=j.error; e.style.display='block'}};
+}
+</script>{% endblock %}

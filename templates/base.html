@@ -13,6 +13,7 @@
   <nav>
     <a href="{{ url_for('ordenes') }}" class="{{ 'act' if request.endpoint in ('ordenes','orden_ver','orden_nueva') }}">Órdenes</a>
     <a href="{{ url_for('clientes') }}" class="{{ 'act' if request.endpoint=='clientes' }}">Clientes</a>
+    <a href="{{ url_for('recordatorios') }}" id="nav-rec" class="{{ 'act' if request.endpoint=='recordatorios' }}">Recordatorios</a>
     <a href="{{ url_for('configuracion') }}" class="{{ 'act' if request.endpoint=='configuracion' }}">Configuración</a>
     {% if cuenta.es_admin %}<a href="{{ url_for('admin') }}" class="{{ 'act' if request.endpoint=='admin' }}">Cuentas</a>{% endif %}
     <button type="button" id="tema" title="Modo oscuro">◐</button>
@@ -25,6 +26,7 @@
 {% block cuerpo %}{% endblock %}
 </main>
 <div class="modal" id="modal"><div class="caja" id="modal-caja"></div></div>
+<script>window.HAY_SESION={{ "true" if cuenta else "false" }};</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 {% block js %}{% endblock %}
 </body></html>

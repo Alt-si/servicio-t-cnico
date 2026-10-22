@@ -71,3 +71,37 @@ function ofrecerWhatsApp(titulo, numero, texto) {
     $('#wa-no', c).onclick = () => { cerrar(); res(false); };
   });
 }
+
+// ----- Recordatorios: aviso cuando llega la hora (consulta cada 20 s)
+function sonido() {
+  try {
+    const a = new (window.AudioContext || window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain();
+    o.connect(g); g.connect(a.destination); o.frequency.value = 880; g.gain.value = 0.15; o.start();
+    setTimeout(() => { o.stop(); a.close(); }, 600);
+  } catch (e) {}
+}
+const colaAvisos = []; let mostrando = false;
+function siguienteAviso() {
+  if (mostrando || !colaAvisos.length) return;
+  mostrando = true;
+  const r = colaAvisos.shift();
+  const c = modal(`<div style="background:#f97316;color:#fff;margin:-18px -18px 12px;padding:12px 18px;border-radius:10px 10px 0 0">
+      <b style="font-size:16px">RECORDATORIO</b><br>${esc(r.cuando)}</div>
+    <p style="font-size:17px;white-space:pre-wrap">${esc(r.descripcion)}</p>
+    <div class="row"><button class="btn pri" id="r-hecho">Hecho</button><button class="btn" id="r-pos">Posponer 10 min</button><button class="btn" id="r-cer">Cerrar</button></div>`);
+  sonido();
+  const fin = async (acc) => { if (acc) await api(`/api/recordatorio/${r.id}/${acc}`, {}); cerrar(); mostrando = false; revisarRecordatorios(); siguienteAviso(); };
+  $('#r-hecho', c).onclick = () => fin('hecho'); $('#r-pos', c).onclick = () => fin('posponer'); $('#r-cer', c).onclick = () => fin(null);
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('Recordatorio', {body: r.descripcion}); } catch (e) {}
+}
+async function revisarRecordatorios() {
+  if (!window.HAY_SESION) return;
+  const j = await api('/api/recordatorios/avisos');
+  if (!j.ok) return;
+  const n = $('#nav-rec'); if (n) n.textContent = j.pendientes ? `Recordatorios (${j.pendientes})` : 'Recordatorios';
+  (j.avisos || []).forEach(a => colaAvisos.push(a)); siguienteAviso();
+}
+if (window.HAY_SESION) {
+  try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
+  revisarRecordatorios(); setInterval(revisarRecordatorios, 20000);
+}

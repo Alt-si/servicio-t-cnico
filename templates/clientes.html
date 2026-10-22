@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row" style="margin-bottom:10px"><h1 style="margin:0">Clientes ({{ filas|length }})</h1>
+    <button class="btn pri der" onclick="clienteForm()">+ Nuevo cliente</button></div>
+  <form method="get" class="row" style="margin-bottom:10px">
+    <input name="q" value="{{ q }}" placeholder="Buscar cliente, teléfono, CUIT, equipo, N° de orden…" style="flex:1;min-width:200px">
+    <button class="btn">Buscar</button></form>
+  <div class="tabla-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Teléfono</th><th class="ocu">Ciudad</th><th class="ocu">CUIT / IVA</th><th></th></tr></thead>
+    <tbody class="clientes">
+    {% for c in filas %}
+    <tr><td><b>{{ c.apellido }}, {{ c.nombre }}</b></td><td>{{ c.telefono or '' }}</td><td class="ocu">{{ c.ciudad or '' }}</td>
+      <td class="ocu">{{ c.cuit or '' }}{% if c.cuit %} · {{ c.condicion_iva }}{% endif %}</td>
+      <td style="white-space:nowrap">
+        <a class="btn" href="{{ url_for('orden_nueva', cliente=c.id) }}">Nueva orden</a>
+        <button class="btn" onclick='historial({{ c.id }})'>Historial</button>
+        <button class="btn" onclick='clienteForm({{ c|tojson_cliente }})'>Editar</button></td></tr>
+    {% else %}<tr><td colspan="5" class="mut">No hay clientes.</td></tr>{% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}
+{% block js %}<script>const IVA={{ IVA|tojson }};</script><script src="{{ url_for('static', filename='clientes.js') }}"></script>{% endblock %}

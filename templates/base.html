@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block titulo %}{{ marca.nombre if marca else 'Servicio técnico' }}{% endblock %}</title>
+<meta name="csrf" content="{{ csrf_token() }}">
+<script>try{var t=localStorage.getItem('tema');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% if marca %}<style>:root{--brand:{{ marca.color }}}</style>{% endif %}
+</head><body>
+{% if cuenta %}
+<header class="top">
+  {% if marca.tiene_logo %}<img src="{{ url_for('logo') }}" width="{{ marca.logo_ancho }}" height="{{ marca.logo_alto }}" alt="">{% endif %}
+  <div><div class="nom">{{ marca.nombre }}</div><div class="sub">{{ marca.subtitulo }}</div></div>
+  <nav>
+    <a href="{{ url_for('ordenes') }}" class="{{ 'act' if request.endpoint in ('ordenes','orden_ver','orden_nueva') }}">Órdenes</a>
+    <a href="{{ url_for('clientes') }}" class="{{ 'act' if request.endpoint=='clientes' }}">Clientes</a>
+    <a href="{{ url_for('configuracion') }}" class="{{ 'act' if request.endpoint=='configuracion' }}">Configuración</a>
+    {% if cuenta.es_admin %}<a href="{{ url_for('admin') }}" class="{{ 'act' if request.endpoint=='admin' }}">Cuentas</a>{% endif %}
+    <button type="button" id="tema" title="Modo oscuro">◐</button>
+    <form method="post" action="{{ url_for('logout') }}" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button>Salir</button></form>
+  </nav>
+</header>
+{% endif %}
+<main>
+{% with m = get_flashed_messages(with_categories=true) %}{% for c, t in m %}<div class="msg {{ c }}">{{ t }}</div>{% endfor %}{% endwith %}
+{% block cuerpo %}{% endblock %}
+</main>
+<div class="modal" id="modal"><div class="caja" id="modal-caja"></div></div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block js %}{% endblock %}
+</body></html>

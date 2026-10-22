@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+{% set eq = equipo or {} %}
+<div class="card">
+  <div class="row"><h1 style="margin:0">{% if o %}Orden #{{ '%05d' % o.id }}{% else %}Nueva orden{% endif %}</h1>
+    {% if o %}<span class="pill e-{{ o.estado.lower().replace(' ','-') }}" id="pill-estado">{{ o.estado }}</span>
+      {% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">Presupuesto no aceptado</span>{% elif o.presupuesto_respuesta=='aceptado' %}<span class="pill" style="background:#e5e7eb;color:#111">Presupuesto aceptado</span>{% endif %}{% endif %}
+    <a class="btn der" href="{{ url_for('ordenes') }}">← Volver</a></div>
+  <div id="err" class="msg error" style="display:none;margin-top:10px"></div>
+
+  <h2 style="margin-top:14px">Cliente</h2>
+  {% if cliente %}<p><b>{{ cliente.apellido }}, {{ cliente.nombre }}</b>{% if cliente.telefono %} · {{ cliente.telefono }}{% endif %}</p>
+  {% else %}<input id="busca-cliente" placeholder="Escribí nombre o teléfono para buscar…" autocomplete="off"><div id="sugeridos"></div>
+  <p class="mut">¿No existe? <a href="{{ url_for('clientes') }}">Cargalo primero en Clientes</a>.</p>{% endif %}
+
+  <h2 style="margin-top:14px">Equipo</h2>
+  {% if not o and cliente %}<div class="grid"><div><label>Equipos anteriores de este cliente</label><select id="prev-equipo"><option value="">Equipo nuevo</option></select></div></div>{% endif %}
+  <div class="grid">
+    <div><label>Tipo *</label><select id="tipo">{% for t in TIPOS %}<option {{ 'selected' if eq.tipo==t }}>{{ t }}</option>{% endfor %}</select></div>
+    <div><label>Marca</label><input id="marca" value="{{ eq.marca or '' }}"></div>
+    <div><label>Modelo</label><input id="modelo" value="{{ eq.modelo or '' }}"></div>
+    <div><label>N° de serie</label><input id="serie" value="{{ eq.serie or '' }}"></div>
+    <div><label>Clave de acceso del equipo</label><input id="clave_acceso" value="{{ eq.clave_acceso or '' }}"></div>
+    <div><label>Descripción / estado físico</label><input id="descripcion" value="{{ eq.descripcion or '' }}"></div>
+  </div>
+  <label><input type="checkbox" id="en_garantia" {{ 'checked' if eq.en_garantia }}>En garantía</label>
+
+  <h2 style="margin-top:14px">Falla y presupuesto</h2>
+  <label>Falla reportada *</label><textarea id="falla">{{ o.falla if o else '' }}</textarea>
+  <label>Accesorios entregados</label><input id="accesorios" value="{{ o.accesorios if o and o.accesorios else '' }}">
+  <div class="grid">
+    <div><label>Presupuesto ($)</label><input id="monto" inputmode="decimal" value="{{ o.presupuesto_monto if o and o.presupuesto_monto is not none else '' }}"></div>
+    <div><label>Seña ($)</label><input id="sena" inputmode="decimal" value="{{ o.sena_monto if o and o.sena_monto is not none else '' }}"></div>
+    <div><label>Saldo a abonar</label><div class="saldo" id="saldo">—</div></div>
+  </div>
+  <label>Detalle del presupuesto</label><textarea id="detalle">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>
+  <label><input type="checkbox" id="espera_repuesto" {{ 'checked' if o and o.espera_repuesto }}>Esperando repuesto</label>
+  {% if o %}<div class="grid" style="margin-top:6px"><div><label>Estado</label>
+    <select id="estado">{% for e in ESTADOS %}<option {{ 'selected' if o.estado==e }}>{{ e }}</option>{% endfor %}</select></div></div>{% endif %}
+
+  <div class="row" style="margin-top:16px">
+    <button class="btn pri" id="guardar">{{ 'Guardar cambios' if o else 'Crear orden' }}</button>
+  </div>
+</div>
+
+{% if o %}
+<div class="card"><h2>Acciones</h2><div class="row" id="acciones"></div></div>
+<div class="card"><h2>Historial</h2><ul class="hist" id="hist"></ul></div>
+{% endif %}
+{% endblock %}
+{% block js %}
+<script>
+const ORDEN = {{ ({
+  'id': o.id if o else None, 'estado': o.estado if o else None, 'resp': o.presupuesto_respuesta if o else None,
+  'dev': o.reembolso_monto if o else None, 'cliente_id': cliente.id if cliente else None,
+  'equipo_id': (o.equipo_id if o else None), 'wa': wa_numero if o else '', 'nombre': nombre_pila if o else '',
+  'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre
+}) | tojson }};
+</script>
+<script src="{{ url_for('static', filename='orden.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card"><h1>Configuración del comercio</h1>
+<form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="grid">
+    <div><label>Nombre de la empresa</label><input name="nombre" value="{{ marca.nombre }}" required></div>
+    <div><label>Subtítulo</label><input name="subtitulo" value="{{ marca.subtitulo }}"></div>
+    <div><label>Color principal</label><input type="color" name="color" value="{{ marca.color }}"></div>
+    <div><label>Ancho del logo (px)</label><input type="number" name="logo_ancho" value="{{ marca.logo_ancho }}" min="24" max="300"></div>
+    <div><label>Alto del logo (px)</label><input type="number" name="logo_alto" value="{{ marca.logo_alto }}" min="24" max="200"></div>
+    <div><label>Logo (PNG o JPG)</label><input type="file" name="logo" accept="image/*"></div>
+  </div>
+  {% if marca.tiene_logo %}<label><input type="checkbox" name="quitar_logo">Quitar el logo actual</label>{% endif %}
+  <p><button class="btn pri">Guardar</button></p>
+</form></div>
+
+<div class="card"><h1>Código de validación</h1>
+  <p class="mut">Se pide para retroceder estados, deshacer respuestas del cliente o borrar el historial.
+  {% if codigo_defecto %}<b>Todavía usa el código por defecto (0000).</b>{% endif %}</p>
+  <div id="e-cod" class="msg error" style="display:none"></div>
+  <div class="grid">
+    <div><label>Código actual</label><input type="password" id="c-act" autocomplete="off"></div>
+    <div><label>Código nuevo (mín. 4)</label><input type="password" id="c-nue" autocomplete="off"></div>
+    <div><label>Repetir código nuevo</label><input type="password" id="c-rep" autocomplete="off"></div>
+    {% if not rec_email %}<div><label>Mail de recuperación (obligatorio la primera vez)</label><input type="email" id="c-mail"></div>{% endif %}
+  </div>
+  <p><button class="btn pri" id="c-ok">Cambiar código</button></p>
+</div>
+
+<div class="card"><h1>Mi clave de acceso</h1>
+  <div id="e-cl" class="msg error" style="display:none"></div>
+  <div class="grid">
+    <div><label>Clave actual</label><input type="password" id="k-act" autocomplete="current-password"></div>
+    <div><label>Clave nueva (mín. 8)</label><input type="password" id="k-nue" autocomplete="new-password"></div>
+    <div><label>Repetir clave nueva</label><input type="password" id="k-rep" autocomplete="new-password"></div>
+  </div>
+  <p><button class="btn pri" id="k-ok">Cambiar clave</button></p>
+</div>
+{% endblock %}
+{% block js %}<script>
+const msg=(id,t,ok)=>{const e=document.getElementById(id);e.textContent=t;e.className='msg '+(ok?'ok':'error');e.style.display='block'};
+document.getElementById('c-ok').onclick=async()=>{
+  const j=await api('/api/codigo/cambiar',{actual:$('#c-act').value,nuevo:$('#c-nue').value,repetir:$('#c-rep').value,mail:$('#c-mail')?.value});
+  if(j.ok){await aviso('El código se cambió correctamente.');location.reload()}else msg('e-cod',j.error)};
+document.getElementById('k-ok').onclick=async()=>{
+  const j=await api('/api/cuenta/clave',{actual:$('#k-act').value,nueva:$('#k-nue').value,repetir:$('#k-rep').value});
+  if(j.ok){msg('e-cl','Clave cambiada.',1);['k-act','k-nue','k-rep'].forEach(i=>$('#'+i).value='')}else msg('e-cl',j.error)};
+</script>{% endblock %}

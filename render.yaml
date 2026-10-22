@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: servicio-tecnico
+    runtime: python
+    plan: starter            # los discos persistentes requieren un plan pago
+    buildCommand: pip install -r requirements.txt
+    # 1 solo worker: SQLite + un solo disco
+    startCommand: gunicorn wsgi:app --workers 1 --threads 4 --bind 0.0.0.0:$PORT
+    healthCheckPath: /salud
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: PYTHON_VERSION
+        value: 3.12.3
+    disk:
+      name: datos
+      mountPath: /var/data
+      sizeGB: 1

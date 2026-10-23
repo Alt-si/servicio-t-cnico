@@ -47,6 +47,7 @@ def csrf_token():
 
 app.jinja_env.globals["csrf_token"] = csrf_token
 app.jinja_env.filters["nombre_cliente"] = core.nombre_cliente
+app.jinja_env.filters["wa_numero"] = core.telefono_whatsapp
 app.jinja_env.filters["monto_input"] = core.num_ar
 app.jinja_env.filters["tojson_cliente"] = lambda c: {k: c[k] for k in c.keys()}
 

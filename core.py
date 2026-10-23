@@ -557,4 +557,4 @@ def texto_ingreso(empresa, oid, fecha_ingreso, nombre_pila, tipo, marca, modelo,
         ticket.append(fila("Observ.:", limpio(observaciones)))
     ticket.append(raya)
     return (f"Hola, {nombre_pila}. Te enviamos el comprobante de ingreso de tu equipo.\n\n"
-            "```" + "\n".join(ticket) + "```\n\nGracias por confiar en nosotros.")
+            "```\n" + "\n".join(ticket) + "\n```\n\nGracias por confiar en nosotros.")

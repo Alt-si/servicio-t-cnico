@@ -379,10 +379,11 @@ def orden_ver(oid):
         o = cargar_orden(con, oid)
         cliente = con.execute("SELECT * FROM clientes WHERE id=?", (o["cliente_id"],)).fetchone()
         equipo = con.execute("SELECT * FROM equipos WHERE id=?", (o["equipo_id"],)).fetchone() if o["equipo_id"] else None
+        extras = [dict(monto=m, detalle=t) for m, t in opciones_de(con, oid)]
     equipo_txt = texto_equipo(equipo["tipo"], equipo["marca"], equipo["modelo"]) if equipo else "equipo"
     return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False,
                            wa_numero=telefono_whatsapp(cliente["telefono"]), equipo_txt=equipo_txt,
-                           nombre_pila=(cliente["nombre"] or "").strip().title())
+                           nombre_pila=(cliente["nombre"] or "").strip().title(), extras=extras)
 
 
 @app.route("/api/clientes/buscar")
@@ -403,6 +404,34 @@ def importes(d):
         return None, None, "Revisá el presupuesto y la seña (solo números)."
 
 
+def leer_opciones(d):
+    """Opciones adicionales de presupuesto del pedido: ([(monto, detalle)], mensaje de error)."""
+    extra = []
+    for it in (d.get("opciones") or [])[:5]:
+        try:
+            m = parse_monto(it.get("monto"))
+        except ValueError:
+            return None, "Revisá el monto de las opciones de presupuesto (solo números)."
+        det = U(it.get("detalle"))
+        if m is None and not det:
+            continue
+        if m is None:
+            return None, "Cada opción de presupuesto necesita un monto."
+        extra.append((m, det))
+    return extra, None
+
+
+def opciones_de(con, oid):
+    return [(r["monto"], r["detalle"] or "") for r in
+            con.execute("SELECT monto, detalle FROM presupuesto_opciones WHERE orden_id=? ORDER BY n", (oid,))]
+
+
+def guardar_opciones(con, oid, extra):
+    con.execute("DELETE FROM presupuesto_opciones WHERE orden_id=?", (oid,))
+    for n, (m, det) in enumerate(extra, 2):
+        con.execute("INSERT INTO presupuesto_opciones (orden_id, n, monto, detalle) VALUES (?,?,?,?)", (oid, n, m, det))
+
+
 def pide_codigo(d, motivo):
     """None si el código es correcto; si no, la respuesta de error que hace que el navegador lo pida."""
     if core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
@@ -417,6 +446,11 @@ def api_orden_crear():
     monto, sena, msg = importes(d)
     if msg:
         return error(msg)
+    extra, msg = leer_opciones(d)
+    if msg:
+        return error(msg)
+    if extra and monto is None:
+        return error("Cargá el precio de la opción 1 antes de agregar otras opciones.")
     falla = U(d.get("falla"))
     tipo = (d.get("tipo") or "").strip()
     if not falla:
@@ -449,6 +483,9 @@ def api_orden_crear():
         core.registrar_evento(con, oid, estado, "Ingreso del equipo al taller")
         if monto is not None or detalle:
             core.registrar_evento(con, oid, estado, core.texto_evento_presupuesto(monto, detalle, True))
+        if extra:
+            guardar_opciones(con, oid, extra)
+            core.registrar_evento(con, oid, estado, "Opciones adicionales de presupuesto - " + core.texto_opciones(extra))
         if sena:
             core.registrar_evento(con, oid, estado, f"Seña recibida: {fmt_monto(sena)}")
         if d.get("espera_repuesto"):
@@ -467,6 +504,14 @@ def api_orden_guardar(oid):
         if msg:
             return error(msg)
         detalle = U(d.get("detalle"))
+        extra, msg = leer_opciones(d)
+        if msg:
+            return error(msg)
+        previas = opciones_de(con, oid)
+        if extra and monto is None:
+            return error("Cargá el precio de la opción 1 antes de agregar otras opciones.")
+        if resp and [tuple(x) for x in extra] != previas:
+            return error("El presupuesto ya fue respondido: no se pueden modificar las opciones.")
         # Con el presupuesto respondido se bloquea el precio; con «no aceptado» también la seña.
         if resp:
             if (monto, detalle) != (o["presupuesto_monto"], (o["presupuesto_detalle"] or "")):
@@ -511,6 +556,10 @@ def api_orden_guardar(oid):
             core.registrar_evento(con, oid, estado, core.texto_evento_estado(o["estado"], estado, a_abonar, bool(dev)))
         if (monto, detalle) != (o["presupuesto_monto"], (o["presupuesto_detalle"] or "")):
             core.registrar_evento(con, oid, estado, core.texto_evento_presupuesto(monto, detalle, False))
+        if extra != previas:
+            guardar_opciones(con, oid, extra)
+            core.registrar_evento(con, oid, estado, ("Opciones adicionales de presupuesto - " + core.texto_opciones(extra)) if extra
+                                  else "Opciones adicionales de presupuesto quitadas")
         if repuesto != o["espera_repuesto"]:
             core.registrar_evento(con, oid, estado, "Esperando repuesto" if repuesto else "Repuesto recibido")
         if sena != o["sena_monto"]:
@@ -543,6 +592,23 @@ def api_orden_accion(oid):
             if accion == "aceptar" and monto is None:
                 return error("Cargá el presupuesto antes de marcar que el cliente lo acepta.")
             nueva = "aceptado" if accion == "aceptar" else "rechazado"
+            extras = opciones_de(con, oid)
+            elegida = None
+            if accion == "aceptar" and extras:
+                todas = [(monto, o["presupuesto_detalle"] or "")] + extras
+                try:
+                    elegida = int(d.get("opcion"))
+                except (TypeError, ValueError):
+                    elegida = 0
+                if not 1 <= elegida <= len(todas):
+                    return error("Elegí qué opción aceptó el cliente.")
+                if elegida > 1:
+                    con.execute("UPDATE ordenes SET presupuesto_monto=?, presupuesto_detalle=? WHERE id=?",
+                                (todas[elegida - 1][0], todas[elegida - 1][1], oid))
+                noelegidas = [x for i, x in enumerate(todas, 1) if i != elegida]
+                con.execute("DELETE FROM presupuesto_opciones WHERE orden_id=?", (oid,))
+                core.registrar_evento(con, oid, estado, f"El cliente eligió la opción {elegida}: {fmt_monto(todas[elegida - 1][0])}. " +
+                                      "Opciones no elegidas - " + "; ".join(f"{fmt_monto(m)} ({' '.join(t.split())})" if t.strip() else fmt_monto(m) for m, t in noelegidas))
             nuevo_estado = E_PENDIENTE if estado == E_NUEVO else estado
             cambiar(nuevo_estado, ", presupuesto_respuesta=?, fecha_aceptacion=COALESCE(fecha_aceptacion, ?)" if nueva == "aceptado"
                     else ", presupuesto_respuesta=?", (nueva, ahora) if nueva == "aceptado" else (nueva,))

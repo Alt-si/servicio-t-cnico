@@ -366,6 +366,11 @@ def crear_base(cuenta_id):
                 fecha_hora TEXT NOT NULL, descripcion TEXT NOT NULL,
                 hecho INTEGER NOT NULL DEFAULT 0, avisado INTEGER NOT NULL DEFAULT 0, creado TEXT
             );
+            CREATE TABLE IF NOT EXISTS presupuesto_opciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, orden_id INTEGER NOT NULL, n INTEGER NOT NULL,
+                monto REAL NOT NULL, detalle TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_opc_orden ON presupuesto_opciones(orden_id);
             CREATE TABLE IF NOT EXISTS config (clave TEXT PRIMARY KEY, valor TEXT);
             CREATE INDEX IF NOT EXISTS ix_equipos_cliente ON equipos(cliente_id);
             CREATE INDEX IF NOT EXISTS ix_ordenes_cliente ON ordenes(cliente_id);
@@ -427,7 +432,7 @@ def registrar_evento(con, orden_id, estado, nota):
 
 
 # ---------------------------------------------------------------- respaldo / carga de base
-TABLAS_DATOS = ("clientes", "equipos", "ordenes", "historial_ordenes")
+TABLAS_DATOS = ("clientes", "equipos", "ordenes", "historial_ordenes", "presupuesto_opciones")
 
 
 def exportar_base(cuenta_id, destino):
@@ -601,3 +606,12 @@ def ajustes(cuenta_id):
     modo = filas.get("modo_texto")
     return {"tipos": lista("tipos_equipo", TIPOS_EQUIPO), "marcas": lista("marcas_equipo", MARCAS_DEFECTO),
             "modo_texto": modo if modo in MODOS_TEXTO else "mayusculas"}
+
+
+def texto_opciones(extra, desde=2):
+    """Texto para el historial: 'Opción 2: $ 25.000 (detalle); Opción 3: ...'."""
+    partes = []
+    for i, (monto, detalle) in enumerate(extra, desde):
+        det = " ".join((detalle or "").split())
+        partes.append(f"Opción {i}: {fmt_monto(monto)}" + (f" ({det})" if det else ""))
+    return "; ".join(partes)

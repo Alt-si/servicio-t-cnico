@@ -34,7 +34,9 @@
     <div><label>Seña ($)</label><input id="sena" class="moneda" inputmode="decimal" value="{{ o.sena_monto|monto_input if o and o.sena_monto is not none else '' }}"></div>
     <div><label>Saldo a abonar</label><div class="saldo" id="saldo">—</div></div>
   </div>
-  <label>Detalle del presupuesto</label><textarea id="detalle" class="mayus">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>
+  <label id="lbl-detalle">Detalle del presupuesto</label><textarea id="detalle" class="mayus">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>
+  <div id="opciones-extra"></div>
+  <p><button type="button" class="btn" id="mas-opcion" title="Agregar otra opción de presupuesto para el cliente">＋ Agregar otra opción de presupuesto</button></p>
   <label><input type="checkbox" id="espera_repuesto" {{ 'checked' if o and o.espera_repuesto }}>Esperando repuesto</label>
   {% if o %}<div class="grid" style="margin-top:6px"><div><label>Estado</label>
     <select id="estado">{% for e in ESTADOS %}<option {{ 'selected' if o.estado==e }}>{{ e }}</option>{% endfor %}</select></div></div>{% endif %}
@@ -57,7 +59,8 @@ const ORDEN = {{ ({
   'dev': o.reembolso_monto if o else None, 'cliente_id': cliente.id if cliente else None,
   'equipo_id': (o.equipo_id if o else None), 'wa': wa_numero if o else '', 'nombre': nombre_pila if o else '',
   'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre,
-  'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else ''
+  'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else '',
+  'extra': extras if extras is defined else []
 }) | tojson }};
 </script>
 <script src="{{ url_for('static', filename='orden.js') }}"></script>

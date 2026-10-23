@@ -13,6 +13,7 @@ function saldo() {
   const m = num(val('monto')), s = num(val('sena')) || 0;
   let t = '—';
   if (ORDEN.resp === 'rechazado' || ORDEN.dev) t = fmt(0);
+  else if (!ORDEN.resp && document.querySelector('.opcion-extra')) t = 'Según la opción elegida';
   else if (m !== null) t = fmt(Math.max(m - s, 0));
   $('#saldo').textContent = t;
 }
@@ -22,6 +23,7 @@ saldo();
 function datos() {
   const d = {};
   ['tipo', 'marca', 'modelo', 'serie', 'clave_acceso', 'descripcion', 'falla', 'accesorios', 'monto', 'sena', 'detalle'].forEach(k => d[k] = val(k));
+  d.opciones = [...document.querySelectorAll('.opcion-extra')].map(b => ({monto: $('.ex-monto', b).value, detalle: $('.ex-detalle', b).value}));
   d.en_garantia = chk('en_garantia'); d.espera_repuesto = chk('espera_repuesto');
   if ($('#estado')) d.estado = val('estado');
   return d;
@@ -34,12 +36,43 @@ if (ORDEN.id) {
   if (['Equipo retirado', 'Scrap', 'Equipo comprado'].includes(ORDEN.estado)) $('#espera_repuesto').disabled = true;
 }
 
-function textoPresupuesto(id, d) {
-  const m = num(d.monto);
-  const equipo = [d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ');
+// opciones = [{monto: número|null, detalle}]; con una sola opción el texto es el de siempre
+function textoPresupuestoOpciones(id, equipo, opciones) {
+  const una = o => `${(o.detalle || '').trim()} ${o.monto !== null ? fmt(o.monto) : ''}`.trim();
+  const cuerpo = opciones.length === 1 ? una(opciones[0]) : opciones.map((o, i) => `Opción ${i + 1}: ${una(o)}.`).join(' ');
   return `Hola, ${ORDEN.nombre} en ${ORDEN.empresa} hemos actualizado la orden ${String(id).padStart(5, '0')} (${equipo}) ` +
-         `Presupuesto: ${(d.detalle || '').trim()} ${m !== null ? fmt(m) : ''}. Esperamos su respuesta.`.replace(/\s+/g, ' ');
+         `Presupuesto: ${cuerpo}${opciones.length === 1 ? '.' : ''} Esperamos su respuesta.`.replace(/\s+/g, ' ');
 }
+function textoPresupuesto(id, d) {
+  const equipo = [d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ');
+  const ops = [{monto: num(d.monto), detalle: d.detalle}].concat((d.opciones || []).map(o => ({monto: num(o.monto), detalle: o.detalle})));
+  return textoPresupuestoOpciones(id, equipo, ops);
+}
+
+// ----- varias opciones de presupuesto
+const bloqueado = !!ORDEN.resp;
+function nuevaOpcion(monto, detalle) {
+  const n = document.querySelectorAll('.opcion-extra').length + 2;
+  const b = document.createElement('div'); b.className = 'opcion-extra';
+  b.innerHTML = `<div class="row"><b class="ex-tit">Opción ${n}</b>${bloqueado ? '' : '<button type="button" class="btn ex-quitar der" title="Quitar esta opción">✕</button>'}</div>
+    <div class="grid"><div><label>Presupuesto ($)</label><input class="ex-monto moneda" inputmode="decimal"></div></div>
+    <label>Detalle</label><textarea class="ex-detalle mayus"></textarea>`;
+  $('.ex-monto', b).value = monto || ''; $('.ex-detalle', b).value = detalle || '';
+  if (bloqueado) { $('.ex-monto', b).disabled = true; $('.ex-detalle', b).disabled = true; }
+  else $('.ex-quitar', b).onclick = () => { b.remove(); renumerar(); };
+  $('#opciones-extra').appendChild(b); renumerar();
+  return b;
+}
+function renumerar() {
+  const bs = [...document.querySelectorAll('.opcion-extra')];
+  bs.forEach((b, i) => $('.ex-tit', b).textContent = `Opción ${i + 2}`);
+  $('#lbl-detalle').textContent = bs.length ? 'Detalle de la opción 1' : 'Detalle del presupuesto';
+  $('#mas-opcion').style.display = (bloqueado || bs.length >= 4) ? 'none' : '';
+  saldo();
+}
+$('#mas-opcion').onclick = () => nuevaOpcion('', '').querySelector('.ex-detalle').focus();
+(ORDEN.extra || []).forEach(o => nuevaOpcion(num_ar(o.monto), o.detalle));
+function num_ar(v) { v = Math.round(Number(v) * 100) / 100; return v.toLocaleString('es-AR', {minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2}); }
 
 function textoListo(equipo) {
   return `Hola, ${ORDEN.nombre}. ${ORDEN.empresa} le informa que su equipo (${equipo}) está listo para ser retirado. Gracias.`;
@@ -120,12 +153,25 @@ function botones() {
     if (tk.ok) await ofrecerWhatsApp('Comprobante de ingreso por WhatsApp', tk.wa, tk.texto);
   });
   if (ORDEN.monto !== null && ORDEN.monto > 0 && !final && !ret) add('Enviar presupuesto', 'wa', async () => {
-    const texto = `Hola, ${ORDEN.nombre} en ${ORDEN.empresa} hemos actualizado la orden ${String(ORDEN.id).padStart(5, '0')} (${ORDEN.equipo_txt}) ` +
-                  `Presupuesto: ${ORDEN.detalle.trim()} ${fmt(ORDEN.monto)}. Esperamos su respuesta.`.replace(/\s+/g, ' ');
+    const texto = textoPresupuestoOpciones(ORDEN.id, ORDEN.equipo_txt,
+      [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat((ORDEN.extra || []).map(o => ({monto: o.monto, detalle: o.detalle}))));
     await ofrecerWhatsApp('Enviar presupuesto por WhatsApp', ORDEN.wa, texto);
   });
   if (!ORDEN.resp && !final && !ret) {
-    add('El cliente aceptó el presupuesto', 'ok', async () => { if (await accion('aceptar')) location.reload(); });
+    add('El cliente aceptó el presupuesto', 'ok', async () => {
+      let opcion;
+      if ((ORDEN.extra || []).length) {
+        const todas = [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat(ORDEN.extra);
+        opcion = await new Promise(res => {
+          const c = modal(`<h2>¿Qué opción aceptó el cliente?</h2>${todas.map((o, i) => `<label class="modulo"><input type="radio" name="op" value="${i + 1}" ${i === 0 ? 'checked' : ''}><span><b>Opción ${i + 1}: ${esc(fmt(o.monto))}</b><br><span class="mut">${esc(o.detalle || '')}</span></span></label>`).join('')}
+            <div class="row" style="margin-top:12px"><button class="btn pri" id="op-ok">Aceptar</button><button class="btn" id="op-no">Cancelar</button></div>`);
+          $('#op-ok', c).onclick = () => { const v = c.querySelector('input[name=op]:checked').value; cerrar(); res(Number(v)); };
+          $('#op-no', c).onclick = () => { cerrar(); res(null); };
+        });
+        if (!opcion) return;
+      }
+      if (await accion('aceptar', {opcion})) location.reload();
+    });
     add('El cliente rechazó el presupuesto', 'bad', async () => { if (await accion('rechazar')) location.reload(); });
   }
   if (ORDEN.resp) add('Deshacer respuesta del cliente', '', async () => { if (await accion('deshacer')) location.reload(); });

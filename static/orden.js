@@ -74,7 +74,7 @@ async function buscarCliente(id) {
 const bc = $('#busca-cliente');
 if (bc) bc.addEventListener('input', async () => {
   const j = await api('/api/clientes/buscar?q=' + encodeURIComponent(bc.value));
-  $('#sugeridos').innerHTML = (j.clientes || []).map(c => `<div><a href="/orden/nueva?cliente=${c.id}">${esc(c.mostrar)}</a> <span class="mut">${esc(c.telefono || '')}</span></div>`).join('');
+  $('#sugeridos').innerHTML = (j.clientes || []).map(c => `<div><a href="/orden/nueva?cliente=${c.id}">${esc(c.mostrar)}</a> <span class="mut">${esc(c.telefono || '')} · ${esc(c.condicion_iva || '')}</span></div>`).join('');
 });
 // ----- equipos anteriores
 const pe = $('#prev-equipo');

@@ -6,7 +6,7 @@
     <a class="btn pri der" href="{{ url_for('orden_nueva') }}">+ Nueva orden</a>
   </div>
   <form method="get" class="row" style="margin-bottom:10px">
-    <input name="q" value="{{ q }}" placeholder="Buscar por cliente, equipo, falla o N° de orden" style="flex:1;min-width:200px">
+    <input name="q" data-vivo value="{{ q }}" autocomplete="off" placeholder="Buscar por cliente, equipo, falla o N° de orden" style="flex:1;min-width:200px">
     <select name="orden" onchange="this.form.submit()" style="width:auto">
       {% for k, t in (('nuevas','Más nuevas primero'),('viejas','Más viejas primero'),('cliente','Por cliente'),('estado','Por estado')) %}
       <option value="{{ k }}" {{ 'selected' if orden==k }}>{{ t }}</option>{% endfor %}

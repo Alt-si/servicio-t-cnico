@@ -10,7 +10,7 @@
 
   <h2 style="margin-top:14px">Cliente</h2>
   {% if cliente %}<p><b>{{ cliente|nombre_cliente }}</b>{% if cliente.telefono %} · {{ cliente.telefono }}{% endif %}</p>
-  {% else %}<input id="busca-cliente" placeholder="Escribí nombre o teléfono para buscar…" autocomplete="off"><div id="sugeridos"></div>
+  {% else %}<input id="busca-cliente" placeholder="Escribí nombre, razón social o teléfono para buscar…" autocomplete="off"><div id="sugeridos"></div>
   <p class="mut">¿No existe? <a href="{{ url_for('clientes') }}">Cargalo primero en Clientes</a>.</p>{% endif %}
 
   <h2 style="margin-top:14px">Equipo</h2>

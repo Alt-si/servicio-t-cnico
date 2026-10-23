@@ -202,7 +202,7 @@ def clientes():
         params = []
         if q:
             like = f"%{core.sin_acentos(q)}%"
-            campos = ("nombre", "apellido", "telefono", "dni", "ciudad", "domicilio", "razon_social", "condicion_iva", "cuit", "mail")
+            campos = ("nombre", "apellido", "telefono", "dni", "ciudad", "domicilio", "razon_social", "condicion_iva", "cuit", "mail")  # incluye la condición de IVA
             sql += " WHERE " + " OR ".join(f"lower_u({c}) LIKE ?" for c in campos)
             sql += (" OR id IN (SELECT cliente_id FROM equipos WHERE lower_u(tipo||' '||marca||' '||modelo||' '||ifnull(serie,'')) LIKE ?)"
                     " OR id IN (SELECT cliente_id FROM ordenes WHERE CAST(id AS TEXT) LIKE ? OR lower_u(falla) LIKE ?)")
@@ -364,7 +364,7 @@ def api_clientes_buscar():
     q = core.sin_acentos((request.args.get("q") or "").strip())
     with db() as con:
         filas = con.execute(
-            "SELECT id, nombre, apellido, razon_social, telefono FROM clientes WHERE lower_u(nombre||' '||apellido||' '||IFNULL(razon_social,'')) LIKE ? OR lower_u(telefono) LIKE ? "
+            "SELECT id, nombre, apellido, razon_social, telefono, condicion_iva FROM clientes WHERE lower_u(nombre||' '||apellido||' '||IFNULL(razon_social,'')) LIKE ? OR lower_u(telefono) LIKE ? "
             "ORDER BY apellido COLLATE NOCASE LIMIT 15", (f"%{q}%", f"%{q}%")).fetchall()
     return jsonify(ok=True, clientes=[dict(f, mostrar=core.nombre_cliente(f)) for f in filas])
 

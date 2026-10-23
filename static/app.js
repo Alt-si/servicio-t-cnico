@@ -142,3 +142,22 @@ document.addEventListener('input', e => {
   const a = el.selectionStart, b = el.selectionEnd, up = el.value.toUpperCase();
   if (up !== el.value) { el.value = up; try { el.setSelectionRange(a, b); } catch (x) {} }
 });
+
+// ----- Buscador en vivo: filtra mientras se escribe (sin apretar Buscar)
+(function () {
+  const inp = document.querySelector('input[data-vivo]');
+  if (!inp) return;
+  let t = null, n = 0;
+  inp.form.addEventListener('submit', e => { e.preventDefault(); buscar(); });
+  inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(buscar, 250); });
+  async function buscar() {
+    const mi = ++n, url = new URL(location.href);
+    const datos = new FormData(inp.form);
+    url.search = new URLSearchParams([...datos.entries()].filter(([k]) => k !== 'csrf')).toString();
+    let html; try { html = await (await fetch(url, {headers: {'X-Requested-With': 'fetch'}})).text(); } catch (e) { return; }
+    if (mi !== n) return;                       // llegó una respuesta más nueva
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    ['.tabla-wrap', '#cuenta'].forEach(s => { const a = document.querySelector(s), b = doc.querySelector(s); if (a && b) a.replaceWith(b); });
+    history.replaceState(null, '', url);
+  }
+})();

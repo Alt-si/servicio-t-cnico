@@ -82,7 +82,7 @@ function sonido() {
 }
 const colaAvisos = []; let mostrando = false;
 function siguienteAviso() {
-  if (mostrando || !colaAvisos.length) return;
+  if (mostrando || !colaAvisos.length || $('#modal').classList.contains('abierto')) return;
   mostrando = true;
   const r = colaAvisos.shift();
   const c = modal(`<div style="background:#f97316;color:#fff;margin:-18px -18px 12px;padding:12px 18px;border-radius:10px 10px 0 0">
@@ -161,3 +161,25 @@ document.addEventListener('input', e => {
     history.replaceState(null, '', url);
   }
 })();
+
+// ----- Respaldo automático cada 30 días: se ofrece al entrar (o en el primer ingreso después de la fecha)
+async function revisarRespaldo() {
+  if (!window.HAY_SESION || !window.HAY_RESP) return;
+  const j = await api('/api/respaldo/estado');
+  if (!j.ok || !j.pendiente) return;
+  const mostrar = () => {
+    if ($('#modal').classList.contains('abierto')) return setTimeout(mostrar, 5000);
+    const c = modal(`<h2>Respaldo mensual</h2>
+      <p>Corresponde el respaldo de seguridad de tu información (clientes, equipos y órdenes). Ya se preparó una copia en el servidor.</p>
+      <p>Guardalo también en este equipo con el nombre <b>${esc(j.nombre)}</b>.</p>
+      <p class="mut">Guardar el archivo o no es responsabilidad del usuario.</p>
+      <div class="row" style="margin-top:12px"><a class="btn pri" id="rs-g" href="/configuracion/respaldo" download>Guardar respaldo en mi equipo</a><button class="btn" id="rs-n">No guardar</button></div>`);
+    $('#rs-g', c).onclick = async () => { await api('/api/respaldo/confirmar', {accion: 'guardado'}); setTimeout(cerrar, 400); };
+    $('#rs-n', c).onclick = async () => {
+      if (!await confirmar('Si no guardás el archivo, tu información queda solo en el servidor. Es tu responsabilidad. ¿No guardar?')) return mostrar();
+      await api('/api/respaldo/confirmar', {accion: 'omitido'}); cerrar();
+    };
+  };
+  mostrar();
+}
+revisarRespaldo();

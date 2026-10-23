@@ -30,7 +30,7 @@
 {% block cuerpo %}{% endblock %}
 </main>
 <div class="modal" id="modal"><div class="caja" id="modal-caja"></div></div>
-<script>window.HAY_SESION={{ "true" if cuenta else "false" }};window.HAY_REC={{ "true" if cuenta and "recordatorios" in modulos else "false" }};</script>
+<script>window.HAY_SESION={{ "true" if cuenta else "false" }};window.HAY_RESP={{ "true" if cuenta and "respaldo" in modulos else "false" }};window.HAY_REC={{ "true" if cuenta and "recordatorios" in modulos else "false" }};</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 {% block js %}{% endblock %}
 </body></html>

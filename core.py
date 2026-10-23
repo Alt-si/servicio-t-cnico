@@ -489,3 +489,45 @@ def clasificar_recordatorio(fecha_hora, hecho=0):
     if dt.date() == (n + timedelta(days=1)).date():
         return "manana", "Mañana · " + dt.strftime("%H:%M")
     return "proximo", f"{largo}  ·  {dt.strftime('%H:%M')}"
+
+
+# ---------------------------------------------------------------- respaldo automático cada 30 días
+DIAS_RESPALDO = 30
+NOMBRE_RESPALDO = "RspSERv"
+
+
+def zip_respaldo(cuenta_id):
+    """Devuelve (bytes del .zip, nombre de archivo) con una copia consistente de la base del comercio."""
+    import io, tempfile, zipfile
+    with tempfile.TemporaryDirectory() as tmp:
+        base = os.path.join(tmp, "base.db")
+        exportar_base(cuenta_id, base)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(base, "base.db")
+    return buf.getvalue(), f"{NOMBRE_RESPALDO}_{ahora_dt().strftime('%Y-%m-%d')}.zip"
+
+
+def respaldo_pendiente(cuenta_id):
+    """True si pasaron 30 días desde el último respaldo (o su aviso). La primera vez solo arranca el conteo."""
+    hoy = ahora_dt().date()
+    ultimo = leer_config(cuenta_id, "respaldo_ultimo")
+    if not ultimo:
+        guardar_config(cuenta_id, "respaldo_ultimo", hoy.isoformat())
+        return False
+    try:
+        return (hoy - datetime.strptime(ultimo, "%Y-%m-%d").date()).days >= DIAS_RESPALDO
+    except ValueError:
+        guardar_config(cuenta_id, "respaldo_ultimo", hoy.isoformat())
+        return False
+
+
+def guardar_copia_servidor(cuenta_id, conservar=3):
+    """Copia automática en el servidor (se conservan las últimas 3)."""
+    datos, nombre = zip_respaldo(cuenta_id)
+    carpeta = DATA_DIR / "respaldos" / str(cuenta_id)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    (carpeta / nombre).write_bytes(datos)
+    for viejo in sorted(carpeta.glob(f"{NOMBRE_RESPALDO}_*.zip"))[:-conservar]:
+        viejo.unlink()
+    return nombre

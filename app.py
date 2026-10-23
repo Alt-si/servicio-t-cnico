@@ -659,23 +659,44 @@ def configuracion():
         flash("Configuración guardada.", "ok")
         return redirect(url_for("configuracion"))
     return render_template("configuracion.html", codigo_defecto=core.codigo_por_defecto(cid),
-                           rec_email=core.leer_config(cid, "rec_email", ""))
+                           rec_email=core.leer_config(cid, "rec_email", ""),
+                           ult_resp=core.leer_config(cid, "respaldo_ultimo", ""), ult_resp_accion=core.leer_config(cid, "respaldo_ultimo_accion", ""))
 
 
 @app.route("/configuracion/respaldo")
 @login_requerido
 @modulo_requerido("respaldo")
 def respaldo():
-    import tempfile, zipfile
-    with tempfile.TemporaryDirectory() as tmp:
-        base = os.path.join(tmp, "base.db")
-        core.exportar_base(g.cuenta["id"], base)
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            z.write(base, "base.db")
-    nombre = "respaldo_%s.zip" % time.strftime("%Y-%m-%d_%H%M")
-    return Response(buf.getvalue(), mimetype="application/zip",
+    datos, nombre = core.zip_respaldo(g.cuenta["id"])
+    return Response(datos, mimetype="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@app.route("/api/respaldo/estado")
+@login_requerido
+@modulo_requerido("respaldo")
+def api_respaldo_estado():
+    """Si toca el respaldo mensual, hace la copia en el servidor y avisa para ofrecer la descarga."""
+    cid = g.cuenta["id"]
+    if not core.respaldo_pendiente(cid):
+        return jsonify(ok=True, pendiente=False)
+    if not core.leer_config(cid, "respaldo_copia"):
+        core.guardar_config(cid, "respaldo_copia", core.guardar_copia_servidor(cid))
+    return jsonify(ok=True, pendiente=True, nombre=core.leer_config(cid, "respaldo_copia"))
+
+
+@app.route("/api/respaldo/confirmar", methods=["POST"])
+@login_requerido
+@modulo_requerido("respaldo")
+def api_respaldo_confirmar():
+    """El usuario eligió guardar o no el archivo: en ambos casos arranca un nuevo ciclo de 30 días."""
+    d = request.get_json(force=True, silent=True) or {}
+    accion = "guardado" if d.get("accion") == "guardado" else "omitido"
+    cid = g.cuenta["id"]
+    core.guardar_config(cid, "respaldo_ultimo", core.ahora_dt().date().isoformat())
+    core.guardar_config(cid, "respaldo_ultimo_accion", accion)
+    core.guardar_config(cid, "respaldo_copia", None)
+    return jsonify(ok=True)
 
 
 @app.route("/configuracion/cargar", methods=["POST"])

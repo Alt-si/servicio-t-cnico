@@ -30,6 +30,8 @@
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>
   <p class="mut">Descargá una copia de toda tu información (clientes, equipos, órdenes e historial). Guardala en un lugar seguro.</p>
   <p><a class="btn pri" href="{{ url_for('respaldo') }}">Respaldar base de datos</a></p>
+  <p class="mut">Cada 30 días el sistema prepara un respaldo automático y te ofrece guardarlo en tu equipo (archivo <b>RspSERv</b>).
+  {% if ult_resp %}Último respaldo mensual: <b>{{ ult_resp[8:10] }}/{{ ult_resp[5:7] }}/{{ ult_resp[:4] }}</b>{% if ult_resp_accion %} ({{ 'guardado en el equipo' if ult_resp_accion=='guardado' else 'no se guardó el archivo' }}){% endif %}.{% endif %}</p>
   <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0">
   <h2>Cargar base de datos</h2>
   <p class="mut">Sube un respaldo (.zip o .db) o la base de la agenda de escritorio (<code>clientes.db</code>). <b>Reemplaza todos los datos actuales.</b> Se pide el código de validación.</p>

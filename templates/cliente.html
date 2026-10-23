@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row"><h1 style="margin:0">{{ c.apellido }}, {{ c.nombre }}</h1>
+    <div class="der row"><a class="btn pri" href="{{ url_for('orden_nueva', cliente=c.id) }}">+ Nueva orden</a>
+      <button class="btn" onclick='clienteForm({{ c|tojson_cliente }})'>Editar</button>
+      <a class="btn" href="{{ url_for('clientes') }}">← Volver</a></div></div>
+</div>
+<div class="card"><h2>Datos del cliente</h2>
+  <div class="ficha">
+    {% for t, v in (('Nombre', c.nombre), ('Apellido', c.apellido), ('Teléfono', c.telefono), ('DNI', c.dni), ('Mail', c.mail),
+                    ('Ciudad', c.ciudad), ('Domicilio', c.domicilio), ('Razón social', c.razon_social), ('CUIT', c.cuit), ('Condición de IVA', c.condicion_iva)) %}
+    <div><span class="mut">{{ t }}</span><b>{{ v or '—' }}</b></div>{% endfor %}
+  </div>
+</div>
+<div class="card"><h2>Equipos ({{ equipos|length }})</h2><div class="tabla-wrap"><table>
+  <thead><tr><th>Equipo</th><th>N° de serie</th><th>Descripción</th><th>Garantía</th></tr></thead><tbody class="clientes">
+  {% for e in equipos %}<tr><td>{{ texto_equipo(e.tipo, e.marca, e.modelo) }}</td><td>{{ e.serie or '' }}</td><td>{{ e.descripcion or '' }}</td><td>{{ 'Sí' if e.en_garantia else '' }}</td></tr>
+  {% else %}<tr><td colspan="4" class="mut">Sin equipos registrados.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Órdenes de reparación ({{ ords|length }})</h2><div class="tabla-wrap"><table>
+  <thead><tr><th>N°</th><th>Ingreso</th><th>Equipo</th><th>Falla</th><th>Estado</th><th>Retiro</th></tr></thead><tbody>
+  {% for o in ords %}<tr class="fila-orden e-{{ o.estado.lower().replace(' ','-') }}" onclick="location='{{ url_for('orden_ver', oid=o.id) }}'">
+    <td>#{{ '%05d' % o.id }}</td><td>{{ fmt_fecha(o.fecha_ingreso) }}</td><td>{{ texto_equipo(o.tipo, o.marca, o.modelo) }}</td><td>{{ o.falla or '' }}</td>
+    <td>{{ o.estado }}{% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">No aceptado</span>{% endif %}</td><td>{{ fmt_fecha(o.fecha_retiro) if o.fecha_retiro else '' }}</td></tr>
+  {% else %}<tr><td colspan="6" class="mut">Sin órdenes.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
+{% block js %}<script>const IVA={{ IVA|tojson }};</script><script src="{{ url_for('static', filename='clientes.js') }}"></script>{% endblock %}

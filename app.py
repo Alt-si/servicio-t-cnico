@@ -204,6 +204,21 @@ def clientes():
     return render_template("clientes.html", filas=filas, q=q, IVA=core.IVA_OPCIONES)
 
 
+@app.route("/cliente/<int:cid>")
+@login_requerido
+def cliente_ver(cid):
+    with db() as con:
+        c = con.execute("SELECT * FROM clientes WHERE id=?", (cid,)).fetchone()
+        if not c:
+            abort(404)
+        equipos = con.execute("SELECT * FROM equipos WHERE cliente_id=? ORDER BY id DESC", (cid,)).fetchall()
+        ords = con.execute(
+            "SELECT o.id, o.fecha_ingreso, o.estado, o.falla, o.presupuesto_respuesta, o.fecha_retiro, e.tipo, e.marca, e.modelo "
+            "FROM ordenes o LEFT JOIN equipos e ON e.id=o.equipo_id WHERE o.cliente_id=? ORDER BY o.id DESC", (cid,)).fetchall()
+    return render_template("cliente.html", c=c, equipos=equipos, ords=ords, IVA=core.IVA_OPCIONES,
+                           fmt_fecha=fmt_fecha, texto_equipo=texto_equipo)
+
+
 @app.route("/api/cliente", methods=["POST"])
 @login_requerido
 def api_cliente_guardar():

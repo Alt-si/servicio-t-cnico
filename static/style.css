@@ -1,5 +1,5 @@
-:root{--bg:#f3f4f6;--card:#fff;--tx:#111827;--mut:#6b7280;--bd:#d1d5db;--brand:#2f5bea;--err:#b91c1c;--ok:#15803d}
-:root[data-theme=dark]{--bg:#111827;--card:#1f2937;--tx:#f3f4f6;--mut:#9ca3af;--bd:#374151;--err:#f87171;--ok:#4ade80}
+:root{--bg:#f3f4f6;--card:#fff;--tx:#111827;--mut:#6b7280;--bd:#9ca3af;--brand:#2f5bea;--err:#b91c1c;--ok:#15803d}
+:root[data-theme=dark]{--bg:#111827;--card:#1f2937;--tx:#f3f4f6;--mut:#9ca3af;--bd:#6b7280;--err:#f87171;--ok:#4ade80}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 a{color:var(--brand)}
@@ -73,3 +73,22 @@ tr.rec-vencido{background:#dc2626;color:#fff}tr.rec-hoy{background:#f97316;color
 header.top nav .menu-ord .desplegable a{display:block;background:none;color:var(--tx);border-radius:4px;padding:8px 10px}
 header.top nav .menu-ord .desplegable a:hover{background:var(--bg)}
 .menu-ord hr{border:0;border-top:1px solid var(--bd);margin:4px 0}
+
+/* divisiones más marcadas y botones con sombra */
+.card{border:1.5px solid var(--bd);box-shadow:0 2px 6px rgba(0,0,0,.12)}
+th{border-bottom:2px solid var(--bd)}
+tbody.clientes tr{border-bottom:1.5px solid var(--bd)}
+tr.fila-orden{border-bottom:1.5px solid rgba(0,0,0,.25)}
+.hist li{border-bottom:1.5px solid var(--bd)}
+input,select,textarea{border:1.5px solid var(--bd)}
+.btn,header.top nav a,header.top nav button,.menu-ord summary,.filtros a{box-shadow:0 2px 4px rgba(0,0,0,.25)}
+.btn:hover:not(:disabled){box-shadow:0 3px 7px rgba(0,0,0,.3);transform:translateY(-1px)}
+.btn:active:not(:disabled){box-shadow:0 1px 2px rgba(0,0,0,.3);transform:none}
+.btn{border-width:1.5px}
+.modal .caja{border:1.5px solid var(--bd);box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.modal h2{padding-bottom:8px;border-bottom:1.5px solid var(--bd)}
+.card h2{padding-bottom:8px;border-bottom:1.5px solid var(--bd)}
+.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0}
+.ficha>div{display:flex;flex-direction:column;padding:8px 10px;border-bottom:1.5px solid var(--bd)}
+.ficha .mut{font-size:12px}
+header.top{box-shadow:0 2px 6px rgba(0,0,0,.3)}

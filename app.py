@@ -119,6 +119,11 @@ def contexto():
     return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES, "vistas": vistas}
 
 
+def U(valor):
+    """Texto ingresado por el usuario, siempre en mayúsculas."""
+    return (valor or "").strip().upper()
+
+
 def error(msg, codigo=400, **extra):
     return jsonify(ok=False, error=msg, **extra), codigo
 
@@ -230,9 +235,9 @@ def api_cliente_guardar():
         msg = validar_cliente(d, con, cid)
         if msg:
             return error(msg)
-        valores = ((d.get("nombre") or "").strip(), (d.get("apellido") or "").strip(), (d.get("telefono") or "").strip(),
-                   (d.get("dni") or "").strip(), (d.get("ciudad") or "").strip(), (d.get("domicilio") or "").strip(),
-                   (d.get("razon_social") or "").strip(), (d.get("condicion_iva") or "").strip() or "Consumidor Final",
+        valores = (U(d.get("nombre")), U(d.get("apellido")), (d.get("telefono") or "").strip(),
+                   (d.get("dni") or "").strip(), U(d.get("ciudad")), U(d.get("domicilio")),
+                   U(d.get("razon_social")), (d.get("condicion_iva") or "").strip() or "Consumidor Final",
                    (d.get("cuit") or "").strip(), (d.get("mail") or "").strip())
         if cid:
             con.execute("UPDATE clientes SET nombre=?, apellido=?, telefono=?, dni=?, ciudad=?, domicilio=?, razon_social=?, "
@@ -385,7 +390,7 @@ def api_orden_crear():
     monto, sena, msg = importes(d)
     if msg:
         return error(msg)
-    falla = (d.get("falla") or "").strip()
+    falla = U(d.get("falla"))
     tipo = (d.get("tipo") or "").strip()
     if not falla:
         return error("Describí la falla reportada por el cliente.")
@@ -397,7 +402,7 @@ def api_orden_crear():
             return error("Elegí el cliente.")
         ahora = core.ahora()
         equipo_id = d.get("equipo_id") or None
-        campos = [(d.get(k) or "").strip() for k in ("tipo", "marca", "modelo", "serie", "descripcion", "clave_acceso")]
+        campos = [(d.get("tipo") or "").strip(), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
         if equipo_id:
             if not con.execute("SELECT 1 FROM equipos WHERE id=? AND cliente_id=?", (equipo_id, cliente["id"])).fetchone():
                 return error("El equipo no es de ese cliente.")
@@ -407,12 +412,12 @@ def api_orden_crear():
             equipo_id = con.execute(
                 "INSERT INTO equipos (cliente_id, tipo, marca, modelo, serie, descripcion, clave_acceso, en_garantia, creado) "
                 "VALUES (?,?,?,?,?,?,?,?,?)", [cliente["id"]] + campos + [int(bool(d.get("en_garantia"))), ahora]).lastrowid
-        detalle = (d.get("detalle") or "").strip()
+        detalle = U(d.get("detalle"))
         estado = E_PENDIENTE if monto and monto > 0 else E_NUEVO
         oid = con.execute(
             "INSERT INTO ordenes (cliente_id, equipo_id, fecha_ingreso, estado, falla, accesorios, presupuesto_monto, "
             "presupuesto_detalle, fecha_presupuesto, sena_monto, actualizado, espera_repuesto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (cliente["id"], equipo_id, ahora, estado, falla, (d.get("accesorios") or "").strip(), monto, detalle,
+            (cliente["id"], equipo_id, ahora, estado, falla, U(d.get("accesorios")), monto, detalle,
              ahora if monto is not None else None, sena, ahora, int(bool(d.get("espera_repuesto"))))).lastrowid
         core.registrar_evento(con, oid, estado, "Ingreso del equipo al taller")
         if monto is not None or detalle:
@@ -434,14 +439,14 @@ def api_orden_guardar(oid):
         monto, sena, msg = importes(d)
         if msg:
             return error(msg)
-        detalle = (d.get("detalle") or "").strip()
+        detalle = U(d.get("detalle"))
         # Con el presupuesto respondido se bloquea el precio; con «no aceptado» también la seña.
         if resp:
             if (monto, detalle) != (o["presupuesto_monto"], (o["presupuesto_detalle"] or "")):
                 return error("El presupuesto ya fue respondido: no se puede modificar el precio ni el detalle.")
         if resp == "rechazado" and sena != o["sena_monto"]:
             return error("Con el presupuesto no aceptado no se puede modificar la seña.")
-        falla = (d.get("falla") or "").strip()
+        falla = U(d.get("falla"))
         if not falla or not (d.get("tipo") or "").strip():
             return error("Completá el tipo de equipo y la falla.")
         estado = d.get("estado") or o["estado"]
@@ -469,11 +474,11 @@ def api_orden_guardar(oid):
             f_ret = None
         con.execute("UPDATE ordenes SET estado=?, falla=?, accesorios=?, presupuesto_monto=?, presupuesto_detalle=?, sena_monto=?, "
                     "espera_repuesto=?, fecha_presupuesto=?, fecha_finalizado=?, fecha_retiro=?, fecha_archivada=?, actualizado=? WHERE id=?",
-                    (estado, falla, (d.get("accesorios") or "").strip(), monto, detalle, sena, repuesto, f_pres, f_fin, f_ret,
+                    (estado, falla, U(d.get("accesorios")), monto, detalle, sena, repuesto, f_pres, f_fin, f_ret,
                      f_arch, ahora, oid))
         if o["equipo_id"]:
             con.execute("UPDATE equipos SET tipo=?, marca=?, modelo=?, serie=?, descripcion=?, clave_acceso=?, en_garantia=? WHERE id=?",
-                        [(d.get(k) or "").strip() for k in ("tipo", "marca", "modelo", "serie", "descripcion", "clave_acceso")]
+                        [(d.get("tipo") or "").strip(), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
                         + [int(bool(d.get("en_garantia"))), o["equipo_id"]])
         if estado != o["estado"]:
             core.registrar_evento(con, oid, estado, core.texto_evento_estado(o["estado"], estado, a_abonar, bool(dev)))
@@ -483,7 +488,7 @@ def api_orden_guardar(oid):
             core.registrar_evento(con, oid, estado, "Esperando repuesto" if repuesto else "Repuesto recibido")
         if sena != o["sena_monto"]:
             core.registrar_evento(con, oid, estado, f"Seña recibida: {fmt_monto(sena)}" if sena else "Seña quitada")
-        if falla != (o["falla"] or "") or (d.get("accesorios") or "").strip() != (o["accesorios"] or ""):
+        if falla != (o["falla"] or "") or U(d.get("accesorios")) != (o["accesorios"] or ""):
             core.registrar_evento(con, oid, estado, "Datos de ingreso modificados")
     return jsonify(ok=True, id=oid, estado=estado)
 
@@ -546,7 +551,7 @@ def api_orden_accion(oid):
                 cmonto = parse_monto(d.get("compra_monto"))
             except ValueError:
                 return error("El monto de la compra no es válido.")
-            cond = (d.get("compra_condiciones") or "").strip()
+            cond = U(d.get("compra_condiciones"))
             if cmonto is None or not cond:
                 return error("Completá el monto y las condiciones de la compra.")
             if core.requiere_codigo(estado, E_COMPRADO):
@@ -562,7 +567,7 @@ def api_orden_accion(oid):
                 dmonto = parse_monto(d.get("dev_monto"))
             except ValueError:
                 return error("El monto a devolver no es válido.")
-            motivo = (d.get("dev_motivo") or "").strip()
+            motivo = U(d.get("dev_motivo"))
             if dev and not core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
                 return pide_codigo(d, "Modificar una devolución ya registrada requiere el código de validación.")
             if dmonto is None or dmonto <= 0 or not motivo:
@@ -727,7 +732,7 @@ def recordatorios():
 @login_requerido
 def api_recordatorio_guardar():
     d = request.get_json(force=True, silent=True) or {}
-    desc = (d.get("descripcion") or "").strip()
+    desc = U(d.get("descripcion"))
     fh = _fecha_hora(d)
     if not desc:
         return error("Escribí la descripción del recordatorio.")

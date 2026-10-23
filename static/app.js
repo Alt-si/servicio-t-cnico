@@ -134,3 +134,11 @@ document.addEventListener('keydown', e => {      // el punto del teclado numéri
     e.preventDefault(); el.setRangeText(',', el.selectionStart, el.selectionEnd, 'end'); aplicarMoneda(el);
   } else if (el.classList?.contains('moneda') && e.key === '.') e.preventDefault();
 });
+
+// ----- Texto de datos siempre en MAYÚSCULAS (campos con clase "mayus")
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (!el.classList?.contains('mayus') || e.isComposing) return;
+  const a = el.selectionStart, b = el.selectionEnd, up = el.value.toUpperCase();
+  if (up !== el.value) { el.value = up; try { el.setSelectionRange(a, b); } catch (x) {} }
+});

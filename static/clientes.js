@@ -1,7 +1,8 @@
 function clienteForm(c) {
   c = c || {};
   const ivas = IVA.map(i => `<option ${((c.condicion_iva || '') === i) ? 'selected' : ''}>${esc(i)}</option>`).join('');
-  const campo = (k, t, req) => `<div><label>${t}${req ? ' *' : ''}</label><input id="f-${k}" value="${esc(c[k] || '')}"></div>`;
+  const MAY = ['nombre', 'apellido', 'ciudad', 'domicilio', 'razon_social'];
+  const campo = (k, t, req) => `<div><label>${t}${req ? ' *' : ''}</label><input id="f-${k}" class="${MAY.includes(k) ? 'mayus' : ''}" value="${esc(c[k] || '')}"></div>`;
   const box = modal(`<h2>${c.id ? 'Editar cliente' : 'Nuevo cliente'}</h2><div id="f-err" class="msg error" style="display:none"></div>
     <div class="grid">${campo('nombre', 'Nombre', 1)}${campo('apellido', 'Apellido', 1)}${campo('telefono', 'Teléfono', 1)}
     ${campo('dni', 'DNI')}${campo('ciudad', 'Ciudad')}${campo('domicilio', 'Domicilio')}${campo('razon_social', 'Razón social')}

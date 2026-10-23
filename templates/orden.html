@@ -17,23 +17,23 @@
   {% if not o and cliente %}<div class="grid"><div><label>Equipos anteriores de este cliente</label><select id="prev-equipo"><option value="">Equipo nuevo</option></select></div></div>{% endif %}
   <div class="grid">
     <div><label>Tipo *</label><select id="tipo">{% for t in TIPOS %}<option {{ 'selected' if eq.tipo==t }}>{{ t }}</option>{% endfor %}</select></div>
-    <div><label>Marca</label><input id="marca" value="{{ eq.marca or '' }}"></div>
-    <div><label>Modelo</label><input id="modelo" value="{{ eq.modelo or '' }}"></div>
-    <div><label>N° de serie</label><input id="serie" value="{{ eq.serie or '' }}"></div>
+    <div><label>Marca</label><input id="marca" class="mayus" value="{{ eq.marca or '' }}"></div>
+    <div><label>Modelo</label><input id="modelo" class="mayus" value="{{ eq.modelo or '' }}"></div>
+    <div><label>N° de serie</label><input id="serie" class="mayus" value="{{ eq.serie or '' }}"></div>
     <div><label>Clave de acceso del equipo</label><input id="clave_acceso" value="{{ eq.clave_acceso or '' }}"></div>
-    <div><label>Descripción / estado físico</label><input id="descripcion" value="{{ eq.descripcion or '' }}"></div>
+    <div><label>Descripción / estado físico</label><input id="descripcion" class="mayus" value="{{ eq.descripcion or '' }}"></div>
   </div>
   <label><input type="checkbox" id="en_garantia" {{ 'checked' if eq.en_garantia }}>En garantía</label>
 
   <h2 style="margin-top:14px">Falla y presupuesto</h2>
-  <label>Falla reportada *</label><textarea id="falla">{{ o.falla if o else '' }}</textarea>
-  <label>Accesorios entregados</label><input id="accesorios" value="{{ o.accesorios if o and o.accesorios else '' }}">
+  <label>Falla reportada *</label><textarea id="falla" class="mayus">{{ o.falla if o else '' }}</textarea>
+  <label>Accesorios entregados</label><input id="accesorios" class="mayus" value="{{ o.accesorios if o and o.accesorios else '' }}">
   <div class="grid">
     <div><label>Presupuesto ($)</label><input id="monto" class="moneda" inputmode="decimal" value="{{ o.presupuesto_monto|monto_input if o and o.presupuesto_monto is not none else '' }}"></div>
     <div><label>Seña ($)</label><input id="sena" class="moneda" inputmode="decimal" value="{{ o.sena_monto|monto_input if o and o.sena_monto is not none else '' }}"></div>
     <div><label>Saldo a abonar</label><div class="saldo" id="saldo">—</div></div>
   </div>
-  <label>Detalle del presupuesto</label><textarea id="detalle">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>
+  <label>Detalle del presupuesto</label><textarea id="detalle" class="mayus">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>
   <label><input type="checkbox" id="espera_repuesto" {{ 'checked' if o and o.espera_repuesto }}>Esperando repuesto</label>
   {% if o %}<div class="grid" style="margin-top:6px"><div><label>Estado</label>
     <select id="estado">{% for e in ESTADOS %}<option {{ 'selected' if o.estado==e }}>{{ e }}</option>{% endfor %}</select></div></div>{% endif %}

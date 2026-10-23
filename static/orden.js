@@ -97,7 +97,7 @@ async function accion(a, extra) {
 }
 function formulario(titulo, campos, boton) {
   return new Promise(res => {
-    const c = modal(`<h2>${esc(titulo)}</h2>${campos.map(f => `<label>${esc(f.t)}</label>${f.area ? `<textarea id="m-${f.k}"></textarea>` : `<input id="m-${f.k}" class="${f.num ? 'moneda' : ''}" inputmode="${f.num ? 'decimal' : 'text'}">`}`).join('')}
+    const c = modal(`<h2>${esc(titulo)}</h2>${campos.map(f => `<label>${esc(f.t)}</label>${f.area ? `<textarea id="m-${f.k}" class="mayus"></textarea>` : `<input id="m-${f.k}" class="${f.num ? 'moneda' : ''}" inputmode="${f.num ? 'decimal' : 'text'}">`}`).join('')}
       <div class="row" style="margin-top:12px"><button class="btn pri" id="m-ok">${esc(boton)}</button><button class="btn" id="m-no">Cancelar</button></div>`);
     $('#m-no', c).onclick = () => { cerrar(); res(null); };
     $('#m-ok', c).onclick = () => { const o = {}; campos.forEach(f => o[f.k] = $('#m-' + f.k, c).value); cerrar(); res(o); };

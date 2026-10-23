@@ -546,7 +546,7 @@ def texto_ingreso(empresa, oid, fecha_ingreso, nombre_pila, tipo, marca, modelo,
         cuando = fecha_ingreso or ""
     limpio = lambda t: " ".join((t or "").split())
     lineas = [f"Hola, {nombre_pila}. Te enviamos el comprobante de ingreso de tu equipo.", "",
-              f"*{empresa} - Ingreso de equipo*",
+              f"*{empresa}*",
               f"Orden N° {int(oid):05d}",
               f"Ingresó: {cuando}", "",
               f"Tipo: {limpio(tipo) or '-'}",

@@ -9,7 +9,7 @@
   <div id="err" class="msg error" style="display:none;margin-top:10px"></div>
 
   <h2 style="margin-top:14px">Cliente</h2>
-  {% if cliente %}<p><b>{{ cliente.apellido }}, {{ cliente.nombre }}</b>{% if cliente.telefono %} · {{ cliente.telefono }}{% endif %}</p>
+  {% if cliente %}<p><b>{{ cliente|nombre_cliente }}</b>{% if cliente.telefono %} · {{ cliente.telefono }}{% endif %}</p>
   {% else %}<input id="busca-cliente" placeholder="Escribí nombre o teléfono para buscar…" autocomplete="off"><div id="sugeridos"></div>
   <p class="mut">¿No existe? <a href="{{ url_for('clientes') }}">Cargalo primero en Clientes</a>.</p>{% endif %}
 
@@ -29,8 +29,8 @@
   <label>Falla reportada *</label><textarea id="falla">{{ o.falla if o else '' }}</textarea>
   <label>Accesorios entregados</label><input id="accesorios" value="{{ o.accesorios if o and o.accesorios else '' }}">
   <div class="grid">
-    <div><label>Presupuesto ($)</label><input id="monto" inputmode="decimal" value="{{ o.presupuesto_monto if o and o.presupuesto_monto is not none else '' }}"></div>
-    <div><label>Seña ($)</label><input id="sena" inputmode="decimal" value="{{ o.sena_monto if o and o.sena_monto is not none else '' }}"></div>
+    <div><label>Presupuesto ($)</label><input id="monto" class="moneda" inputmode="decimal" value="{{ o.presupuesto_monto|monto_input if o and o.presupuesto_monto is not none else '' }}"></div>
+    <div><label>Seña ($)</label><input id="sena" class="moneda" inputmode="decimal" value="{{ o.sena_monto|monto_input if o and o.sena_monto is not none else '' }}"></div>
     <div><label>Saldo a abonar</label><div class="saldo" id="saldo">—</div></div>
   </div>
   <label>Detalle del presupuesto</label><textarea id="detalle">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>

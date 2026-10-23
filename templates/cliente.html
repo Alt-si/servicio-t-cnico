@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">{{ c.apellido }}, {{ c.nombre }}</h1>
+  <div class="row"><div><h1 style="margin:0">{{ c|nombre_cliente }}</h1>{% if c.razon_social %}<div class="mut">Contacto: {{ c.apellido }}, {{ c.nombre }}</div>{% endif %}</div>
     <div class="der row"><a class="btn pri" href="{{ url_for('orden_nueva', cliente=c.id) }}">+ Nueva orden</a>
       <button class="btn" onclick='clienteForm({{ c|tojson_cliente }})'>Editar</button>
       <a class="btn" href="{{ url_for('clientes') }}">← Volver</a></div></div>

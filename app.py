@@ -46,6 +46,8 @@ def csrf_token():
 
 
 app.jinja_env.globals["csrf_token"] = csrf_token
+app.jinja_env.filters["nombre_cliente"] = core.nombre_cliente
+app.jinja_env.filters["monto_input"] = core.num_ar
 app.jinja_env.filters["tojson_cliente"] = lambda c: {k: c[k] for k in c.keys()}
 
 
@@ -191,7 +193,7 @@ def validar_cliente(d, con, cliente_id=None):
 def clientes():
     q = (request.args.get("q") or "").strip()
     with db() as con:
-        sql = "SELECT * FROM clientes"
+        sql = "SELECT *, CASE WHEN TRIM(IFNULL(razon_social,''))<>'' THEN razon_social ELSE apellido||', '||nombre END AS mostrar FROM clientes"
         params = []
         if q:
             like = f"%{core.sin_acentos(q)}%"
@@ -200,7 +202,7 @@ def clientes():
             sql += (" OR id IN (SELECT cliente_id FROM equipos WHERE lower_u(tipo||' '||marca||' '||modelo||' '||ifnull(serie,'')) LIKE ?)"
                     " OR id IN (SELECT cliente_id FROM ordenes WHERE CAST(id AS TEXT) LIKE ? OR lower_u(falla) LIKE ?)")
             params = [like] * len(campos) + [like, f"%{q.lstrip('#').lstrip('0') or q}%", like]
-        filas = con.execute(sql + " ORDER BY apellido COLLATE NOCASE, nombre COLLATE NOCASE", params).fetchall()
+        filas = con.execute(sql + " ORDER BY mostrar COLLATE NOCASE", params).fetchall()
     return render_template("clientes.html", filas=filas, q=q, IVA=core.IVA_OPCIONES)
 
 
@@ -257,13 +259,13 @@ def api_cliente_eliminar(cid):
 @login_requerido
 def api_cliente_ordenes(cid):
     with db() as con:
-        c = con.execute("SELECT nombre, apellido FROM clientes WHERE id=?", (cid,)).fetchone()
+        c = con.execute("SELECT nombre, apellido, razon_social FROM clientes WHERE id=?", (cid,)).fetchone()
         if not c:
             return error("No existe el cliente", 404)
         filas = con.execute(
             "SELECT o.id, o.fecha_ingreso, o.estado, o.falla, o.presupuesto_respuesta, e.tipo, e.marca, e.modelo "
             "FROM ordenes o LEFT JOIN equipos e ON e.id=o.equipo_id WHERE o.cliente_id=? ORDER BY o.id DESC", (cid,)).fetchall()
-    return jsonify(ok=True, cliente=f"{c['apellido']}, {c['nombre']}", ordenes=[
+    return jsonify(ok=True, cliente=core.nombre_cliente(c), ordenes=[
         dict(id=f["id"], fecha=fmt_fecha(f["fecha_ingreso"]), estado=f["estado"], falla=f["falla"] or "",
              equipo=texto_equipo(f["tipo"], f["marca"], f["modelo"]), rechazado=f["presupuesto_respuesta"] == "rechazado")
         for f in filas])
@@ -289,7 +291,7 @@ def api_cliente_equipos(cid):
 
 # --------------------------------------------------------------------------- órdenes: listado
 SQL_ORDEN = {"nuevas": "o.fecha_ingreso DESC, o.id DESC", "viejas": "o.fecha_ingreso ASC, o.id ASC",
-             "cliente": "c.apellido COLLATE NOCASE, c.nombre COLLATE NOCASE, o.id DESC",
+             "cliente": "CASE WHEN TRIM(IFNULL(c.razon_social,''))<>'' THEN c.razon_social ELSE c.apellido||', '||c.nombre END COLLATE NOCASE, o.id DESC",
              "estado": "o.estado, o.fecha_ingreso DESC"}
 
 
@@ -306,11 +308,11 @@ def ordenes():
     if q:
         like = f"%{core.sin_acentos(q).lstrip('#')}%"
         where.append("(" + " OR ".join(f"lower_u({c}) LIKE ?" for c in (
-            "c.nombre", "c.apellido", "c.telefono", "e.tipo", "e.marca", "e.modelo", "e.serie", "o.falla", "o.estado")) +
+            "c.nombre", "c.apellido", "c.razon_social", "c.telefono", "e.tipo", "e.marca", "e.modelo", "e.serie", "o.falla", "o.estado")) +
             " OR CAST(o.id AS TEXT) LIKE ?)")
-        params += [like] * 9
+        params += [like] * 10
         params[-1] = f"%{q.lstrip('#').lstrip('0') or q}%"
-    sql = ("SELECT o.*, c.nombre, c.apellido, c.telefono, e.tipo, e.marca, e.modelo, e.en_garantia "
+    sql = ("SELECT o.*, c.nombre, c.apellido, c.razon_social, c.telefono, e.tipo, e.marca, e.modelo, e.en_garantia "
            "FROM ordenes o JOIN clientes c ON c.id=o.cliente_id LEFT JOIN equipos e ON e.id=o.equipo_id")
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -357,9 +359,9 @@ def api_clientes_buscar():
     q = core.sin_acentos((request.args.get("q") or "").strip())
     with db() as con:
         filas = con.execute(
-            "SELECT id, nombre, apellido, telefono FROM clientes WHERE lower_u(nombre||' '||apellido) LIKE ? OR lower_u(telefono) LIKE ? "
+            "SELECT id, nombre, apellido, razon_social, telefono FROM clientes WHERE lower_u(nombre||' '||apellido||' '||IFNULL(razon_social,'')) LIKE ? OR lower_u(telefono) LIKE ? "
             "ORDER BY apellido COLLATE NOCASE LIMIT 15", (f"%{q}%", f"%{q}%")).fetchall()
-    return jsonify(ok=True, clientes=[dict(f) for f in filas])
+    return jsonify(ok=True, clientes=[dict(f, mostrar=core.nombre_cliente(f)) for f in filas])
 
 
 def importes(d):

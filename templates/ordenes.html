@@ -25,7 +25,7 @@
     {% for f in filas %}
     <tr class="fila-orden e-{{ f.estado.lower().replace(' ','-') }}" onclick="location='{{ url_for('orden_ver', oid=f.id) }}'">
       <td>#{{ '%05d' % f.id }}</td><td>{{ fmt_fecha(f.fecha_ingreso) }}</td>
-      <td>{{ f.apellido }}, {{ f.nombre }}</td><td>{{ texto_equipo(f.tipo, f.marca, f.modelo) }}</td>
+      <td>{{ f|nombre_cliente }}</td><td>{{ texto_equipo(f.tipo, f.marca, f.modelo) }}</td>
       <td>{{ f.falla or '' }}{% if f.espera_repuesto %} esperando{% endif %}</td>
       <td>{{ f.estado }}{% if f.presupuesto_respuesta=='rechazado' %}<span class="pill rech">No aceptado</span>{% endif %}</td>
       <td>{{ fmt_fecha(f.fecha_retiro) if f.fecha_retiro else '' }}</td>

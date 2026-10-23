@@ -10,7 +10,7 @@
     <thead><tr><th>Cliente</th><th>Teléfono</th><th class="ocu">Ciudad</th><th class="ocu">CUIT / IVA</th><th></th></tr></thead>
     <tbody class="clientes">
     {% for c in filas %}
-    <tr><td><b>{{ c.apellido }}, {{ c.nombre }}</b></td><td>{{ c.telefono or '' }}</td><td class="ocu">{{ c.ciudad or '' }}</td>
+    <tr><td><b>{{ c|nombre_cliente }}</b>{% if c.razon_social %}<div class="mut" style="font-size:12px">{{ c.apellido }}, {{ c.nombre }}</div>{% endif %}</td><td>{{ c.telefono or '' }}</td><td class="ocu">{{ c.ciudad or '' }}</td>
       <td class="ocu">{{ c.cuit or '' }}{% if c.cuit %} · {{ c.condicion_iva }}{% endif %}</td>
       <td style="white-space:nowrap">
         <a class="btn pri" href="{{ url_for('cliente_ver', cid=c.id) }}">Ver</a>

@@ -108,3 +108,29 @@ if (window.HAY_SESION) {
 
 // cerrar el submenú de Órdenes al hacer clic afuera
 document.addEventListener('click', e => { const d = document.querySelector('.menu-ord'); if (d && !d.contains(e.target)) d.open = false; });
+
+// ----- Montos: miles con punto (1.000 / 1.000.000) y centavos con coma, mientras se escribe
+function formatearMonto(txt) {
+  txt = txt.replace(/[^\d,]/g, '');
+  const i = txt.indexOf(',');
+  let ent = i < 0 ? txt : txt.slice(0, i), dec = i < 0 ? null : txt.slice(i + 1).replace(/,/g, '').slice(0, 2);
+  ent = ent.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return dec === null ? ent : ent + ',' + dec;
+}
+function aplicarMoneda(el) {
+  const antes = el.value, pos = el.selectionStart ?? antes.length;
+  const sig = antes.slice(0, pos).replace(/[^\d,]/g, '').length;      // dígitos/coma a la izquierda del cursor
+  const nuevo = formatearMonto(antes);
+  if (nuevo === antes) return;
+  el.value = nuevo;
+  let n = 0, p = 0;
+  while (p < nuevo.length && n < sig) { if (/[\d,]/.test(nuevo[p])) n++; p++; }
+  try { el.setSelectionRange(p, p); } catch (e) {}
+}
+document.addEventListener('input', e => { if (e.target.classList?.contains('moneda')) aplicarMoneda(e.target); });
+document.addEventListener('keydown', e => {      // el punto del teclado numérico cuenta como coma decimal
+  const el = e.target;
+  if (el.classList?.contains('moneda') && e.key === '.' && !el.value.includes(',')) {
+    e.preventDefault(); el.setRangeText(',', el.selectionStart, el.selectionEnd, 'end'); aplicarMoneda(el);
+  } else if (el.classList?.contains('moneda') && e.key === '.') e.preventDefault();
+});

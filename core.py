@@ -56,11 +56,25 @@ def fmt_fecha(txt, con_hora=False):
         return txt
 
 
+def num_ar(valor):
+    """1500 -> '1.500'; 1500.5 -> '1.500,50' (miles con punto, centavos con coma solo si los hay)."""
+    if valor is None or valor == "":
+        return ""
+    v = round(float(valor), 2)
+    texto = f"{v:,.0f}" if v == int(v) else f"{v:,.2f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def fmt_monto(valor):
     if valor is None or valor == "":
         return ""
-    texto = f"{float(valor):,.2f}"
-    return "$ " + texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    return "$ " + num_ar(valor)
+
+
+def nombre_cliente(c):
+    """Razón social si la tiene; si no, «Apellido, Nombre» (consumidor final)."""
+    rs = (c["razon_social"] or "").strip()
+    return rs or f"{c['apellido']}, {c['nombre']}"
 
 
 def parse_monto(texto):

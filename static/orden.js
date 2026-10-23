@@ -1,10 +1,10 @@
 const val = id => $('#' + id).value;
 const chk = id => $('#' + id).checked;
-const fmt = n => '$ ' + Number(n).toLocaleString('es-AR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const fmt = n => { n = Math.round(Number(n) * 100) / 100; const d = Number.isInteger(n) ? 0 : 2; return '$ ' + n.toLocaleString('es-AR', {minimumFractionDigits: d, maximumFractionDigits: d}); };
 function num(t) {
   t = String(t || '').replace(/[$\s]/g, '');
   if (!t) return null;
-  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); else if ((t.match(/\./g) || []).length > 1) t = t.replace(/\./g, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
   const n = Number(t); return isNaN(n) ? null : n;
 }
 function mostrarError(t) { const e = $('#err'); e.textContent = t; e.style.display = t ? 'block' : 'none'; if (t) scrollTo(0, 0); }
@@ -74,7 +74,7 @@ async function buscarCliente(id) {
 const bc = $('#busca-cliente');
 if (bc) bc.addEventListener('input', async () => {
   const j = await api('/api/clientes/buscar?q=' + encodeURIComponent(bc.value));
-  $('#sugeridos').innerHTML = (j.clientes || []).map(c => `<div><a href="/orden/nueva?cliente=${c.id}">${esc(c.apellido)}, ${esc(c.nombre)}</a> <span class="mut">${esc(c.telefono || '')}</span></div>`).join('');
+  $('#sugeridos').innerHTML = (j.clientes || []).map(c => `<div><a href="/orden/nueva?cliente=${c.id}">${esc(c.mostrar)}</a> <span class="mut">${esc(c.telefono || '')}</span></div>`).join('');
 });
 // ----- equipos anteriores
 const pe = $('#prev-equipo');
@@ -97,7 +97,7 @@ async function accion(a, extra) {
 }
 function formulario(titulo, campos, boton) {
   return new Promise(res => {
-    const c = modal(`<h2>${esc(titulo)}</h2>${campos.map(f => `<label>${esc(f.t)}</label>${f.area ? `<textarea id="m-${f.k}"></textarea>` : `<input id="m-${f.k}" inputmode="${f.num ? 'decimal' : 'text'}">`}`).join('')}
+    const c = modal(`<h2>${esc(titulo)}</h2>${campos.map(f => `<label>${esc(f.t)}</label>${f.area ? `<textarea id="m-${f.k}"></textarea>` : `<input id="m-${f.k}" class="${f.num ? 'moneda' : ''}" inputmode="${f.num ? 'decimal' : 'text'}">`}`).join('')}
       <div class="row" style="margin-top:12px"><button class="btn pri" id="m-ok">${esc(boton)}</button><button class="btn" id="m-no">Cancelar</button></div>`);
     $('#m-no', c).onclick = () => { cerrar(); res(null); };
     $('#m-ok', c).onclick = () => { const o = {}; campos.forEach(f => o[f.k] = $('#m-' + f.k, c).value); cerrar(); res(o); };

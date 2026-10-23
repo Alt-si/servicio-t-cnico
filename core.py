@@ -24,7 +24,7 @@ COLORES = {
     "Scrap": (("#dc2626", "#ffffff"), ("#991b1b", "#ffffff")),
     "Equipo comprado": (("#9ca3af", "#111827"), ("#4b5563", "#f3f4f6")),
 }
-TIPOS_EQUIPO = ["Notebook", "PC de escritorio", "All in One", "Impresora", "Celular", "Tablet", "Monitor", "Consola", "Otro"]
+TIPOS_EQUIPO = ["Notebook", "PC de escritorio", "All in One", "Impresora", "Celular", "Tablet", "Monitor", "Consola", "GPS", "Otro"]
 IVA_OPCIONES = ["Monotributo", "Responsable Inscripto", "Exento", "Consumidor Final"]
 CODIGO_POR_DEFECTO = "0000"
 MARCA_NOMBRE = "Mi Servicio Técnico"

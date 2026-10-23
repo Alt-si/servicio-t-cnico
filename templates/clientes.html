@@ -7,7 +7,7 @@
     <input name="q" data-vivo value="{{ q }}" autocomplete="off" placeholder="Buscar por nombre, apellido, razón social, teléfono, CUIT, IVA, equipo…" style="flex:1;min-width:200px">
     <button class="btn">Buscar</button></form>
   <div class="tabla-wrap"><table>
-    <thead><tr><th>Cliente</th><th>Teléfono</th><th class="ocu">Ciudad</th><th>Condición frente al IVA</th><th class="ocu">CUIT</th><th></th></tr></thead>
+    <thead><tr><th>Cliente</th><th>Teléfono</th><th class="ocu">Ciudad</th><th>IVA</th><th class="ocu">CUIT</th><th></th></tr></thead>
     <tbody class="clientes">
     {% for c in filas %}
     <tr><td><b>{{ c|nombre_cliente }}</b>{% if c.razon_social %}<div class="mut" style="font-size:12px">{{ c.apellido }}, {{ c.nombre }}</div>{% endif %}</td><td>{{ c.telefono or '' }}</td><td class="ocu">{{ c.ciudad or '' }}</td>

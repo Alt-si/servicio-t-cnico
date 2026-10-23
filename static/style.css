@@ -64,3 +64,12 @@ tbody.clientes tr{border-bottom:1px solid var(--bd)}
 :root[data-theme=dark] .e-equipo-comprado{background:#4b5563;color:#f3f4f6}
 
 tr.rec-vencido{background:#dc2626;color:#fff}tr.rec-hoy{background:#f97316;color:#fff}tr.rec-hecho{opacity:.55}
+
+.menu-ord{position:relative}
+.menu-ord summary{list-style:none;color:#fff;background:rgba(255,255,255,.15);border-radius:6px;padding:7px 12px;cursor:pointer}
+.menu-ord summary::-webkit-details-marker{display:none}
+.menu-ord summary.act{background:rgba(255,255,255,.35);font-weight:600}
+.menu-ord .desplegable{position:absolute;top:100%;left:0;margin-top:4px;min-width:230px;background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:6px;z-index:40}
+header.top nav .menu-ord .desplegable a{display:block;background:none;color:var(--tx);border-radius:4px;padding:8px 10px}
+header.top nav .menu-ord .desplegable a:hover{background:var(--bg)}
+.menu-ord hr{border:0;border-top:1px solid var(--bd);margin:4px 0}

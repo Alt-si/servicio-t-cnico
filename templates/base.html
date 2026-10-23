@@ -11,7 +11,11 @@
   {% if marca.tiene_logo %}<img src="{{ url_for('logo') }}" width="{{ marca.logo_ancho }}" height="{{ marca.logo_alto }}" alt="">{% endif %}
   <div><div class="nom">{{ marca.nombre }}</div><div class="sub">{{ marca.subtitulo }}</div></div>
   <nav>
-    <a href="{{ url_for('ordenes') }}" class="{{ 'act' if request.endpoint in ('ordenes','orden_ver','orden_nueva') }}">Órdenes</a>
+    <details class="menu-ord"><summary class="{{ 'act' if request.endpoint in ('ordenes','orden_ver','orden_nueva') }}">Órdenes ▾</summary>
+      <div class="desplegable">
+        {% for t, e, n in vistas %}<a href="{{ url_for('ordenes', estado=e) if e else url_for('ordenes') }}">{{ t }} <span class="mut">({{ n }})</span></a>{% endfor %}
+        <hr><a href="{{ url_for('orden_nueva') }}">➕ Crear nueva</a>
+      </div></details>
     <a href="{{ url_for('clientes') }}" class="{{ 'act' if request.endpoint=='clientes' }}">Clientes</a>
     <a href="{{ url_for('recordatorios') }}" id="nav-rec" class="{{ 'act' if request.endpoint=='recordatorios' }}">Recordatorios</a>
     <a href="{{ url_for('configuracion') }}" class="{{ 'act' if request.endpoint=='configuracion' }}">Configuración</a>

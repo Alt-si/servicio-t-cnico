@@ -108,7 +108,13 @@ def db():
 def contexto():
     if not g.get("cuenta"):
         return {}
-    return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES}
+    with db() as con:
+        cuentas = dict(con.execute("SELECT estado, COUNT(*) FROM ordenes GROUP BY estado").fetchall())
+    vistas = [("Todas las órdenes", "", sum(cuentas.values())), ("Ingresos nuevos", "Nuevo ingreso", cuentas.get("Nuevo ingreso", 0)),
+              ("Pendientes", "Pendiente", cuentas.get("Pendiente", 0)), ("Listos para retirar", "Listo para retirar", cuentas.get("Listo para retirar", 0)),
+              ("Equipos retirados", "Equipo retirado", cuentas.get("Equipo retirado", 0)), ("Scrap", "Scrap", cuentas.get("Scrap", 0)),
+              ("Equipos comprados", "Equipo comprado", cuentas.get("Equipo comprado", 0))]
+    return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES, "vistas": vistas}
 
 
 def error(msg, codigo=400, **extra):

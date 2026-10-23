@@ -105,3 +105,6 @@ if (window.HAY_SESION) {
   try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
   revisarRecordatorios(); setInterval(revisarRecordatorios, 20000);
 }
+
+// cerrar el submenú de Órdenes al hacer clic afuera
+document.addEventListener('click', e => { const d = document.querySelector('.menu-ord'); if (d && !d.contains(e.target)) d.open = false; });

@@ -128,11 +128,14 @@ function aplicarMoneda(el) {
   try { el.setSelectionRange(p, p); } catch (e) {}
 }
 document.addEventListener('input', e => { if (e.target.classList?.contains('moneda')) aplicarMoneda(e.target); });
-document.addEventListener('keydown', e => {      // el punto del teclado numérico cuenta como coma decimal
+document.addEventListener('keydown', e => {      // el punto es separador de miles: se agrega solo, no se escribe
+  if (e.target.classList?.contains('moneda') && e.key === '.') e.preventDefault();
+});
+document.addEventListener('paste', e => {        // al pegar "1500.50" (punto decimal) se pasa a coma
   const el = e.target;
-  if (el.classList?.contains('moneda') && e.key === '.' && !el.value.includes(',')) {
-    e.preventDefault(); el.setRangeText(',', el.selectionStart, el.selectionEnd, 'end'); aplicarMoneda(el);
-  } else if (el.classList?.contains('moneda') && e.key === '.') e.preventDefault();
+  if (!el.classList?.contains('moneda')) return;
+  const t = (e.clipboardData?.getData('text') || '').trim();
+  if (/^\d+\.\d{1,2}$/.test(t)) { e.preventDefault(); el.setRangeText(t.replace('.', ','), el.selectionStart, el.selectionEnd, 'end'); aplicarMoneda(el); el.dispatchEvent(new Event('input', {bubbles: true})); }
 });
 
 // ----- Texto de datos siempre en MAYÚSCULAS (campos con clase "mayus")

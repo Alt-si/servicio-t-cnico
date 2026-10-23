@@ -4,7 +4,7 @@ const fmt = n => { n = Math.round(Number(n) * 100) / 100; const d = Number.isInt
 function num(t) {
   t = String(t || '').replace(/[$\s]/g, '');
   if (!t) return null;
-  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(/\./g, '');      // sin coma, los puntos son separadores de miles
   const n = Number(t); return isNaN(n) ? null : n;
 }
 function mostrarError(t) { const e = $('#err'); e.textContent = t; e.style.display = t ? 'block' : 'none'; if (t) scrollTo(0, 0); }
@@ -16,7 +16,7 @@ function saldo() {
   else if (m !== null) t = fmt(Math.max(m - s, 0));
   $('#saldo').textContent = t;
 }
-['monto', 'sena'].forEach(i => $('#' + i).addEventListener('input', saldo));
+['monto', 'sena'].forEach(i => $('#' + i).addEventListener('input', e => { aplicarMoneda(e.target); saldo(); }));
 saldo();
 
 function datos() {

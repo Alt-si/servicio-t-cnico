@@ -108,6 +108,11 @@ function botones() {
   const est = ORDEN.estado, final = ['Scrap', 'Equipo comprado'].includes(est), ret = est === 'Equipo retirado';
   const b = [];
   const add = (t, cls, fn) => b.push([t, cls, fn]);
+  if (ORDEN.monto !== null && ORDEN.monto > 0 && !final && !ret) add('Enviar presupuesto', 'wa', async () => {
+    const texto = `Hola, ${ORDEN.nombre} en ${ORDEN.empresa} hemos actualizado la orden ${String(ORDEN.id).padStart(5, '0')} (${ORDEN.equipo_txt}) ` +
+                  `Presupuesto: ${ORDEN.detalle.trim()} ${fmt(ORDEN.monto)}. Esperamos su respuesta.`.replace(/\s+/g, ' ');
+    await ofrecerWhatsApp('Enviar presupuesto por WhatsApp', ORDEN.wa, texto);
+  });
   if (!ORDEN.resp && !final && !ret) {
     add('El cliente aceptó el presupuesto', 'ok', async () => { if (await accion('aceptar')) location.reload(); });
     add('El cliente rechazó el presupuesto', 'bad', async () => { if (await accion('rechazar')) location.reload(); });

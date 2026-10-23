@@ -114,3 +114,4 @@ label.modulo .mut{font-size:13px;font-weight:400}
 
 a.wa{display:inline-flex;vertical-align:middle;margin-left:6px;border-radius:50%;box-shadow:0 2px 4px rgba(0,0,0,.3);transition:transform .1s}
 a.wa:hover{transform:scale(1.12)}
+.btn.wa{background:#25d366;border-color:#25d366;color:#fff}

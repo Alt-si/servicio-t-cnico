@@ -41,6 +41,10 @@ function textoPresupuesto(id, d) {
          `Presupuesto: ${(d.detalle || '').trim()} ${m !== null ? fmt(m) : ''}. Esperamos su respuesta.`.replace(/\s+/g, ' ');
 }
 
+function textoListo(equipo) {
+  return `Hola, ${ORDEN.nombre}. ${ORDEN.empresa} le informa que su equipo (${equipo}) está listo para ser retirado. Gracias.`;
+}
+
 $('#guardar').onclick = async () => {
   mostrarError('');
   const d = datos();
@@ -56,13 +60,15 @@ $('#guardar').onclick = async () => {
       await ofrecerWhatsApp('¿Enviar el comprobante de ingreso por WhatsApp?', tk.wa, tk.texto);
     }
     if (j.ofrecer_presupuesto && tk.ok) await ofrecerWhatsApp('¿Enviar el presupuesto por WhatsApp?', tk.wa, textoPresupuesto(j.id, d));
-    location = '/orden/' + j.id; return;
+    location = '/ordenes'; return;
   }
   j = await apiCodigo('/api/orden/' + ORDEN.id, d);
   if (j.cancelado) return;
   if (!j.ok) return mostrarError(j.error);
   if (j.ofrecer_presupuesto) await ofrecerWhatsApp('La orden pasó a Pendiente: ¿enviar el presupuesto por WhatsApp?', ORDEN.wa, textoPresupuesto(ORDEN.id, d));
-  location.reload();
+  if (j.estado === 'Listo para retirar' && ORDEN.estado !== 'Listo para retirar')
+    await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo([d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ')));
+  location = '/ordenes';
 };
 
 async function buscarCliente(id) {
@@ -123,7 +129,11 @@ function botones() {
     add('El cliente rechazó el presupuesto', 'bad', async () => { if (await accion('rechazar')) location.reload(); });
   }
   if (ORDEN.resp) add('Deshacer respuesta del cliente', '', async () => { if (await accion('deshacer')) location.reload(); });
-  if (!final && !ret && est !== 'Listo para retirar') add('Marcar listo para retirar', 'ok', async () => { if (await accion('listo')) location.reload(); });
+  if (!final && !ret && est !== 'Listo para retirar') add('Marcar listo para retirar', 'ok', async () => {
+    if (!await accion('listo')) return;
+    await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
+    location.reload();
+  });
   if (est === 'Listo para retirar') add('Retirar', 'ok', async () => {
     const texto = `Hola, ${ORDEN.nombre}. ${ORDEN.empresa} le informa que su equipo (${ORDEN.equipo_txt}) está listo para ser retirado. Gracias.`;
     await ofrecerWhatsApp('¿Avisar al cliente por WhatsApp?', ORDEN.wa, texto);

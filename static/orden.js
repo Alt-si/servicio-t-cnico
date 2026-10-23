@@ -13,7 +13,13 @@ function saldo() {
   const m = num(val('monto')), s = num(val('sena')) || 0;
   let t = '—';
   if (ORDEN.resp === 'rechazado' || ORDEN.dev) t = fmt(0);
-  else if (!ORDEN.resp && document.querySelector('.opcion-extra')) t = 'Según la opción elegida';
+  else if (!ORDEN.resp && document.querySelector('.opcion-extra')) {
+    const ok = tildadas();
+    if (ok.length) {
+      const montos = [num(val('monto'))].concat([...document.querySelectorAll('.ex-monto')].map(x => num(x.value)));
+      t = fmt(Math.max(ok.reduce((acc, n) => acc + (montos[n - 1] || 0), 0) - s, 0));
+    } else t = 'Según la opción elegida';
+  }
   else if (m !== null) t = fmt(Math.max(m - s, 0));
   $('#saldo').textContent = t;
 }
@@ -54,7 +60,7 @@ const bloqueado = !!ORDEN.resp;
 function nuevaOpcion(monto, detalle) {
   const n = document.querySelectorAll('.opcion-extra').length + 2;
   const b = document.createElement('div'); b.className = 'opcion-extra';
-  b.innerHTML = `<div class="row"><b class="ex-tit">Opción ${n}</b>${bloqueado ? '' : '<button type="button" class="btn ex-quitar der" title="Quitar esta opción">✕</button>'}</div>
+  b.innerHTML = `<div class="row"><b class="ex-tit">Opción ${n}</b><label class="acepta" style="display:none;margin:0"><input type="checkbox" class="ex-acepta"> ✔ Acepta</label>${bloqueado ? '' : '<button type="button" class="btn ex-quitar der" title="Quitar esta opción">✕</button>'}</div>
     <div class="grid"><div><label>Presupuesto ($)</label><input class="ex-monto moneda" inputmode="decimal"></div></div>
     <label>Detalle</label><textarea class="ex-detalle mayus"></textarea>`;
   $('.ex-monto', b).value = monto || ''; $('.ex-detalle', b).value = detalle || '';
@@ -63,11 +69,19 @@ function nuevaOpcion(monto, detalle) {
   $('#opciones-extra').appendChild(b); renumerar();
   return b;
 }
+function tildadas() {      // números de opción tildados: 1 = presupuesto de arriba, 2.. = opciones agregadas
+  const r = $('#acepta-1').checked ? [1] : [];
+  document.querySelectorAll('.ex-acepta').forEach((c, i) => { if (c.checked) r.push(i + 2); });
+  return r;
+}
+document.addEventListener('change', e => { if (e.target.id === 'acepta-1' || e.target.classList?.contains('ex-acepta')) saldo(); });
 function renumerar() {
   const bs = [...document.querySelectorAll('.opcion-extra')];
   bs.forEach((b, i) => $('.ex-tit', b).textContent = `Opción ${i + 2}`);
   $('#lbl-detalle').textContent = bs.length ? 'Detalle de la opción 1' : 'Detalle del presupuesto';
   $('#mas-opcion').style.display = (bloqueado || bs.length >= 4) ? 'none' : '';
+  document.querySelectorAll('.acepta').forEach(l => l.style.display = (!bloqueado && bs.length) ? '' : 'none');
+  if (!bs.length) $('#acepta-1').checked = false;
   saldo();
 }
 $('#mas-opcion').onclick = () => nuevaOpcion('', '').querySelector('.ex-detalle').focus();
@@ -159,25 +173,14 @@ function botones() {
   });
   if (!ORDEN.resp && !final && !ret) {
     add('El cliente aceptó el presupuesto', 'ok', async () => {
-      let opcion;
+      mostrarError('');
+      let aceptadas;
       if ((ORDEN.extra || []).length) {
-        const todas = [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat(ORDEN.extra);
-        opcion = await new Promise(res => {
-          const c = modal(`<h2>¿Qué presupuesto acepta el cliente?</h2><p class="mut">Marcá cada opción como aceptada o no aceptada.</p>
-            ${todas.map((o, i) => `<div class="modulo" style="display:block"><b>Opción ${i + 1}: ${esc(fmt(o.monto))}</b> <span class="mut">${esc(o.detalle || '')}</span>
-              <div class="row" style="margin-top:6px"><label style="margin:0"><input type="radio" name="op${i}" value="si" ${i === 0 ? 'checked' : ''}> Acepta</label>
-              <label style="margin:0 0 0 14px"><input type="radio" name="op${i}" value="no" ${i === 0 ? '' : 'checked'}> No acepta</label></div></div>`).join('')}
-            <p class="saldo" id="op-total"></p>
-            <div class="row" style="margin-top:8px"><button class="btn pri" id="op-ok">Confirmar</button><button class="btn" id="op-no">Cancelar</button></div>`);
-          const marcadas = () => todas.map((o, i) => c.querySelector(`input[name=op${i}]:checked`).value === 'si' ? i + 1 : 0).filter(Boolean);
-          const total = () => { const m = marcadas(); $('#op-total', c).textContent = m.length ? 'Total aceptado: ' + fmt(m.reduce((s, i) => s + Number(todas[i - 1].monto), 0)) : 'Ninguna opción aceptada'; };
-          c.addEventListener('change', total); total();
-          $('#op-ok', c).onclick = () => { const m = marcadas(); if (!m.length) return aviso('Marcá al menos una opción como aceptada. Si el cliente no acepta ninguna, usá «El cliente rechazó el presupuesto».').then(() => res(null)); cerrar(); res(m); };
-          $('#op-no', c).onclick = () => { cerrar(); res(null); };
-        });
-        if (!opcion) return;
+        if (document.querySelectorAll('.opcion-extra').length !== ORDEN.extra.length) return mostrarError('Guardá la orden antes de marcar la opción que acepta el cliente.');
+        aceptadas = tildadas();
+        if (!aceptadas.length) return mostrarError('Tildá ✔ Acepta al lado del presupuesto que acepta el cliente. Si no acepta ninguno, usá «El cliente rechazó el presupuesto».');
       }
-      if (await accion('aceptar', {aceptadas: opcion})) location.reload();
+      if (await accion('aceptar', {aceptadas})) location.reload();
     });
     add('El cliente rechazó el presupuesto', 'bad', async () => { if (await accion('rechazar')) location.reload(); });
   }

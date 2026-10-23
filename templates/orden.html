@@ -30,7 +30,7 @@
   <label>Falla reportada *</label><textarea id="falla" class="mayus">{{ o.falla if o else '' }}</textarea>
   <label>Accesorios entregados</label><input id="accesorios" class="mayus" value="{{ o.accesorios if o and o.accesorios else '' }}">
   <div class="grid">
-    <div><label>Presupuesto ($)</label><input id="monto" class="moneda" inputmode="decimal" value="{{ o.presupuesto_monto|monto_input if o and o.presupuesto_monto is not none else '' }}"></div>
+    <div><label>Presupuesto ($) <span class="acepta" id="acepta-1-l" style="display:none"><input type="checkbox" id="acepta-1"> ✔ Acepta</span></label><input id="monto" class="moneda" inputmode="decimal" value="{{ o.presupuesto_monto|monto_input if o and o.presupuesto_monto is not none else '' }}"></div>
     <div><label>Seña ($)</label><input id="sena" class="moneda" inputmode="decimal" value="{{ o.sena_monto|monto_input if o and o.sena_monto is not none else '' }}"></div>
     <div><label>Saldo a abonar</label><div class="saldo" id="saldo">—</div></div>
   </div>

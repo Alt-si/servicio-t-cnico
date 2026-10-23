@@ -27,7 +27,7 @@
   <p><button class="btn pri" id="c-ok">Cambiar código</button></p>
 </div>
 
-<div class="card"><h1>Respaldo de datos</h1>
+{% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>
   <p class="mut">Descargá una copia de toda tu información (clientes, equipos, órdenes e historial). Guardala en un lugar seguro.</p>
   <p><a class="btn pri" href="{{ url_for('respaldo') }}">Respaldar base de datos</a></p>
   <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0">
@@ -42,7 +42,7 @@
     </div>
     <p><button class="btn bad">Cargar base de datos</button></p>
   </form>
-</div>
+</div>{% endif %}
 
 <div class="card"><h1>Mi clave de acceso</h1>
   <div id="e-cl" class="msg error" style="display:none"></div>

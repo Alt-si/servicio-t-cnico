@@ -95,13 +95,13 @@ function siguienteAviso() {
   try { if (window.Notification && Notification.permission === 'granted') new Notification('Recordatorio', {body: r.descripcion}); } catch (e) {}
 }
 async function revisarRecordatorios() {
-  if (!window.HAY_SESION) return;
+  if (!window.HAY_SESION || !window.HAY_REC) return;
   const j = await api('/api/recordatorios/avisos');
   if (!j.ok) return;
   const n = $('#nav-rec'); if (n) n.textContent = j.pendientes ? `Recordatorios (${j.pendientes})` : 'Recordatorios';
   (j.avisos || []).forEach(a => colaAvisos.push(a)); siguienteAviso();
 }
-if (window.HAY_SESION) {
+if (window.HAY_SESION && window.HAY_REC) {
   try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {}
   revisarRecordatorios(); setInterval(revisarRecordatorios, 20000);
 }

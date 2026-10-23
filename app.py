@@ -70,6 +70,7 @@ def antes():
         elif g.cuenta["id"] not in _bases_listas:
             core.crear_base(g.cuenta["id"])      # agrega tablas nuevas a comercios existentes
             _bases_listas.add(g.cuenta["id"])
+    g.modulos = core.modulos_de(g.cuenta) if g.cuenta else set()
 
 
 @app.after_request
@@ -90,6 +91,19 @@ def login_requerido(f):
             return redirect(url_for("login", siguiente=request.path))
         return f(*a, **k)
     return interior
+
+
+def modulo_requerido(clave):
+    def deco(f):
+        @wraps(f)
+        def interior(*a, **k):
+            if clave not in g.get("modulos", set()):
+                if request.path.startswith("/api/"):
+                    return jsonify(ok=False, error="Esta sección no está habilitada en tu cuenta."), 403
+                abort(403)
+            return f(*a, **k)
+        return interior
+    return deco
 
 
 def admin_requerido(f):
@@ -116,7 +130,7 @@ def contexto():
               ("Pendientes", "Pendiente", cuentas.get("Pendiente", 0)), ("Listos para retirar", "Listo para retirar", cuentas.get("Listo para retirar", 0)),
               ("Equipos retirados", "Equipo retirado", cuentas.get("Equipo retirado", 0)), ("Scrap", "Scrap", cuentas.get("Scrap", 0)),
               ("Equipos comprados", "Equipo comprado", cuentas.get("Equipo comprado", 0))]
-    return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES, "vistas": vistas}
+    return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES, "vistas": vistas, "modulos": g.modulos}
 
 
 def U(valor):
@@ -650,6 +664,7 @@ def configuracion():
 
 @app.route("/configuracion/respaldo")
 @login_requerido
+@modulo_requerido("respaldo")
 def respaldo():
     import tempfile, zipfile
     with tempfile.TemporaryDirectory() as tmp:
@@ -665,6 +680,7 @@ def respaldo():
 
 @app.route("/configuracion/cargar", methods=["POST"])
 @login_requerido
+@modulo_requerido("respaldo")
 def cargar_base():
     import tempfile, zipfile
     if not core.codigo_es_valido(g.cuenta["id"], request.form.get("codigo")):
@@ -712,6 +728,7 @@ def _fecha_hora(d):
 
 @app.route("/recordatorios")
 @login_requerido
+@modulo_requerido("recordatorios")
 def recordatorios():
     filtro = request.args.get("ver", "pendientes")
     sql = "SELECT * FROM recordatorios"
@@ -730,6 +747,7 @@ def recordatorios():
 
 @app.route("/api/recordatorio", methods=["POST"])
 @login_requerido
+@modulo_requerido("recordatorios")
 def api_recordatorio_guardar():
     d = request.get_json(force=True, silent=True) or {}
     desc = U(d.get("descripcion"))
@@ -748,6 +766,7 @@ def api_recordatorio_guardar():
 
 @app.route("/api/recordatorio/<int:rid>/<accion>", methods=["POST"])
 @login_requerido
+@modulo_requerido("recordatorios")
 def api_recordatorio_accion(rid, accion):
     from datetime import timedelta
     with db() as con:
@@ -767,6 +786,7 @@ def api_recordatorio_accion(rid, accion):
 
 @app.route("/api/recordatorios/avisos")
 @login_requerido
+@modulo_requerido("recordatorios")
 def api_recordatorios_avisos():
     """Recordatorios cuya hora llegó y no se avisaron; se marcan como avisados. Además, cuántos hay vencidos/de hoy."""
     ahora_txt = core.ahora_dt().strftime("%Y-%m-%d %H:%M")
@@ -856,6 +876,20 @@ def admin_crear():
         return redirect(url_for("admin"))
     session["cuenta_nueva"] = {"email": request.form.get("email", "").strip().lower(), "clave": clave}
     return redirect(url_for("admin"))
+
+
+@app.route("/admin/<int:cid>/secciones", methods=["GET", "POST"])
+@admin_requerido
+def admin_secciones(cid):
+    with core.conectar_cuentas() as con:
+        f = con.execute("SELECT * FROM cuentas WHERE id=?", (cid,)).fetchone()
+    if not f:
+        abort(404)
+    if request.method == "POST":
+        core.guardar_modulos(cid, request.form.getlist("modulo"))
+        flash(f"Secciones de «{f['comercio']}» actualizadas.", "ok")
+        return redirect(url_for("admin"))
+    return render_template("admin_secciones.html", f=f, activos=core.modulos_de(f), MODULOS=core.MODULOS)
 
 
 @app.route("/admin/<int:cid>/<accion>", methods=["POST"])

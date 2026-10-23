@@ -210,6 +210,37 @@ def conectar_cuentas():
     return con
 
 
+# Secciones que se pueden habilitar o deshabilitar por cuenta desde el panel de administración.
+# Para agregar una sección nueva: sumarla acá (clave: (nombre, descripción)), proteger sus rutas con
+# @modulo_requerido("clave") y mostrar su enlace con {% if 'clave' in modulos %}.
+MODULOS = {
+    "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
+    "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
+}
+# Qué tienen habilitado las cuentas que todavía no se configuraron (las secciones nuevas arrancan apagadas).
+MODULOS_INICIALES = ["recordatorios", "respaldo"]
+
+
+def modulos_de(cuenta):
+    """Conjunto de secciones habilitadas para una cuenta (fila de la tabla cuentas)."""
+    import json
+    if cuenta["es_admin"]:
+        return set(MODULOS)
+    crudo = cuenta["modulos"]
+    try:
+        lista = json.loads(crudo) if crudo else MODULOS_INICIALES
+    except ValueError:
+        lista = MODULOS_INICIALES
+    return {m for m in lista if m in MODULOS}
+
+
+def guardar_modulos(cuenta_id, claves):
+    import json
+    validas = [m for m in MODULOS if m in claves]
+    with conectar_cuentas() as con:
+        con.execute("UPDATE cuentas SET modulos=? WHERE id=?", (json.dumps(validas), cuenta_id))
+
+
 def crear_cuentas():
     with conectar_cuentas() as con:
         con.execute("""
@@ -223,9 +254,12 @@ def crear_cuentas():
                 creada TEXT,
                 ultimo_ingreso TEXT,
                 vence TEXT,
-                notas TEXT
+                notas TEXT,
+                modulos TEXT
             )
         """)
+        if "modulos" not in [r[1] for r in con.execute("PRAGMA table_info(cuentas)")]:
+            con.execute("ALTER TABLE cuentas ADD COLUMN modulos TEXT")
 
 
 def generar_clave(largo=10):

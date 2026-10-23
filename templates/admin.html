@@ -14,6 +14,7 @@
     <td>{{ stats[f.id][0] }}</td><td>{{ stats[f.id][1] }}</td><td>{{ fmt_fecha(f.ultimo_ingreso, True) if f.ultimo_ingreso else '—' }}</td>
     <td>{{ 'Activa' if f.activa else 'Desactivada' }}</td>
     <td style="white-space:nowrap">
+      <a class="btn" href="{{ url_for('admin_secciones', cid=f.id) }}">Secciones</a>
       {% for a, t in (('clave','Nueva clave'),('codigo','Código → 0000'),('desactivar' if f.activa else 'activar', 'Desactivar' if f.activa else 'Activar')) %}
       <form method="post" action="{{ url_for('admin_accion', cid=f.id, accion=a) }}" style="display:inline" {% if a!='activar' %}onsubmit="return confirm('¿Confirmar: {{ t }}?')"{% endif %}>
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn">{{ t }}</button></form>{% endfor %}

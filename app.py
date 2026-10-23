@@ -596,6 +596,21 @@ def api_orden_accion(oid):
     return jsonify(ok=True)
 
 
+@app.route("/api/orden/<int:oid>/ticket")
+@login_requerido
+def api_orden_ticket(oid):
+    """Texto del comprobante de ingreso y número de WhatsApp del cliente."""
+    with db() as con:
+        o = cargar_orden(con, oid)
+        c = con.execute("SELECT nombre, telefono FROM clientes WHERE id=?", (o["cliente_id"],)).fetchone()
+        e = con.execute("SELECT * FROM equipos WHERE id=?", (o["equipo_id"],)).fetchone() if o["equipo_id"] else None
+    e = e or {"tipo": "", "marca": "", "modelo": "", "serie": "", "descripcion": ""}
+    nombre = (c["nombre"] or "").strip().title()
+    texto = core.texto_ingreso(core.marca(g.cuenta["id"])["nombre"], oid, o["fecha_ingreso"], nombre, e["tipo"], e["marca"], e["modelo"],
+                               e["serie"], o["accesorios"], o["falla"], e["descripcion"])
+    return jsonify(ok=True, texto=texto, wa=telefono_whatsapp(c["telefono"]), nombre=nombre)
+
+
 @app.route("/api/orden/<int:oid>/historial")
 @login_requerido
 def api_orden_historial(oid):

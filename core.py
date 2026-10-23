@@ -531,3 +531,31 @@ def guardar_copia_servidor(cuenta_id, conservar=3):
     for viejo in sorted(carpeta.glob(f"{NOMBRE_RESPALDO}_*.zip"))[:-conservar]:
         viejo.unlink()
     return nombre
+
+
+# ---------------------------------------------------------------- comprobante de ingreso (WhatsApp)
+DIAS_LARGO = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def texto_ingreso(empresa, oid, fecha_ingreso, nombre_pila, tipo, marca, modelo, serie, accesorios, falla, observaciones):
+    """Ticket resumido del ingreso del equipo, para enviar al cliente por WhatsApp."""
+    try:
+        dt = datetime.strptime(fecha_ingreso[:19], "%Y-%m-%d %H:%M:%S")
+        cuando = f"{DIAS_LARGO[dt.weekday()].capitalize()} {dt.strftime('%d/%m/%Y')} - {dt.strftime('%H:%M')} hs"
+    except (TypeError, ValueError):
+        cuando = fecha_ingreso or ""
+    limpio = lambda t: " ".join((t or "").split())
+    lineas = [f"Hola, {nombre_pila}. Te enviamos el comprobante de ingreso de tu equipo.", "",
+              f"*{empresa} - Ingreso de equipo*",
+              f"Orden N° {int(oid):05d}",
+              f"Ingresó: {cuando}", "",
+              f"Tipo: {limpio(tipo) or '-'}",
+              f"Marca: {limpio(marca) or '-'}",
+              f"Modelo: {limpio(modelo) or '-'}",
+              f"N° de serie: {limpio(serie) or '-'}",
+              f"Accesorios: {limpio(accesorios) or 'Ninguno'}",
+              f"Falla reportada: {limpio(falla) or '-'}"]
+    if limpio(observaciones):
+        lineas.append(f"Observaciones: {limpio(observaciones)}")
+    lineas += ["", "Gracias por confiar en nosotros."]
+    return "\n".join(lineas)

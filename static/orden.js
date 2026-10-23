@@ -50,12 +50,12 @@ $('#guardar').onclick = async () => {
     d.cliente_id = ORDEN.cliente_id; d.equipo_id = $('#prev-equipo')?.value || null;
     j = await api('/api/orden', d);
     if (!j.ok) return mostrarError(j.error);
-    if (j.ofrecer_presupuesto) {
-      const cl = await buscarCliente(ORDEN.cliente_id);
-      const wa = cl ? cl.wa : '';
-      ORDEN.nombre = cl ? cl.nombre : '';
-      await ofrecerWhatsApp('¿Enviar el presupuesto por WhatsApp?', wa, textoPresupuesto(j.id, d));
+    const tk = await api(`/api/orden/${j.id}/ticket`);
+    if (tk.ok) {
+      ORDEN.nombre = tk.nombre;
+      await ofrecerWhatsApp('¿Enviar el comprobante de ingreso por WhatsApp?', tk.wa, tk.texto);
     }
+    if (j.ofrecer_presupuesto && tk.ok) await ofrecerWhatsApp('¿Enviar el presupuesto por WhatsApp?', tk.wa, textoPresupuesto(j.id, d));
     location = '/orden/' + j.id; return;
   }
   j = await apiCodigo('/api/orden/' + ORDEN.id, d);
@@ -109,6 +109,10 @@ function botones() {
   const est = ORDEN.estado, final = ['Scrap', 'Equipo comprado'].includes(est), ret = est === 'Equipo retirado';
   const b = [];
   const add = (t, cls, fn) => b.push([t, cls, fn]);
+  add('Enviar comprobante de ingreso', 'wa', async () => {
+    const tk = await api(`/api/orden/${ORDEN.id}/ticket`);
+    if (tk.ok) await ofrecerWhatsApp('Comprobante de ingreso por WhatsApp', tk.wa, tk.texto);
+  });
   if (ORDEN.monto !== null && ORDEN.monto > 0 && !final && !ret) add('Enviar presupuesto', 'wa', async () => {
     const texto = `Hola, ${ORDEN.nombre} en ${ORDEN.empresa} hemos actualizado la orden ${String(ORDEN.id).padStart(5, '0')} (${ORDEN.equipo_txt}) ` +
                   `Presupuesto: ${ORDEN.detalle.trim()} ${fmt(ORDEN.monto)}. Esperamos su respuesta.`.replace(/\s+/g, ' ');

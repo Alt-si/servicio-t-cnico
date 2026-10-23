@@ -61,6 +61,7 @@ $('#guardar').onclick = async () => {
   j = await apiCodigo('/api/orden/' + ORDEN.id, d);
   if (j.cancelado) return;
   if (!j.ok) return mostrarError(j.error);
+  if (j.ofrecer_presupuesto) await ofrecerWhatsApp('La orden pasó a Pendiente: ¿enviar el presupuesto por WhatsApp?', ORDEN.wa, textoPresupuesto(ORDEN.id, d));
   location.reload();
 };
 

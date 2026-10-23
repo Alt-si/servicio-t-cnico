@@ -505,7 +505,8 @@ def api_orden_guardar(oid):
             core.registrar_evento(con, oid, estado, f"Seña recibida: {fmt_monto(sena)}" if sena else "Seña quitada")
         if falla != (o["falla"] or "") or U(d.get("accesorios")) != (o["accesorios"] or ""):
             core.registrar_evento(con, oid, estado, "Datos de ingreso modificados")
-    return jsonify(ok=True, id=oid, estado=estado)
+    return jsonify(ok=True, id=oid, estado=estado,
+                   ofrecer_presupuesto=bool(o["estado"] == E_NUEVO and estado == E_PENDIENTE and monto and monto > 0))
 
 
 @app.route("/api/orden/<int:oid>/accion", methods=["POST"])

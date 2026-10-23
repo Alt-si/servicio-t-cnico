@@ -100,3 +100,11 @@ details[open]>.resumen-hist::before{transform:rotate(90deg)}
 details[open]>.resumen-hist{padding-bottom:8px;border-bottom:1.5px solid var(--bd)}
 
 .mayus{text-transform:uppercase}
+
+/* etiquetas y encabezados más legibles (sin superar a los títulos) */
+:root{--lbl:#374151}
+:root[data-theme=dark]{--lbl:#d1d5db}
+label{font-size:13px;font-weight:600;color:var(--lbl)}
+th{font-size:13px;font-weight:700;color:var(--lbl)}
+.ficha .mut{font-size:13px;font-weight:600;color:var(--lbl)}
+label input[type=checkbox]{vertical-align:-1px}

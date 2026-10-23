@@ -62,7 +62,7 @@ function confirmar(texto) {
 // Ofrece enviar un WhatsApp; resuelve cuando se cierra la ventana
 function ofrecerWhatsApp(titulo, numero, texto) {
   return new Promise(res => {
-    const c = modal(`<h2>${esc(titulo)}</h2><pre>${esc(texto)}</pre>
+    const c = modal(`<h2>${esc(titulo)}</h2><pre class="${texto.includes('```') ? 'ticket' : ''}">${esc(texto.replace(/```\n?/g, ''))}</pre>
       ${numero ? '' : '<p class="err">El teléfono del cliente no parece un celular válido; se abrirá WhatsApp para elegir el contacto.</p>'}
       <div class="row"><a class="btn ok" id="wa-ir" target="_blank" rel="noopener"
         href="https://wa.me/${numero || ''}?text=${encodeURIComponent(texto)}">Enviar por WhatsApp</a>

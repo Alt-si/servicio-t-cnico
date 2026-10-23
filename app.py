@@ -474,7 +474,8 @@ def api_orden_crear():
                 "INSERT INTO equipos (cliente_id, tipo, marca, modelo, serie, descripcion, clave_acceso, en_garantia, creado) "
                 "VALUES (?,?,?,?,?,?,?,?,?)", [cliente["id"]] + campos + [int(bool(d.get("en_garantia"))), ahora]).lastrowid
         detalle = U(d.get("detalle"))
-        estado = E_PENDIENTE if monto and monto > 0 else E_NUEVO
+        tiene_pres = bool((monto and monto > 0) or detalle or extra)
+        estado = E_PENDIENTE if tiene_pres else E_NUEVO
         oid = con.execute(
             "INSERT INTO ordenes (cliente_id, equipo_id, fecha_ingreso, estado, falla, accesorios, presupuesto_monto, "
             "presupuesto_detalle, fecha_presupuesto, sena_monto, actualizado, espera_repuesto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -490,7 +491,7 @@ def api_orden_crear():
             core.registrar_evento(con, oid, estado, f"Seña recibida: {fmt_monto(sena)}")
         if d.get("espera_repuesto"):
             core.registrar_evento(con, oid, estado, "Esperando repuesto")
-    return jsonify(ok=True, id=oid, estado=estado, ofrecer_presupuesto=bool(monto and monto > 0))
+    return jsonify(ok=True, id=oid, estado=estado, ofrecer_presupuesto=bool(tiene_pres))
 
 
 @app.route("/api/orden/<int:oid>", methods=["POST"])
@@ -530,7 +531,7 @@ def api_orden_guardar(oid):
             r = pide_codigo(d, f"Cambiar el estado de «{o['estado']}» a «{estado}» requiere el código de validación.")
             if r:
                 return r
-        if estado == E_NUEVO and monto and monto > 0 and o["estado"] == E_NUEVO:
+        if estado == E_NUEVO and o["estado"] == E_NUEVO and ((monto and monto > 0) or detalle or extra):
             estado = E_PENDIENTE
         ahora = core.ahora()
         repuesto = int(bool(d.get("espera_repuesto")))
@@ -567,7 +568,7 @@ def api_orden_guardar(oid):
         if falla != (o["falla"] or "") or U(d.get("accesorios")) != (o["accesorios"] or ""):
             core.registrar_evento(con, oid, estado, "Datos de ingreso modificados")
     return jsonify(ok=True, id=oid, estado=estado,
-                   ofrecer_presupuesto=bool(o["estado"] == E_NUEVO and estado == E_PENDIENTE and monto and monto > 0))
+                   ofrecer_presupuesto=bool(o["estado"] == E_NUEVO and estado == E_PENDIENTE))
 
 
 @app.route("/api/orden/<int:oid>/accion", methods=["POST"])

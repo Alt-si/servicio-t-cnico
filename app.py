@@ -70,6 +70,9 @@ def antes():
             g.cuenta = None
         elif g.cuenta["id"] not in _bases_listas:
             core.crear_base(g.cuenta["id"])      # agrega tablas nuevas a comercios existentes
+            if core.ajustes(g.cuenta["id"])["modo_texto"] == "mayusculas":      # tipos y marcas ya cargados, en mayúsculas
+                with core.conectar(g.cuenta["id"]) as _c:
+                    _c.execute("UPDATE equipos SET tipo=UPPER(tipo), marca=UPPER(marca) WHERE tipo<>UPPER(tipo) OR marca<>UPPER(marca)")
             _bases_listas.add(g.cuenta["id"])
     g.modulos = core.modulos_de(g.cuenta) if g.cuenta else set()
 
@@ -426,7 +429,7 @@ def api_orden_crear():
             return error("Elegí el cliente.")
         ahora = core.ahora()
         equipo_id = d.get("equipo_id") or None
-        campos = [(d.get("tipo") or "").strip(), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
+        campos = [U(d.get("tipo")), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
         if equipo_id:
             if not con.execute("SELECT 1 FROM equipos WHERE id=? AND cliente_id=?", (equipo_id, cliente["id"])).fetchone():
                 return error("El equipo no es de ese cliente.")
@@ -502,7 +505,7 @@ def api_orden_guardar(oid):
                      f_arch, ahora, oid))
         if o["equipo_id"]:
             con.execute("UPDATE equipos SET tipo=?, marca=?, modelo=?, serie=?, descripcion=?, clave_acceso=?, en_garantia=? WHERE id=?",
-                        [(d.get("tipo") or "").strip(), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
+                        [U(d.get("tipo")), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
                         + [int(bool(d.get("en_garantia"))), o["equipo_id"]])
         if estado != o["estado"]:
             core.registrar_evento(con, oid, estado, core.texto_evento_estado(o["estado"], estado, a_abonar, bool(dev)))

@@ -17,7 +17,7 @@
   <h2 style="margin-top:14px">Equipo</h2>
   {% if not o and cliente %}<div class="grid"><div><label>Equipos anteriores de este cliente</label><select id="prev-equipo"><option value="">Equipo nuevo</option></select></div></div>{% endif %}
   <div class="grid">
-    <div><label>Tipo *</label><select id="tipo">{% for t in tipos_equipo %}<option {{ 'selected' if eq.tipo==t }}>{{ t }}</option>{% endfor %}{% if eq.tipo and eq.tipo not in tipos_equipo %}<option selected>{{ eq.tipo }}</option>{% endif %}</select></div>
+    <div><label>Tipo *</label><select id="tipo">{% for t in tipos_equipo %}<option {{ 'selected' if (eq.tipo or '')|lower==t|lower }}>{{ t }}</option>{% endfor %}{% if eq.tipo and (eq.tipo|lower) not in (tipos_equipo|map('lower')|list) %}<option selected>{{ eq.tipo }}</option>{% endif %}</select></div>
     <div><label>Marca</label><input id="marca" class="mayus" list="lista-marcas" autocomplete="off" value="{{ eq.marca or '' }}"><datalist id="lista-marcas">{% for m in marcas_equipo %}<option value="{{ m }}">{% endfor %}</datalist></div>
     <div><label>Modelo</label><input id="modelo" class="mayus" value="{{ eq.modelo or '' }}"></div>
     <div><label>N° de serie</label><input id="serie" class="mayus" value="{{ eq.serie or '' }}"></div>

@@ -24,7 +24,7 @@ COLORES = {
     "Scrap": (("#dc2626", "#ffffff"), ("#991b1b", "#ffffff")),
     "Equipo comprado": (("#9ca3af", "#111827"), ("#4b5563", "#f3f4f6")),
 }
-TIPOS_EQUIPO = ["Notebook", "PC de escritorio", "All in One", "Impresora", "Celular", "Tablet", "Monitor", "Consola", "GPS", "Otro"]
+TIPOS_EQUIPO = ['NOTEBOOK', 'PC DE ESCRITORIO', 'ALL IN ONE', 'IMPRESORA', 'CELULAR', 'TABLET', 'MONITOR', 'CONSOLA', 'GPS', 'OTRO']
 IVA_OPCIONES = ["Monotributo", "Responsable Inscripto", "Exento", "Consumidor Final"]
 CODIGO_POR_DEFECTO = "0000"
 MARCA_NOMBRE = "Mi Servicio Técnico"
@@ -572,8 +572,7 @@ def texto_ingreso(empresa, oid, fecha_ingreso, nombre_pila, tipo, marca, modelo,
 
 
 # ---------------------------------------------------------------- listas y modo de texto configurables
-MARCAS_DEFECTO = ["Acer", "Apple", "Asus", "BGH", "Brother", "Canon", "Dell", "Epson", "Garmin", "HP", "Huawei", "Lenovo",
-                  "LG", "Motorola", "Noblex", "Pantum", "Positivo", "Samsung", "Sony", "Toshiba", "Vaio", "Xerox", "Xiaomi"]
+MARCAS_DEFECTO = ['ACER', 'APPLE', 'ASUS', 'BGH', 'BROTHER', 'CANON', 'DELL', 'EPSON', 'GARMIN', 'HP', 'HUAWEI', 'LENOVO', 'LG', 'MOTOROLA', 'NOBLEX', 'PANTUM', 'POSITIVO', 'SAMSUNG', 'SONY', 'TOSHIBA', 'VAIO', 'XEROX', 'XIAOMI']
 MODOS_TEXTO = ("mayusculas", "minusculas", "manual")
 
 

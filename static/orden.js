@@ -163,14 +163,21 @@ function botones() {
       if ((ORDEN.extra || []).length) {
         const todas = [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat(ORDEN.extra);
         opcion = await new Promise(res => {
-          const c = modal(`<h2>¿Qué opción aceptó el cliente?</h2>${todas.map((o, i) => `<label class="modulo"><input type="radio" name="op" value="${i + 1}" ${i === 0 ? 'checked' : ''}><span><b>Opción ${i + 1}: ${esc(fmt(o.monto))}</b><br><span class="mut">${esc(o.detalle || '')}</span></span></label>`).join('')}
-            <div class="row" style="margin-top:12px"><button class="btn pri" id="op-ok">Aceptar</button><button class="btn" id="op-no">Cancelar</button></div>`);
-          $('#op-ok', c).onclick = () => { const v = c.querySelector('input[name=op]:checked').value; cerrar(); res(Number(v)); };
+          const c = modal(`<h2>¿Qué presupuesto acepta el cliente?</h2><p class="mut">Marcá cada opción como aceptada o no aceptada.</p>
+            ${todas.map((o, i) => `<div class="modulo" style="display:block"><b>Opción ${i + 1}: ${esc(fmt(o.monto))}</b> <span class="mut">${esc(o.detalle || '')}</span>
+              <div class="row" style="margin-top:6px"><label style="margin:0"><input type="radio" name="op${i}" value="si" ${i === 0 ? 'checked' : ''}> Acepta</label>
+              <label style="margin:0 0 0 14px"><input type="radio" name="op${i}" value="no" ${i === 0 ? '' : 'checked'}> No acepta</label></div></div>`).join('')}
+            <p class="saldo" id="op-total"></p>
+            <div class="row" style="margin-top:8px"><button class="btn pri" id="op-ok">Confirmar</button><button class="btn" id="op-no">Cancelar</button></div>`);
+          const marcadas = () => todas.map((o, i) => c.querySelector(`input[name=op${i}]:checked`).value === 'si' ? i + 1 : 0).filter(Boolean);
+          const total = () => { const m = marcadas(); $('#op-total', c).textContent = m.length ? 'Total aceptado: ' + fmt(m.reduce((s, i) => s + Number(todas[i - 1].monto), 0)) : 'Ninguna opción aceptada'; };
+          c.addEventListener('change', total); total();
+          $('#op-ok', c).onclick = () => { const m = marcadas(); if (!m.length) return aviso('Marcá al menos una opción como aceptada. Si el cliente no acepta ninguna, usá «El cliente rechazó el presupuesto».').then(() => res(null)); cerrar(); res(m); };
           $('#op-no', c).onclick = () => { cerrar(); res(null); };
         });
         if (!opcion) return;
       }
-      if (await accion('aceptar', {opcion})) location.reload();
+      if (await accion('aceptar', {aceptadas: opcion})) location.reload();
     });
     add('El cliente rechazó el presupuesto', 'bad', async () => { if (await accion('rechazar')) location.reload(); });
   }

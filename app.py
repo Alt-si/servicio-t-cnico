@@ -597,18 +597,22 @@ def api_orden_accion(oid):
             if accion == "aceptar" and extras:
                 todas = [(monto, o["presupuesto_detalle"] or "")] + extras
                 try:
-                    elegida = int(d.get("opcion"))
+                    aceptadas = sorted({int(x) for x in (d.get("aceptadas") or [])})
                 except (TypeError, ValueError):
-                    elegida = 0
-                if not 1 <= elegida <= len(todas):
-                    return error("Elegí qué opción aceptó el cliente.")
-                if elegida > 1:
-                    con.execute("UPDATE ordenes SET presupuesto_monto=?, presupuesto_detalle=? WHERE id=?",
-                                (todas[elegida - 1][0], todas[elegida - 1][1], oid))
-                noelegidas = [x for i, x in enumerate(todas, 1) if i != elegida]
+                    aceptadas = []
+                if not aceptadas or any(not 1 <= x <= len(todas) for x in aceptadas):
+                    return error("Marcá al menos una opción que el cliente acepta (si no acepta ninguna, usá «El cliente rechazó el presupuesto»).")
+                sel = [todas[x - 1] for x in aceptadas]
+                total = sum(m for m, _ in sel)
+                detalle_final = " + ".join(" ".join(t.split()) for _, t in sel if t.strip())
+                if aceptadas != [1]:
+                    con.execute("UPDATE ordenes SET presupuesto_monto=?, presupuesto_detalle=? WHERE id=?", (total, detalle_final, oid))
+                texto = lambda m, t: fmt_monto(m) + (f" ({' '.join(t.split())})" if t.strip() else "")
+                si = "; ".join(f"Opción {x}: {texto(*todas[x - 1])}" for x in aceptadas)
+                no = "; ".join(f"Opción {x}: {texto(*todas[x - 1])}" for x in range(1, len(todas) + 1) if x not in aceptadas)
                 con.execute("DELETE FROM presupuesto_opciones WHERE orden_id=?", (oid,))
-                core.registrar_evento(con, oid, estado, f"El cliente eligió la opción {elegida}: {fmt_monto(todas[elegida - 1][0])}. " +
-                                      "Opciones no elegidas - " + "; ".join(f"{fmt_monto(m)} ({' '.join(t.split())})" if t.strip() else fmt_monto(m) for m, t in noelegidas))
+                core.registrar_evento(con, oid, estado, "El cliente aceptó - " + si + (f". Total aceptado: {fmt_monto(total)}" if len(aceptadas) > 1 else "")
+                                      + (f". No aceptó - {no}" if no else ""))
             nuevo_estado = E_PENDIENTE if estado == E_NUEVO else estado
             cambiar(nuevo_estado, ", presupuesto_respuesta=?, fecha_aceptacion=COALESCE(fecha_aceptacion, ?)" if nueva == "aceptado"
                     else ", presupuesto_respuesta=?", (nueva, ahora) if nueva == "aceptado" else (nueva,))

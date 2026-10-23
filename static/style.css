@@ -121,3 +121,4 @@ a.wa:hover{transform:scale(1.12)}
 input[type=radio]{width:auto;margin-top:4px}
 
 .opcion-extra{border:1.5px solid var(--bd);border-radius:8px;padding:10px 12px;margin:10px 0;background:rgba(0,0,0,.03)}
+div.modulo{border:1.5px solid var(--bd);border-radius:8px;padding:10px;margin:8px 0}

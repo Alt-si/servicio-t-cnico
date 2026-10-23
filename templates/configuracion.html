@@ -27,6 +27,21 @@
   <p><button class="btn pri" id="c-ok">Cambiar código</button></p>
 </div>
 
+<div class="card"><h1>Tipos de equipo, marcas y escritura</h1>
+<form method="post" action="{{ url_for('configuracion_listas') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <div class="grid">
+    <div><label>Tipos de equipo (uno por línea)</label><textarea name="tipos" rows="10">{{ tipos_equipo|join('\n') }}</textarea></div>
+    <div><label>Marcas (una por línea)</label><textarea name="marcas" rows="10">{{ marcas_equipo|join('\n') }}</textarea></div>
+  </div>
+  <p class="mut">Estas listas aparecen al cargar una orden. En marca se puede escribir otra distinta aunque no esté en la lista.</p>
+  <h2 style="margin-top:14px">Cómo se escribe el texto de los datos</h2>
+  <label class="modulo"><input type="radio" name="modo_texto" value="mayusculas" {{ 'checked' if modo_texto=='mayusculas' }}><span><b>Todo en MAYÚSCULAS</b><br><span class="mut">El sistema convierte automáticamente lo que se escribe.</span></span></label>
+  <label class="modulo"><input type="radio" name="modo_texto" value="minusculas" {{ 'checked' if modo_texto=='minusculas' }}><span><b>Todo en minúsculas</b><br><span class="mut">El sistema convierte automáticamente lo que se escribe.</span></span></label>
+  <label class="modulo"><input type="radio" name="modo_texto" value="manual" {{ 'checked' if modo_texto=='manual' }}><span><b>Manual</b><br><span class="mut">Cada usuario escribe con las mayúsculas y minúsculas que quiera.</span></span></label>
+  <div class="row"><button class="btn pri">Guardar</button>
+    <button class="btn" name="accion" value="restablecer" formnovalidate onclick="return confirm('Se restablecen los tipos de equipo y las marcas a los valores por defecto. ¿Continuar?')">Restablecer listas por defecto</button></div>
+</form></div>
+
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>
   <p class="mut">Descargá una copia de toda tu información (clientes, equipos, órdenes e historial). Guardala en un lugar seguro.</p>
   <p><a class="btn pri" href="{{ url_for('respaldo') }}">Respaldar base de datos</a></p>

@@ -569,3 +569,36 @@ def texto_ingreso(empresa, oid, fecha_ingreso, nombre_pila, tipo, marca, modelo,
     ticket.append(raya)
     return (f"Hola, {nombre_pila}. Te enviamos el comprobante de ingreso de tu equipo.\n\n"
             "```\n" + "\n".join(ticket) + "\n```\n\nGracias por confiar en nosotros.")
+
+
+# ---------------------------------------------------------------- listas y modo de texto configurables
+MARCAS_DEFECTO = ["Acer", "Apple", "Asus", "BGH", "Brother", "Canon", "Dell", "Epson", "Garmin", "HP", "Huawei", "Lenovo",
+                  "LG", "Motorola", "Noblex", "Pantum", "Positivo", "Samsung", "Sony", "Toshiba", "Vaio", "Xerox", "Xiaomi"]
+MODOS_TEXTO = ("mayusculas", "minusculas", "manual")
+
+
+def limpiar_lista(texto, maximo=300):
+    """Texto (una entrada por línea o separadas por coma) -> lista sin vacíos ni repetidos."""
+    vistos, salida = set(), []
+    for item in re.split(r"[\n,;]+", texto or ""):
+        item = " ".join(item.split())[:40]
+        if item and item.lower() not in vistos:
+            vistos.add(item.lower())
+            salida.append(item)
+    return salida[:maximo]
+
+
+def ajustes(cuenta_id):
+    """Tipos de equipo, marcas y modo de texto configurados por el comercio (con valores por defecto)."""
+    import json
+    with conectar(cuenta_id) as con:
+        filas = dict(con.execute("SELECT clave, valor FROM config WHERE clave IN ('tipos_equipo','marcas_equipo','modo_texto')").fetchall())
+    def lista(clave, defecto):
+        try:
+            v = json.loads(filas.get(clave) or "")
+            return v if isinstance(v, list) and v else list(defecto)
+        except ValueError:
+            return list(defecto)
+    modo = filas.get("modo_texto")
+    return {"tipos": lista("tipos_equipo", TIPOS_EQUIPO), "marcas": lista("marcas_equipo", MARCAS_DEFECTO),
+            "modo_texto": modo if modo in MODOS_TEXTO else "mayusculas"}

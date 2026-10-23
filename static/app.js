@@ -138,12 +138,12 @@ document.addEventListener('paste', e => {        // al pegar "1500.50" (punto de
   if (/^\d+\.\d{1,2}$/.test(t)) { e.preventDefault(); el.setRangeText(t.replace('.', ','), el.selectionStart, el.selectionEnd, 'end'); aplicarMoneda(el); el.dispatchEvent(new Event('input', {bubbles: true})); }
 });
 
-// ----- Texto de datos siempre en MAYÚSCULAS (campos con clase "mayus")
+// ----- Escritura automática de los datos según Configuración (campos con clase "mayus")
 document.addEventListener('input', e => {
-  const el = e.target;
-  if (!el.classList?.contains('mayus') || e.isComposing) return;
-  const a = el.selectionStart, b = el.selectionEnd, up = el.value.toUpperCase();
-  if (up !== el.value) { el.value = up; try { el.setSelectionRange(a, b); } catch (x) {} }
+  const el = e.target, modo = window.MODO_TEXTO;
+  if (!el.classList?.contains('mayus') || e.isComposing || (modo !== 'mayusculas' && modo !== 'minusculas')) return;
+  const a = el.selectionStart, b = el.selectionEnd, nuevo = modo === 'mayusculas' ? el.value.toUpperCase() : el.value.toLowerCase();
+  if (nuevo !== el.value) { el.value = nuevo; try { el.setSelectionRange(a, b); } catch (x) {} }
 });
 
 // ----- Buscador en vivo: filtra mientras se escribe (sin apretar Buscar)

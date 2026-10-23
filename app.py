@@ -131,12 +131,21 @@ def contexto():
               ("Pendientes", "Pendiente", cuentas.get("Pendiente", 0)), ("Listos para retirar", "Listo para retirar", cuentas.get("Listo para retirar", 0)),
               ("Equipos retirados", "Equipo retirado", cuentas.get("Equipo retirado", 0)), ("Scrap", "Scrap", cuentas.get("Scrap", 0)),
               ("Equipos comprados", "Equipo comprado", cuentas.get("Equipo comprado", 0))]
-    return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES, "vistas": vistas, "modulos": g.modulos}
+    return {"marca": core.marca(g.cuenta["id"]), "cuenta": g.cuenta, "ESTADOS": ESTADOS, "COLORES": core.COLORES, "vistas": vistas, "modulos": g.modulos,
+            "tipos_equipo": ajustes_cuenta()["tipos"], "marcas_equipo": ajustes_cuenta()["marcas"], "modo_texto": ajustes_cuenta()["modo_texto"]}
+
+
+def ajustes_cuenta():
+    if "_ajustes" not in g:
+        g._ajustes = core.ajustes(g.cuenta["id"])
+    return g._ajustes
 
 
 def U(valor):
-    """Texto ingresado por el usuario, siempre en mayúsculas."""
-    return (valor or "").strip().upper()
+    """Texto ingresado por el usuario, según el modo elegido en Configuración (mayúsculas, minúsculas o tal cual)."""
+    t = (valor or "").strip()
+    modo = ajustes_cuenta()["modo_texto"]
+    return t.upper() if modo == "mayusculas" else t.lower() if modo == "minusculas" else t
 
 
 def error(msg, codigo=400, **extra):
@@ -838,6 +847,30 @@ def api_recordatorios_avisos():
     return jsonify(ok=True, pendientes=pendientes, avisos=[
         dict(id=f["id"], cuando=core.clasificar_recordatorio(f["fecha_hora"])[1].replace("VENCIDO · ", ""), descripcion=f["descripcion"])
         for f in vencidos])
+
+
+@app.route("/configuracion/listas", methods=["POST"])
+@login_requerido
+def configuracion_listas():
+    import json
+    cid = g.cuenta["id"]
+    accion = request.form.get("accion", "guardar")
+    if accion == "restablecer":
+        for clave in ("tipos_equipo", "marcas_equipo"):
+            core.guardar_config(cid, clave, None)
+        flash("Tipos de equipo y marcas restablecidos a los valores por defecto.", "ok")
+        return redirect(url_for("configuracion"))
+    tipos = core.limpiar_lista(request.form.get("tipos"))
+    marcas = core.limpiar_lista(request.form.get("marcas"))
+    if not tipos:
+        flash("Tiene que haber al menos un tipo de equipo.", "error")
+        return redirect(url_for("configuracion"))
+    core.guardar_config(cid, "tipos_equipo", json.dumps(tipos))
+    core.guardar_config(cid, "marcas_equipo", json.dumps(marcas))
+    modo = request.form.get("modo_texto")
+    core.guardar_config(cid, "modo_texto", modo if modo in core.MODOS_TEXTO else "mayusculas")
+    flash("Listas y modo de escritura guardados.", "ok")
+    return redirect(url_for("configuracion"))
 
 
 @app.route("/logo")

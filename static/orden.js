@@ -136,6 +136,7 @@ function botones() {
 async function cargarHistorial() {
   const l = $('#hist'); if (!l) return;
   const j = await api(`/api/orden/${ORDEN.id}/historial`);
+  $('#hist-tit').textContent = `Historial (${(j.items || []).length})`;
   l.innerHTML = (j.items || []).map(i => `<li><small>${esc(i.fecha)} · ${esc(i.estado)}</small><br>${esc(i.nota)}
     <button class="btn" style="padding:1px 8px;float:right" data-h="${i.id}" title="Borrar línea">×</button></li>`).join('') || '<li class="mut">Sin movimientos.</li>';
   l.querySelectorAll('[data-h]').forEach(bt => bt.onclick = async () => {
@@ -144,3 +145,6 @@ async function cargarHistorial() {
   });
 }
 if (ORDEN.id) { botones(); cargarHistorial(); }
+
+// recordar si el historial quedó desplegado
+try { const d = $('#hist-det'); if (d) { d.open = localStorage.getItem('hist_abierto') === '1'; d.addEventListener('toggle', () => localStorage.setItem('hist_abierto', d.open ? '1' : '0')); } } catch (e) {}

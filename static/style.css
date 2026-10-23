@@ -92,3 +92,9 @@ input,select,textarea{border:1.5px solid var(--bd)}
 .ficha>div{display:flex;flex-direction:column;padding:8px 10px;border-bottom:1.5px solid var(--bd)}
 .ficha .mut{font-size:12px}
 header.top{box-shadow:0 2px 6px rgba(0,0,0,.3)}
+
+.resumen-hist{cursor:pointer;font-size:16px;font-weight:700;list-style:none;display:flex;align-items:center;gap:8px}
+.resumen-hist::-webkit-details-marker{display:none}
+.resumen-hist::before{content:"▸";transition:transform .15s}
+details[open]>.resumen-hist::before{transform:rotate(90deg)}
+details[open]>.resumen-hist{padding-bottom:8px;border-bottom:1.5px solid var(--bd)}

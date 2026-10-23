@@ -45,7 +45,8 @@
 
 {% if o %}
 <div class="card"><h2>Acciones</h2><div class="row" id="acciones"></div></div>
-<div class="card"><h2>Historial</h2><ul class="hist" id="hist"></ul></div>
+<div class="card"><details id="hist-det"><summary class="resumen-hist"><span id="hist-tit">Historial</span></summary>
+  <ul class="hist" id="hist" style="margin-top:10px"></ul></details></div>
 {% endif %}
 {% endblock %}
 {% block js %}

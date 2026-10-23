@@ -46,12 +46,23 @@ def ahora():
     return ahora_dt().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def parse_fecha(txt):
+    """Lee fechas guardadas con o sin segundos (la agenda de escritorio guarda 'AAAA-MM-DD HH:MM')."""
+    txt = (txt or "").strip()
+    for largo, formato in ((19, "%Y-%m-%d %H:%M:%S"), (16, "%Y-%m-%d %H:%M"), (10, "%Y-%m-%d")):
+        try:
+            return datetime.strptime(txt[:largo], formato)
+        except ValueError:
+            continue
+    return None
+
+
 def fmt_fecha(txt, con_hora=False):
     if not txt:
         return ""
     try:
-        d = datetime.strptime(txt[:19], "%Y-%m-%d %H:%M:%S")
-        return d.strftime("%d/%m/%Y %H:%M" if con_hora else "%d/%m/%Y")
+        d = parse_fecha(txt)
+        return d.strftime("%d/%m/%Y %H:%M" if con_hora else "%d/%m/%Y") if d else txt
     except ValueError:
         return txt
 
@@ -539,11 +550,11 @@ DIAS_LARGO = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "
 
 def texto_ingreso(empresa, oid, fecha_ingreso, nombre_pila, tipo, marca, modelo, serie, accesorios, falla, observaciones):
     """Ticket resumido del ingreso del equipo, en tipografía de máquina de escribir (monoespaciada en WhatsApp)."""
-    try:
-        dt = datetime.strptime(fecha_ingreso[:19], "%Y-%m-%d %H:%M:%S")
+    dt = parse_fecha(fecha_ingreso)
+    if dt:
         dia, fecha, hora = DIAS_LARGO[dt.weekday()].capitalize(), dt.strftime("%d/%m/%Y"), dt.strftime("%H:%M") + " hs"
-    except (TypeError, ValueError):
-        dia, fecha, hora = "", fecha_ingreso or "", ""
+    else:
+        dia, fecha, hora = "-", fecha_ingreso or "-", "-"
     limpio = lambda t: " ".join((t or "").split())
     fila = lambda etiqueta, valor: f"{etiqueta:<13}{valor}"
     raya = "=" * 30

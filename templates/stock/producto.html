@@ -4,6 +4,7 @@
 <div class="card">
   <div class="row"><div><h1 style="margin:0">{{ p.nombre }}</h1><div class="mut">{{ p.codigo or 'Sin código' }}{% if not p.activo %} · DESACTIVADO{% endif %}</div></div>
     <div class="der row"><button class="btn pri" onclick="productoForm({{ p.id }})">Editar</button>
+      <button class="btn ok" onclick="productoForm()">+ Cargar otro producto</button>
       {% if 'ventas' in modulos %}<a class="btn ok" href="{{ url_for('ventas') }}">🛒 Vender</a>{% endif %}<a class="btn" href="{{ url_for('stock') }}">← Volver</a></div></div>
   <div class="row" style="margin:14px 0"><div class="stock-grande st-{{ e }}">{{ fmt_cant(p.stock_actual, p.decimales) }} <small>{{ p.unidad }}</small></div>
     <button class="btn ok" onclick="movimientoForm({{ p.id }}, 'ingreso', true)">+ Ingreso</button>

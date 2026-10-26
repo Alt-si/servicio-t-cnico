@@ -4,6 +4,7 @@
   <div class="row" style="margin-bottom:10px"><h1 style="margin:0">Control de stock <span id="cuenta" class="mut" style="font-size:14px">({{ filas|length }})</span></h1>
     <div class="der row"><a class="btn" href="{{ url_for('stock_listas') }}">Rubros, marcas y unidades</a>
       <a class="btn" href="{{ url_for('stock_exportar') }}">Exportar</a>
+      {% if 'ventas' in modulos %}<a class="btn ok" href="{{ url_for('ventas') }}">🛒 Vender</a>{% endif %}
       <button class="btn pri" onclick="productoForm()">+ Nuevo producto</button></div></div>
   <div class="resumen-stock">
     <div><span class="mut">Productos activos</span><b>{{ res[0] or 0 }}</b></div>

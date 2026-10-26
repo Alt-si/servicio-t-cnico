@@ -19,6 +19,7 @@
       </div></details>
     {% endif %}
     {% if 'clientes' in modulos %}<a href="{{ url_for('clientes') }}" class="{{ 'act' if request.endpoint=='clientes' }}">Clientes</a>{% endif %}
+    {% if 'stock' in modulos %}<a href="{{ url_for('stock') }}" class="{{ 'act' if request.endpoint in ('stock','stock_producto','stock_listas') }}">Stock</a>{% endif %}
     {% if 'recordatorios' in modulos %}<a href="{{ url_for('recordatorios') }}" id="nav-rec" class="{{ 'act' if request.endpoint=='recordatorios' }}">Recordatorios</a>{% endif %}
     <a href="{{ url_for('configuracion') }}" class="{{ 'act' if request.endpoint=='configuracion' }}">Configuración</a>
     {% if cuenta.es_admin %}<a href="{{ url_for('admin') }}" class="{{ 'act' if request.endpoint=='admin' }}">Cuentas</a>{% endif %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card"><div class="row"><h1 style="margin:0">Rubros, marcas y unidades</h1><a class="btn der" href="{{ url_for('stock') }}">← Volver al stock</a></div>
+  <p class="mut">Todo es editable: armá las listas con lo que use tu comercio. Lo que está en uso en algún producto no se puede eliminar.</p>
+  <h2>Nombres de las listas</h2>
+  <div class="grid"><div><label>Cómo le llamás a «Rubro»</label><input id="lbl-categoria" value="{{ lbl.categoria }}" placeholder="Rubro, Categoría, Familia, Línea…"></div>
+    <div><label>Cómo le llamás a «Marca»</label><input id="lbl-marca" value="{{ lbl.marca }}" placeholder="Marca, Fabricante, Proveedor…"></div></div>
+  <p><button class="btn pri" id="lbl-ok">Guardar nombres</button></p></div>
+
+{% for clave, titulo, lista in (('categorias', lbl.categoria ~ 's', cats), ('marcas', lbl.marca ~ 's', mars)) %}
+<div class="card"><div class="row"><h2 style="margin:0;border:0;padding:0">{{ titulo }} ({{ lista|length }})</h2><button class="btn pri der" onclick="listaForm('{{ clave }}')">+ Agregar</button></div>
+  <div class="tabla-wrap"><table><tbody class="clientes">
+  {% for r in lista %}<tr><td><b>{{ r.nombre }}</b></td><td class="mut">{{ r.usos }} producto(s)</td><td style="text-align:right;white-space:nowrap">
+    <button class="btn" onclick='listaForm("{{ clave }}", {{ {"id": r.id, "nombre": r.nombre}|tojson }})'>Editar</button>
+    <button class="btn" onclick="listaEliminar('{{ clave }}', {{ r.id }})">Eliminar</button></td></tr>
+  {% else %}<tr><td class="mut">Todavía no cargaste ninguno.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endfor %}
+
+<div class="card"><div class="row"><h2 style="margin:0;border:0;padding:0">Unidades de medida ({{ unis|length }})</h2><button class="btn pri der" onclick="listaForm('unidades')">+ Agregar</button></div>
+  <p class="mut">«Decimales» indica cuántos decimales admite la cantidad: 0 para unidades enteras, 3 para kilos o litros.</p>
+  <div class="tabla-wrap"><table><thead><tr><th>Nombre</th><th>Abreviatura</th><th>Decimales</th><th></th><th></th></tr></thead><tbody class="clientes">
+  {% for r in unis %}<tr><td><b>{{ r.nombre }}</b></td><td>{{ r.abrev }}</td><td>{{ r.decimales }}</td><td class="mut">{{ r.usos }} producto(s)</td><td style="text-align:right;white-space:nowrap">
+    <button class="btn" onclick='listaForm("unidades", {{ {"id": r.id, "nombre": r.nombre, "abrev": r.abrev, "decimales": r.decimales}|tojson }})'>Editar</button>
+    <button class="btn" onclick="listaEliminar('unidades', {{ r.id }})">Eliminar</button></td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='stock.js') }}"></script>{% endblock %}

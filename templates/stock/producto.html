@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+{% set e = estado_stock(p.stock_actual, p.stock_minimo) %}
+<div class="card">
+  <div class="row"><div><h1 style="margin:0">{{ p.nombre }}</h1><div class="mut">{{ p.codigo or 'Sin código' }}{% if not p.activo %} · DESACTIVADO{% endif %}</div></div>
+    <div class="der row"><button class="btn pri" onclick="productoForm({{ p.id }})">Editar</button>
+      <a class="btn" href="{{ url_for('stock') }}">← Volver</a></div></div>
+  <div class="row" style="margin:14px 0"><div class="stock-grande st-{{ e }}">{{ fmt_cant(p.stock_actual, p.decimales) }} <small>{{ p.unidad }}</small></div>
+    <button class="btn ok" onclick="movimientoForm({{ p.id }}, 'ingreso', true)">+ Ingreso</button>
+    <button class="btn bad" onclick="movimientoForm({{ p.id }}, 'egreso', true)">− Egreso</button>
+    <button class="btn" onclick="movimientoForm({{ p.id }}, 'ajuste', true)">Ajustar (conteo)</button></div>
+  <div class="ficha">
+    {% for t, v in ((lbl.categoria, p.categoria), (lbl.marca, p.marca), ('Unidad', p.unidad ~ ' (' ~ p.abrev ~ ')'), ('Stock mínimo', fmt_cant(p.stock_minimo, p.decimales) ~ ' ' ~ p.abrev if p.stock_minimo else None),
+                    ('Costo', ('$ ' ~ (p.costo|monto_input)) if p.costo is not none else None), ('Precio', ('$ ' ~ (p.precio|monto_input)) if p.precio is not none else None),
+                    ('Ubicación', p.ubicacion), ('Descripción', p.descripcion)) %}
+    <div><span class="mut">{{ t }}</span><b>{{ v or '—' }}</b></div>{% endfor %}
+  </div>
+  <div class="row" style="margin-top:12px">
+    {% if p.activo %}<button class="btn" data-acc="desactivar">Desactivar</button>{% else %}<button class="btn" data-acc="activar">Activar</button>{% endif %}
+    <button class="btn bad" data-acc="eliminar">Eliminar</button></div>
+</div>
+<div class="card"><h2>Movimientos ({{ movs|length }})</h2><div class="tabla-wrap"><table>
+  <thead><tr><th>Fecha</th><th>Tipo</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Stock resultante</th><th>Motivo</th><th>Nota</th></tr></thead><tbody class="clientes">
+  {% for m in movs %}<tr><td style="white-space:nowrap">{{ fmt_fecha(m.fecha, True) }}</td>
+    <td>{{ {'ingreso':'Ingreso','egreso':'Egreso','ajuste':'Ajuste'}[m.tipo] }}</td>
+    <td style="text-align:right;color:{{ '#15803d' if m.cantidad >= 0 else '#b91c1c' }}"><b>{{ '+' if m.cantidad > 0 }}{{ fmt_cant(m.cantidad, p.decimales) }}</b></td>
+    <td style="text-align:right">{{ fmt_cant(m.stock_resultante, p.decimales) }}</td><td>{{ m.motivo or '' }}</td><td>{{ m.nota or '' }}</td></tr>
+  {% else %}<tr><td colspan="6" class="mut">Sin movimientos.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}
+{% block js %}<script>const PROD_ID={{ p.id }};</script><script src="{{ url_for('static', filename='stock.js') }}"></script>
+<script>document.querySelectorAll('[data-acc]').forEach(b=>b.onclick=async()=>{
+  if(b.dataset.acc==='eliminar' && !await confirmar('¿Eliminar este producto?')) return;
+  const j=await api(`/api/stock/producto/${PROD_ID}/${b.dataset.acc}`,{});
+  if(!j.ok) return aviso(j.error); location = b.dataset.acc==='eliminar' ? '/stock' : location.href;});</script>{% endblock %}

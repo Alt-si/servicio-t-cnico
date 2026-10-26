@@ -227,6 +227,7 @@ def conectar_cuentas():
 MODULOS = {
     "clientes": ("Clientes", "Agenda de clientes y ficha completa de cada uno."),
     "ordenes": ("Órdenes de reparación", "Ingreso de equipos, presupuestos, estados, avisos por WhatsApp e historial. Requiere Clientes."),
+    "stock": ("Control de stock", "Inventario de productos: rubros, marcas y unidades editables, ingresos, egresos y alertas de stock bajo."),
     "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
     "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
 }
@@ -234,7 +235,6 @@ MODULOS = {
 MODULOS_INICIALES = ["clientes", "ordenes", "recordatorios", "respaldo"]
 # Secciones planificadas: se muestran como «Próximamente» en el panel. Cuando estén listas se pasan a MODULOS.
 MODULOS_FUTUROS = {
-    "stock": ("Control de stock", "Repuestos y productos: existencias, ingresos y egresos."),
     "ventas": ("Ventas", "Registro de ventas y comprobantes."),
     "contabilidad": ("Contabilidad", "Ingresos, egresos y resultados."),
 }
@@ -500,6 +500,14 @@ def importar_base(cuenta_id, ruta):
                 filas = src.execute(f"SELECT {','.join(cols)} FROM {tabla}").fetchall()
                 dst.executemany(f"INSERT INTO {tabla} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", filas)
                 resumen[tabla] = len(filas)
+            for tabla in ("stock_categorias", "stock_marcas", "stock_unidades", "stock_productos", "stock_movimientos"):
+                if tabla in tablas:                      # respaldo con stock: se reemplaza el stock actual
+                    dst.execute(f"DELETE FROM {tabla}")
+                    cols_d = [r[1] for r in dst.execute(f"PRAGMA table_info({tabla})")]
+                    cols = [r[1] for r in src.execute(f"PRAGMA table_info({tabla})") if r[1] in cols_d]
+                    filas = src.execute(f"SELECT {','.join(cols)} FROM {tabla}").fetchall()
+                    dst.executemany(f"INSERT INTO {tabla} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", filas)
+                    resumen[tabla] = len(filas)
             if "config" in tablas:
                 for clave, valor in src.execute("SELECT clave, valor FROM config WHERE clave LIKE 'marca_%'"):
                     dst.execute("INSERT OR REPLACE INTO config (clave, valor) VALUES (?, ?)", (clave, valor))

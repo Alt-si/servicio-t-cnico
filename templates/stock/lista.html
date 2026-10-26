@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row" style="margin-bottom:10px"><h1 style="margin:0">Control de stock <span id="cuenta" class="mut" style="font-size:14px">({{ filas|length }})</span></h1>
+    <div class="der row"><a class="btn" href="{{ url_for('stock_listas') }}">Rubros, marcas y unidades</a>
+      <a class="btn" href="{{ url_for('stock_exportar') }}">Exportar</a>
+      <button class="btn pri" onclick="productoForm()">+ Nuevo producto</button></div></div>
+  <div class="resumen-stock">
+    <div><span class="mut">Productos activos</span><b>{{ res[0] or 0 }}</b></div>
+    <a href="?ver=bajo"><span class="mut">Stock bajo</span><b style="color:#c2410c">{{ res[2] or 0 }}</b></a>
+    <a href="?ver=sin"><span class="mut">Sin stock</span><b style="color:#b91c1c">{{ res[1] or 0 }}</b></a>
+    <div><span class="mut">Valor a costo</span><b>$ {{ (res[3] or 0)|monto_input or '0' }}</b></div>
+    <div><span class="mut">Valor a precio de venta</span><b>$ {{ (res[4] or 0)|monto_input or '0' }}</b></div>
+  </div>
+  <form method="get" class="row" style="margin:12px 0">
+    <input name="q" data-vivo value="{{ q }}" autocomplete="off" placeholder="Buscar por nombre, código, {{ lbl.categoria|lower }}, {{ lbl.marca|lower }}…" style="flex:1;min-width:200px">
+    <select name="cat" onchange="this.form.requestSubmit()" style="width:auto"><option value="">{{ lbl.categoria }}: todos</option>
+      {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if cat==c.id }}>{{ c.nombre }}</option>{% endfor %}</select>
+    <select name="mar" onchange="this.form.requestSubmit()" style="width:auto"><option value="">{{ lbl.marca }}: todas</option>
+      {% for m in mars %}<option value="{{ m.id }}" {{ 'selected' if mar==m.id }}>{{ m.nombre }}</option>{% endfor %}</select>
+    <select name="ver" onchange="this.form.requestSubmit()" style="width:auto">
+      {% for k, t in (('activos','Activos'),('bajo','Stock bajo'),('sin','Sin stock'),('inactivos','Desactivados'),('todos','Todos')) %}<option value="{{ k }}" {{ 'selected' if ver==k }}>{{ t }}</option>{% endfor %}</select>
+    <button class="btn">Buscar</button>
+  </form>
+  <div class="tabla-wrap"><table>
+    <thead><tr><th>Código</th><th>Producto</th><th class="ocu">{{ lbl.categoria }}</th><th class="ocu">{{ lbl.marca }}</th><th style="text-align:right">Stock</th><th class="ocu" style="text-align:right">Precio</th><th></th></tr></thead>
+    <tbody class="clientes">
+    {% for p in filas %}{% set e = estado_stock(p.stock_actual, p.stock_minimo) %}
+    <tr class="st-{{ e }}{{ ' st-inactivo' if not p.activo }}">
+      <td>{{ p.codigo or '' }}</td><td><a href="{{ url_for('stock_producto', pid=p.id) }}"><b>{{ p.nombre }}</b></a></td>
+      <td class="ocu">{{ p.categoria or '' }}</td><td class="ocu">{{ p.marca or '' }}</td>
+      <td style="text-align:right;white-space:nowrap"><b>{{ fmt_cant(p.stock_actual, p.decimales) }}</b> {{ p.abrev }}
+        {% if e=='sin' %}<span class="pill" style="background:#dc2626;color:#fff">Sin stock</span>{% elif e=='bajo' %}<span class="pill" style="background:#f97316;color:#fff">Bajo</span>{% endif %}</td>
+      <td class="ocu" style="text-align:right">{{ ('$ ' ~ (p.precio|monto_input)) if p.precio is not none else '' }}</td>
+      <td style="white-space:nowrap;text-align:right">
+        <button class="btn" onclick="movimientoForm({{ p.id }}, 'ingreso')">Ingreso</button>
+        <button class="btn" onclick="movimientoForm({{ p.id }}, 'egreso')">Egreso</button>
+        <a class="btn pri" href="{{ url_for('stock_producto', pid=p.id) }}">Ver</a></td></tr>
+    {% else %}<tr><td colspan="7" class="mut">No hay productos. Tocá «+ Nuevo producto» para cargar el primero.</td></tr>{% endfor %}
+    </tbody></table></div>
+</div>
+{% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='stock.js') }}"></script>{% endblock %}

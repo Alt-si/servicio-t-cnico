@@ -228,6 +228,7 @@ MODULOS = {
     "clientes": ("Clientes", "Agenda de clientes y ficha completa de cada uno."),
     "ordenes": ("Órdenes de reparación", "Ingreso de equipos, presupuestos, estados, avisos por WhatsApp e historial. Requiere Clientes."),
     "stock": ("Control de stock", "Inventario de productos: rubros, marcas y unidades editables, ingresos, egresos y alertas de stock bajo."),
+    "ventas": ("Ventas", "Caja simple: código de barras o buscador, descuenta stock y registra la forma de pago. Requiere Control de stock."),
     "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
     "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
 }
@@ -235,10 +236,9 @@ MODULOS = {
 MODULOS_INICIALES = ["clientes", "ordenes", "recordatorios", "respaldo"]
 # Secciones planificadas: se muestran como «Próximamente» en el panel. Cuando estén listas se pasan a MODULOS.
 MODULOS_FUTUROS = {
-    "ventas": ("Ventas", "Registro de ventas y comprobantes."),
     "contabilidad": ("Contabilidad", "Ingresos, egresos y resultados."),
 }
-DEPENDENCIAS = {"ordenes": ["clientes"]}      # una sección que necesita a otra
+DEPENDENCIAS = {"ordenes": ["clientes"], "ventas": ["stock"]}      # una sección que necesita a otra
 
 
 def modulos_de(cuenta):
@@ -500,7 +500,7 @@ def importar_base(cuenta_id, ruta):
                 filas = src.execute(f"SELECT {','.join(cols)} FROM {tabla}").fetchall()
                 dst.executemany(f"INSERT INTO {tabla} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", filas)
                 resumen[tabla] = len(filas)
-            for tabla in ("stock_categorias", "stock_marcas", "stock_unidades", "stock_productos", "stock_movimientos"):
+            for tabla in ("stock_categorias", "stock_marcas", "stock_unidades", "stock_formas_pago", "stock_productos", "stock_movimientos", "ventas", "venta_items"):
                 if tabla in tablas:                      # respaldo con stock: se reemplaza el stock actual
                     dst.execute(f"DELETE FROM {tabla}")
                     cols_d = [r[1] for r in dst.execute(f"PRAGMA table_info({tabla})")]

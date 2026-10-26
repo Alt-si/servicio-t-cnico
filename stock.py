@@ -45,6 +45,7 @@ def crear_tablas(con):
         for col in ("margen_lista", "margen_contado", "descuento"):
             agregar(tabla, col, "REAL")
     agregar("stock_productos", "precio_contado", "REAL")
+    agregar("stock_productos", "codigo_barras", "TEXT")
     agregar("stock_productos", "iva", "REAL")                   # vacío = usa el IVA general de la cuenta
     agregar("stock_productos", "precio_auto", "INTEGER NOT NULL DEFAULT 0")
     con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
@@ -166,8 +167,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         where, params = [], []
         if q:
             where.append("(" + " OR ".join(f"lower_u({c}) LIKE ?" for c in
-                         ("p.nombre", "p.codigo", "p.descripcion", "p.ubicacion", "c.nombre", "m.nombre")) + ")")
-            params += [f"%{q}%"] * 6
+                         ("p.nombre", "p.codigo", "p.codigo_barras", "p.descripcion", "p.ubicacion", "c.nombre", "m.nombre")) + ")")
+            params += [f"%{q}%"] * 7
         if cat:
             where.append("p.categoria_id=?"); params.append(cat)
         if mar:
@@ -254,8 +255,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             except ValueError:
                 return error("Revisá los números (costo, precios, IVA, stock mínimo y stock inicial).")
             codigo = solo(d.get("codigo"))
-            if codigo and con.execute("SELECT 1 FROM stock_productos WHERE lower(codigo)=lower(?) AND id<>?", (codigo, pid or 0)).fetchone():
+            if codigo and con.execute("SELECT 1 FROM stock_productos WHERE (lower(codigo)=lower(?) OR lower(codigo_barras)=lower(?)) AND id<>?", (codigo, codigo, pid or 0)).fetchone():
                 return error("Ya existe otro producto con ese código.")
+            barras = solo(d.get("codigo_barras"))
+            if barras and con.execute("SELECT 1 FROM stock_productos WHERE id<>? AND (lower(codigo)=lower(?) OR lower(codigo_barras)=lower(?))",
+                                      (pid or 0, barras, barras)).fetchone():
+                return error("Ese código de barras ya lo usa otro producto.")
             cat = d.get("categoria_id") or None
             mar = d.get("marca_id") or None
             ahora = core.ahora()
@@ -280,6 +285,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 if inicial:
                     con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
                                 (pid, ahora, "ingreso", inicial, inicial, "Stock inicial"))
+            con.execute("UPDATE stock_productos SET codigo_barras=? WHERE id=?", (barras or None, pid))
         return jsonify(ok=True, id=pid)
 
     @app.route("/api/stock/producto/<int:pid>/<accion>", methods=["POST"])

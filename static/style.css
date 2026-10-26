@@ -133,3 +133,11 @@ tr.st-sin{background:rgba(220,38,38,.10)}tr.st-bajo{background:rgba(249,115,22,.
 .stock-grande{font-size:30px;font-weight:700;padding:6px 16px;border-radius:10px;border:2px solid var(--bd)}
 .stock-grande small{font-size:15px;font-weight:500}
 .stock-grande.st-sin{border-color:#dc2626;color:#b91c1c}.stock-grande.st-bajo{border-color:#f97316;color:#c2410c}
+
+/* ventas */
+.venta-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:14px;align-items:start}
+@media(max-width:850px){.venta-grid{grid-template-columns:1fr}}
+.v-total{font-size:38px;font-weight:800}
+.v-formas{display:grid;grid-template-columns:1fr 1fr;gap:8px}.v-forma{padding:12px 6px;font-size:15px}
+.v-res{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--card);border:1.5px solid var(--bd);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.25);max-height:320px;overflow:auto}
+.v-op{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--bd)}.v-op:hover{background:rgba(37,99,235,.12)}

@@ -11,6 +11,7 @@ from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, r
 
 import core
 import stock
+import ventas
 from core import (ESTADOS, ESTADOS_FINALES, E_NUEVO, E_PENDIENTE, E_LISTO, E_RETIRADO, E_SCRAP, E_COMPRADO,
                   fmt_fecha, fmt_monto, parse_monto, saldo_a_abonar, texto_equipo, telefono_whatsapp)
 
@@ -73,6 +74,7 @@ def antes():
             core.crear_base(g.cuenta["id"])      # agrega tablas nuevas a comercios existentes
             with core.conectar(g.cuenta["id"]) as _c:
                 stock.crear_tablas(_c)
+                ventas.crear_tablas(_c)
             if core.ajustes(g.cuenta["id"])["modo_texto"] == "mayusculas":      # tipos y marcas ya cargados, en mayúsculas
                 with core.conectar(g.cuenta["id"]) as _c:
                     _c.execute("UPDATE equipos SET tipo=UPPER(tipo), marca=UPPER(marca) WHERE tipo<>UPPER(tipo) OR marca<>UPPER(marca)")
@@ -125,7 +127,7 @@ def admin_requerido(f):
 
 def inicio_url():
     """Primera pantalla disponible según las secciones habilitadas."""
-    for modulo, ruta in (("ordenes", "ordenes"), ("clientes", "clientes"), ("recordatorios", "recordatorios")):
+    for modulo, ruta in (("ordenes", "ordenes"), ("ventas", "ventas"), ("clientes", "clientes"), ("stock", "stock"), ("recordatorios", "recordatorios")):
         if modulo in g.get("modulos", set()):
             return url_for(ruta)
     return url_for("configuracion")
@@ -1098,6 +1100,7 @@ def admin_accion(cid, accion):
 
 
 stock.registrar(app, login_requerido, modulo_requerido, db, U, error)
+ventas.registrar(app, login_requerido, modulo_requerido, db, error)
 
 
 @app.errorhandler(400)

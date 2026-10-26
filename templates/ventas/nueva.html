@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="venta-grid">
+  <div class="card">
+    <div class="row"><h1 style="margin:0">Nueva venta</h1><a class="btn der" href="{{ url_for('ventas_historial') }}">Ventas del día</a></div>
+    <div style="position:relative;margin:12px 0">
+      <input id="v-scan" autocomplete="off" autofocus placeholder="Escaneá el código de barras o escribí el código / nombre del producto y Enter" style="font-size:18px;padding:12px">
+      <div id="v-res" class="v-res" style="display:none"></div>
+    </div>
+    <div class="tabla-wrap"><table>
+      <thead><tr><th>Producto</th><th style="width:120px">Cantidad</th><th style="width:130px;text-align:right">Precio</th><th style="width:120px;text-align:right">Subtotal</th><th style="width:40px"></th></tr></thead>
+      <tbody id="v-items" class="clientes"><tr><td colspan="5" class="mut">Todavía no agregaste productos.</td></tr></tbody></table></div>
+  </div>
+  <div class="card v-cobro">
+    <div class="mut">Total a cobrar</div><div id="v-total" class="v-total">$ 0</div>
+    <div id="v-desc" class="mut" style="min-height:18px"></div>
+    <h2>Forma de pago</h2>
+    <div id="v-formas" class="v-formas">
+      {% for f in formas %}<button type="button" class="btn v-forma" data-id="{{ f.id }}" data-nombre="{{ f.nombre }}" data-desc="{{ f.aplica_descuento }}">{{ f.nombre }}</button>{% endfor %}
+    </div>
+    <div id="v-efectivo" style="display:none;margin-top:10px">
+      <label>Recibido ($)</label><input id="v-recibido" class="moneda" inputmode="decimal" autocomplete="off">
+      <div class="mut" style="margin-top:6px">Vuelto: <b id="v-vuelto" style="font-size:18px">$ 0</b></div>
+    </div>
+    <div id="v-err" class="msg error" style="display:none;margin-top:10px"></div>
+    <button class="btn pri" id="v-ok" style="width:100%;margin-top:14px;padding:14px;font-size:18px" disabled>Cobrar</button>
+    <button class="btn" id="v-limpiar" style="width:100%;margin-top:8px">Vaciar venta</button>
+  </div>
+</div>
+{% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='ventas.js') }}"></script>{% endblock %}

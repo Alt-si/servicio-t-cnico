@@ -120,6 +120,14 @@ def admin_requerido(f):
     return interior
 
 
+def inicio_url():
+    """Primera pantalla disponible según las secciones habilitadas."""
+    for modulo, ruta in (("ordenes", "ordenes"), ("clientes", "clientes"), ("recordatorios", "recordatorios")):
+        if modulo in g.get("modulos", set()):
+            return url_for(ruta)
+    return url_for("configuracion")
+
+
 def db():
     return core.conectar(g.cuenta["id"])
 
@@ -128,8 +136,10 @@ def db():
 def contexto():
     if not g.get("cuenta"):
         return {}
-    with db() as con:
-        cuentas = dict(con.execute("SELECT estado, COUNT(*) FROM ordenes GROUP BY estado").fetchall())
+    cuentas = {}
+    if "ordenes" in g.modulos:
+        with db() as con:
+            cuentas = dict(con.execute("SELECT estado, COUNT(*) FROM ordenes GROUP BY estado").fetchall())
     vistas = [("Todas las órdenes", "", sum(cuentas.values())), ("Ingresos nuevos", "Nuevo ingreso", cuentas.get("Nuevo ingreso", 0)),
               ("Pendientes", "Pendiente", cuentas.get("Pendiente", 0)), ("Listos para retirar", "Listo para retirar", cuentas.get("Listo para retirar", 0)),
               ("Equipos retirados", "Equipo retirado", cuentas.get("Equipo retirado", 0)), ("Scrap", "Scrap", cuentas.get("Scrap", 0)),
@@ -159,7 +169,7 @@ def error(msg, codigo=400, **extra):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if g.cuenta:
-        return redirect(url_for("ordenes"))
+        return redirect(inicio_url())
     msg = ""
     if request.method == "POST":
         email = request.form.get("email", "")
@@ -172,9 +182,10 @@ def login():
                 session.clear()
                 session["cuenta_id"] = fila["id"]
                 session.permanent = True
+                g.modulos = core.modulos_de(fila)
                 csrf_token()
                 dest = request.args.get("siguiente", "")
-                return redirect(dest if dest.startswith("/") and not dest.startswith("//") else url_for("ordenes"))
+                return redirect(dest if dest.startswith("/") and not dest.startswith("//") else inicio_url())
             _intentos.setdefault(clave_ip, []).append(time.time())
             msg = "Mail o clave incorrectos." if not fila else "La cuenta está desactivada. Escribinos."
     csrf_token()
@@ -189,7 +200,7 @@ def logout():
 
 @app.route("/")
 def inicio():
-    return redirect(url_for("ordenes"))
+    return redirect(inicio_url() if g.cuenta else url_for("login"))
 
 
 @app.route("/salud")
@@ -222,6 +233,7 @@ def validar_cliente(d, con, cliente_id=None):
 
 @app.route("/clientes")
 @login_requerido
+@modulo_requerido("clientes")
 def clientes():
     q = (request.args.get("q") or "").strip()
     with db() as con:
@@ -240,6 +252,7 @@ def clientes():
 
 @app.route("/cliente/<int:cid>")
 @login_requerido
+@modulo_requerido("clientes")
 def cliente_ver(cid):
     with db() as con:
         c = con.execute("SELECT * FROM clientes WHERE id=?", (cid,)).fetchone()
@@ -255,6 +268,7 @@ def cliente_ver(cid):
 
 @app.route("/api/cliente", methods=["POST"])
 @login_requerido
+@modulo_requerido("clientes")
 def api_cliente_guardar():
     d = request.get_json(force=True, silent=True) or {}
     cid = d.get("id")
@@ -277,6 +291,7 @@ def api_cliente_guardar():
 
 @app.route("/api/cliente/<int:cid>/eliminar", methods=["POST"])
 @login_requerido
+@modulo_requerido("clientes")
 def api_cliente_eliminar(cid):
     with db() as con:
         n = con.execute("SELECT COUNT(*) FROM ordenes WHERE cliente_id=?", (cid,)).fetchone()[0]
@@ -289,6 +304,7 @@ def api_cliente_eliminar(cid):
 
 @app.route("/api/cliente/<int:cid>/ordenes")
 @login_requerido
+@modulo_requerido("ordenes")
 def api_cliente_ordenes(cid):
     with db() as con:
         c = con.execute("SELECT nombre, apellido, razon_social FROM clientes WHERE id=?", (cid,)).fetchone()
@@ -305,6 +321,7 @@ def api_cliente_ordenes(cid):
 
 @app.route("/api/cliente/<int:cid>/contacto")
 @login_requerido
+@modulo_requerido("clientes")
 def api_cliente_contacto(cid):
     with db() as con:
         c = con.execute("SELECT nombre, telefono FROM clientes WHERE id=?", (cid,)).fetchone()
@@ -315,6 +332,7 @@ def api_cliente_contacto(cid):
 
 @app.route("/api/cliente/<int:cid>/equipos")
 @login_requerido
+@modulo_requerido("ordenes")
 def api_cliente_equipos(cid):
     with db() as con:
         filas = con.execute("SELECT * FROM equipos WHERE cliente_id=? ORDER BY id DESC", (cid,)).fetchall()
@@ -329,6 +347,7 @@ SQL_ORDEN = {"nuevas": "o.fecha_ingreso DESC, o.id DESC", "viejas": "o.fecha_ing
 
 @app.route("/ordenes")
 @login_requerido
+@modulo_requerido("ordenes")
 def ordenes():
     estado = request.args.get("estado", "")
     q = (request.args.get("q") or "").strip()
@@ -365,6 +384,7 @@ def cargar_orden(con, oid):
 
 @app.route("/orden/nueva")
 @login_requerido
+@modulo_requerido("ordenes")
 def orden_nueva():
     with db() as con:
         cliente = con.execute("SELECT * FROM clientes WHERE id=?", (request.args.get("cliente", type=int),)).fetchone()
@@ -374,6 +394,7 @@ def orden_nueva():
 
 @app.route("/orden/<int:oid>")
 @login_requerido
+@modulo_requerido("ordenes")
 def orden_ver(oid):
     with db() as con:
         o = cargar_orden(con, oid)
@@ -388,6 +409,7 @@ def orden_ver(oid):
 
 @app.route("/api/clientes/buscar")
 @login_requerido
+@modulo_requerido("clientes")
 def api_clientes_buscar():
     q = core.sin_acentos((request.args.get("q") or "").strip())
     with db() as con:
@@ -441,6 +463,7 @@ def pide_codigo(d, motivo):
 
 @app.route("/api/orden", methods=["POST"])
 @login_requerido
+@modulo_requerido("ordenes")
 def api_orden_crear():
     d = request.get_json(force=True, silent=True) or {}
     monto, sena, msg = importes(d)
@@ -496,6 +519,7 @@ def api_orden_crear():
 
 @app.route("/api/orden/<int:oid>", methods=["POST"])
 @login_requerido
+@modulo_requerido("ordenes")
 def api_orden_guardar(oid):
     d = request.get_json(force=True, silent=True) or {}
     with db() as con:
@@ -573,6 +597,7 @@ def api_orden_guardar(oid):
 
 @app.route("/api/orden/<int:oid>/accion", methods=["POST"])
 @login_requerido
+@modulo_requerido("ordenes")
 def api_orden_accion(oid):
     d = request.get_json(force=True, silent=True) or {}
     accion = d.get("accion")
@@ -681,6 +706,7 @@ def api_orden_accion(oid):
 
 @app.route("/api/orden/<int:oid>/ticket")
 @login_requerido
+@modulo_requerido("ordenes")
 def api_orden_ticket(oid):
     """Texto del comprobante de ingreso y número de WhatsApp del cliente."""
     with db() as con:
@@ -696,6 +722,7 @@ def api_orden_ticket(oid):
 
 @app.route("/api/orden/<int:oid>/historial")
 @login_requerido
+@modulo_requerido("ordenes")
 def api_orden_historial(oid):
     with db() as con:
         cargar_orden(con, oid)
@@ -705,6 +732,7 @@ def api_orden_historial(oid):
 
 @app.route("/api/historial/<int:hid>/borrar", methods=["POST"])
 @login_requerido
+@modulo_requerido("ordenes")
 def api_historial_borrar(hid):
     d = request.get_json(force=True, silent=True) or {}
     r = pide_codigo(d, "Borrar una línea del historial requiere el código de validación.")
@@ -1008,7 +1036,8 @@ def admin():
         except Exception:
             stats[f["id"]] = (0, 0)
     nueva = session.pop("cuenta_nueva", None)
-    return render_template("admin.html", filas=filas, stats=stats, nueva=nueva, fmt_fecha=fmt_fecha)
+    secciones = {f["id"]: ", ".join(core.MODULOS[m][0] for m in core.MODULOS if m in core.modulos_de(f)) for f in filas}
+    return render_template("admin.html", filas=filas, stats=stats, nueva=nueva, fmt_fecha=fmt_fecha, MODULOS=core.MODULOS, secciones=secciones)
 
 
 @app.route("/admin/crear", methods=["POST"])
@@ -1019,6 +1048,8 @@ def admin_crear():
     except ValueError as e:
         flash(str(e), "error")
         return redirect(url_for("admin"))
+    if request.form.get("elegir_secciones"):
+        core.guardar_modulos(cid, request.form.getlist("modulo"))
     session["cuenta_nueva"] = {"email": request.form.get("email", "").strip().lower(), "clave": clave}
     return redirect(url_for("admin"))
 
@@ -1034,7 +1065,7 @@ def admin_secciones(cid):
         core.guardar_modulos(cid, request.form.getlist("modulo"))
         flash(f"Secciones de «{f['comercio']}» actualizadas.", "ok")
         return redirect(url_for("admin"))
-    return render_template("admin_secciones.html", f=f, activos=core.modulos_de(f), MODULOS=core.MODULOS)
+    return render_template("admin_secciones.html", f=f, activos=core.modulos_de(f), MODULOS=core.MODULOS, FUTUROS=core.MODULOS_FUTUROS)
 
 
 @app.route("/admin/<int:cid>/<accion>", methods=["POST"])

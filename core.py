@@ -225,11 +225,20 @@ def conectar_cuentas():
 # Para agregar una sección nueva: sumarla acá (clave: (nombre, descripción)), proteger sus rutas con
 # @modulo_requerido("clave") y mostrar su enlace con {% if 'clave' in modulos %}.
 MODULOS = {
+    "clientes": ("Clientes", "Agenda de clientes y ficha completa de cada uno."),
+    "ordenes": ("Órdenes de reparación", "Ingreso de equipos, presupuestos, estados, avisos por WhatsApp e historial. Requiere Clientes."),
     "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
     "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
 }
 # Qué tienen habilitado las cuentas que todavía no se configuraron (las secciones nuevas arrancan apagadas).
-MODULOS_INICIALES = ["recordatorios", "respaldo"]
+MODULOS_INICIALES = ["clientes", "ordenes", "recordatorios", "respaldo"]
+# Secciones planificadas: se muestran como «Próximamente» en el panel. Cuando estén listas se pasan a MODULOS.
+MODULOS_FUTUROS = {
+    "stock": ("Control de stock", "Repuestos y productos: existencias, ingresos y egresos."),
+    "ventas": ("Ventas", "Registro de ventas y comprobantes."),
+    "contabilidad": ("Contabilidad", "Ingresos, egresos y resultados."),
+}
+DEPENDENCIAS = {"ordenes": ["clientes"]}      # una sección que necesita a otra
 
 
 def modulos_de(cuenta):
@@ -248,6 +257,11 @@ def modulos_de(cuenta):
 def guardar_modulos(cuenta_id, claves):
     import json
     validas = [m for m in MODULOS if m in claves]
+    for m in list(validas):                      # ordenes necesita clientes, etc.
+        for req in DEPENDENCIAS.get(m, []):
+            if req not in validas:
+                validas.append(req)
+    validas = [m for m in MODULOS if m in validas]
     with conectar_cuentas() as con:
         con.execute("UPDATE cuentas SET modulos=? WHERE id=?", (json.dumps(validas), cuenta_id))
 
@@ -271,6 +285,17 @@ def crear_cuentas():
         """)
         if "modulos" not in [r[1] for r in con.execute("PRAGMA table_info(cuentas)")]:
             con.execute("ALTER TABLE cuentas ADD COLUMN modulos TEXT")
+        if con.execute("PRAGMA user_version").fetchone()[0] < 1:
+            # Clientes y Órdenes eran parte fija del sistema: las cuentas con lista guardada las conservan.
+            import json
+            for cid, crudo in con.execute("SELECT id, modulos FROM cuentas WHERE modulos IS NOT NULL").fetchall():
+                try:
+                    lista = json.loads(crudo)
+                except ValueError:
+                    lista = []
+                nueva = ["clientes", "ordenes"] + [m for m in lista if m not in ("clientes", "ordenes")]
+                con.execute("UPDATE cuentas SET modulos=? WHERE id=?", (json.dumps(nueva), cid))
+            con.execute("PRAGMA user_version=1")
 
 
 def generar_clave(largo=10):

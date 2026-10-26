@@ -2,11 +2,16 @@
 {% block cuerpo %}
 <div class="card"><div class="row"><h1 style="margin:0">Secciones de «{{ f.comercio }}»</h1><a class="btn der" href="{{ url_for('admin') }}">← Volver</a></div>
   <p class="mut">{{ f.email }}{% if f.es_admin %} · Cuenta administradora: siempre tiene todo habilitado.{% endif %}</p>
-  <p class="mut">Clientes y Órdenes están siempre incluidos. Tildá lo que contrató este comercio.</p>
+  <p class="mut">Tildá las secciones que contrató este comercio. «Órdenes de reparación» necesita «Clientes», que se activa solo.</p>
   <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
     {% for k, (nombre, desc) in MODULOS.items() %}
     <label class="modulo"><input type="checkbox" name="modulo" value="{{ k }}" {{ 'checked' if k in activos }} {{ 'disabled' if f.es_admin }}>
       <span><b>{{ nombre }}</b><br><span class="mut">{{ desc }}</span></span></label>
+    {% endfor %}
+    <h2 style="margin-top:16px">Próximamente</h2>
+    {% for k, (nombre, desc) in FUTUROS.items() %}
+    <label class="modulo" style="opacity:.6"><input type="checkbox" disabled>
+      <span><b>{{ nombre }}</b> <span class="pill" style="background:#e5e7eb;color:#374151">Próximamente</span><br><span class="mut">{{ desc }}</span></span></label>
     {% endfor %}
     <p><button class="btn pri" {{ 'disabled' if f.es_admin }}>Guardar</button></p>
   </form></div>

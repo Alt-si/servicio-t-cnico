@@ -6,12 +6,17 @@
   <form method="post" action="{{ url_for('admin_crear') }}" class="row"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
     <input name="comercio" placeholder="Nombre del comercio" required style="flex:1;min-width:180px">
     <input name="email" type="email" placeholder="Mail del cliente" required style="flex:1;min-width:180px">
-    <button class="btn pri">Crear cuenta</button></form>
-  <p class="mut">Se genera una clave aleatoria que verás una sola vez.</p></div>
+    <button class="btn pri">Crear cuenta</button>
+    <input type="hidden" name="elegir_secciones" value="1">
+    <div style="flex-basis:100%"><label>Secciones que contrata este comercio</label>
+      <div class="row">{% for k, (nombre, desc) in MODULOS.items() %}
+        <label class="chip-sec" title="{{ desc }}"><input type="checkbox" name="modulo" value="{{ k }}" checked> {{ nombre }}</label>{% endfor %}</div></div>
+  </form>
+  <p class="mut">Se genera una clave aleatoria que verás una sola vez. Las secciones se pueden cambiar después con el botón «Secciones».</p></div>
 <div class="card"><h1>Cuentas ({{ filas|length }})</h1><div class="tabla-wrap"><table>
-  <thead><tr><th>Comercio</th><th>Mail</th><th>Clientes</th><th>Órdenes</th><th>Último ingreso</th><th>Estado</th><th></th></tr></thead><tbody class="clientes">
+  <thead><tr><th>Comercio</th><th>Mail</th><th>Clientes</th><th>Órdenes</th><th>Secciones</th><th>Último ingreso</th><th>Estado</th><th></th></tr></thead><tbody class="clientes">
   {% for f in filas %}<tr><td><b>{{ f.comercio }}</b>{% if f.es_admin %} <span class="mut">(admin)</span>{% endif %}</td><td>{{ f.email }}</td>
-    <td>{{ stats[f.id][0] }}</td><td>{{ stats[f.id][1] }}</td><td>{{ fmt_fecha(f.ultimo_ingreso, True) if f.ultimo_ingreso else '—' }}</td>
+    <td>{{ stats[f.id][0] }}</td><td>{{ stats[f.id][1] }}</td><td style="font-size:13px">{{ secciones[f.id] }}</td><td>{{ fmt_fecha(f.ultimo_ingreso, True) if f.ultimo_ingreso else '—' }}</td>
     <td>{{ 'Activa' if f.activa else 'Desactivada' }}</td>
     <td style="white-space:nowrap">
       <a class="btn" href="{{ url_for('admin_secciones', cid=f.id) }}">Secciones</a>

@@ -27,6 +27,7 @@
   <p><button class="btn pri" id="c-ok">Cambiar código</button></p>
 </div>
 
+{% if 'ordenes' in modulos %}
 <div class="card"><h1>Tipos de equipo, marcas y escritura</h1>
 <form method="post" action="{{ url_for('configuracion_listas') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
   <div class="grid">
@@ -41,6 +42,7 @@
   <div class="row"><button class="btn pri">Guardar</button>
     <button class="btn" name="accion" value="restablecer" formnovalidate onclick="return confirm('Se restablecen los tipos de equipo y las marcas a los valores por defecto. ¿Continuar?')">Restablecer listas por defecto</button></div>
 </form></div>
+{% endif %}
 
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>
   <p class="mut">Descargá una copia de toda tu información (clientes, equipos, órdenes e historial). Guardala en un lugar seguro.</p>

@@ -23,7 +23,7 @@ function modal(html) {
   const m = $('#modal'); $('#modal-caja').innerHTML = html; m.classList.add('abierto'); return $('#modal-caja');
 }
 function cerrar() { $('#modal').classList.remove('abierto'); }
-$('#modal')?.addEventListener('mousedown', e => { if (e.target.id === 'modal') cerrar(); });
+// Las ventanas NO se cierran al tocar afuera (así no se pierden los datos cargados): solo con sus botones.
 
 // Pide el código de validación y reintenta
 function pedirCodigo(motivo) {

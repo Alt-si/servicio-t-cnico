@@ -42,9 +42,25 @@ async function productoForm(id) {
   ['#p-auto', '#p-cat', '#p-mar'].forEach(s => $(s, c).addEventListener('change', recalc));
   $('#p-costo', c).addEventListener('input', recalc);
   recalc();
-  const nuevo = async (tabla, selId) => {
-    const r = await listaPedir(tabla); if (!r) return;
-    $(selId, c).insertAdjacentHTML('beforeend', `<option value="${r.id}">${esc(r.nombre)}</option>`); $(selId, c).value = r.id;
+  // Alta rápida de rubro / marca en la misma ventana, sin cerrar el formulario del producto
+  const nuevo = (tabla, selId, link) => {
+    const sel = $(selId, c), prev = c.querySelector('.alta-rapida');
+    if (prev) prev.remove();
+    const caja = document.createElement('div');
+    caja.className = 'alta-rapida row'; caja.style.margin = '6px 0';
+    caja.innerHTML = `<input class="mayus" placeholder="${tabla === 'categorias' ? 'Nuevo rubro' : 'Nueva marca'}" autocomplete="off" style="flex:1"><button type="button" class="btn pri">Agregar</button><button type="button" class="btn">✕</button><span class="alta-err" style="color:#b91c1c;width:100%"></span>`;
+    sel.after(caja);
+    const inp = caja.querySelector('input'), err = caja.querySelector('.alta-err'); inp.focus();
+    const ok = async () => {
+      const j = await api('/api/stock/lista/' + tabla, {nombre: inp.value});
+      if (!j.ok) { err.textContent = j.error; return; }
+      (tabla === 'categorias' ? f.categorias : f.marcas).push({id: j.id, nombre: j.nombre, margen_lista: null, margen_contado: null, descuento: null});
+      sel.insertAdjacentHTML('beforeend', `<option value="${j.id}">${esc(j.nombre)}</option>`); sel.value = j.id;
+      sel.dispatchEvent(new Event('change')); caja.remove();
+    };
+    caja.querySelector('.pri').onclick = ok;
+    caja.querySelectorAll('button')[1].onclick = () => caja.remove();
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); ok(); } else if (e.key === 'Escape') { e.stopPropagation(); caja.remove(); } });
   };
   $('#p-mas-cat', c).onclick = e => { e.preventDefault(); nuevo('categorias', '#p-cat'); };
   $('#p-mas-mar', c).onclick = e => { e.preventDefault(); nuevo('marcas', '#p-mar'); };
@@ -59,19 +75,6 @@ async function productoForm(id) {
   };
 }
 
-// Alta rápida de un rubro o una marca desde el formulario del producto
-function listaPedir(tabla) {
-  return new Promise(res => {
-    const c = modal(`<h2>${tabla === 'categorias' ? 'Nuevo rubro' : 'Nueva marca'}</h2><div id="l-err" class="msg error" style="display:none"></div>
-      <input id="l-nombre" class="mayus" autocomplete="off"><div class="row" style="margin-top:12px"><button class="btn pri" id="l-ok">Agregar</button><button class="btn" id="l-no">Cancelar</button></div>`);
-    setTimeout(() => $('#l-nombre', c).focus(), 50);
-    $('#l-no', c).onclick = () => { cerrar(); res(null); };
-    $('#l-ok', c).onclick = async () => {
-      const j = await api('/api/stock/lista/' + tabla, {nombre: $('#l-nombre', c).value});
-      if (j.ok) { cerrar(); res(j); } else { const e = $('#l-err', c); e.textContent = j.error; e.style.display = 'block'; }
-    };
-  });
-}
 
 const TIT_MOV = {ingreso: 'Ingreso de stock', egreso: 'Egreso de stock', ajuste: 'Ajuste de inventario (stock real contado)'};
 async function movimientoForm(pid, tipo, recargar) {

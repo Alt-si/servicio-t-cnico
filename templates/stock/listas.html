@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card"><div class="row"><h1 style="margin:0">Rubros, marcas y unidades</h1><a class="btn der" href="{{ url_for('stock') }}">← Volver al stock</a></div>
-  <p class="mut">En cada rubro o marca podés cargar el % de ganancia para precio de lista y contado, y un descuento; los productos con «precio automático» se recalculan solos. Si el producto tiene marca con regla, manda la marca; si no, la del rubro. Todo es editable: armá las listas con lo que use tu comercio. Lo que está en uso en algún producto no se puede eliminar.</p>
+  <p class="mut">En cada rubro o marca podés cargar el % de ganancia para precio de lista y contado, y un descuento para las formas de pago que elijas; los productos con «precio automático» se recalculan solos. Si el producto tiene marca con regla, manda la marca; si no, la del rubro. Todo es editable: armá las listas con lo que use tu comercio. Lo que está en uso en algún producto no se puede eliminar.</p>
   <h2>IVA</h2>
   <p class="mut">Activalo si trabajás como responsable inscripto: los precios se cargan sin IVA y el sistema muestra también el precio final. Cada producto puede tener su propio IVA (21, 10,5, 0…).</p>
   <div class="row"><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="iva-on" style="width:auto" {{ 'checked' if iva.activo }}> Usar IVA</label>
@@ -28,5 +28,10 @@
   {% for r in unis %}<tr><td><b>{{ r.nombre }}</b></td><td>{{ r.abrev }}</td><td>{{ r.decimales }}</td><td class="mut">{{ r.usos }} producto(s)</td><td style="text-align:right;white-space:nowrap">
     <button class="btn" onclick='listaForm("unidades", {{ {"id": r.id, "nombre": r.nombre, "abrev": r.abrev, "decimales": r.decimales}|tojson }})'>Editar</button>
     <button class="btn" onclick="listaEliminar('unidades', {{ r.id }})">Eliminar</button></td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><div class="row"><h2 style="margin:0;border:0;padding:0">Formas de pago ({{ fpagos|length }})</h2><button class="btn pri der" onclick="listaForm('formas_pago')">+ Agregar</button></div>
+  <p class="mut">Marcá en cuáles formas de pago se aplica el descuento que cargaste en cada rubro o marca (por ejemplo efectivo y transferencia).</p>
+  <div class="tabla-wrap"><table><tbody class="clientes">{% for r in fpagos %}<tr><td><b>{{ r.nombre }}</b></td><td class="mut">{{ 'Aplica descuento' if r.aplica_descuento else 'Precio de lista' }}</td><td style="text-align:right;white-space:nowrap">
+    <button class="btn" onclick='listaForm("formas_pago", {{ {"id": r.id, "nombre": r.nombre, "aplica_descuento": r.aplica_descuento}|tojson }})'>Editar</button>
+    <button class="btn" onclick="listaEliminar('formas_pago', {{ r.id }})">Eliminar</button></td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}
 {% block js %}<script src="{{ url_for('static', filename='stock.js') }}"></script>{% endblock %}

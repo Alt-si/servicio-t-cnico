@@ -23,7 +23,7 @@
     <button class="btn">Buscar</button>
   </form>
   <div class="tabla-wrap"><table>
-    <thead><tr><th>Código</th><th>Producto</th><th class="ocu">{{ lbl.categoria }}</th><th class="ocu">{{ lbl.marca }}</th><th style="text-align:right">Stock</th><th class="ocu" style="text-align:right">Lista{{ " (c/IVA)" if iva.activo }}</th><th class="ocu" style="text-align:right">Contado</th><th></th></tr></thead>
+    <thead><tr><th>Código</th><th>Producto</th><th class="ocu">{{ lbl.categoria }}</th><th class="ocu">{{ lbl.marca }}</th><th style="text-align:right">Stock</th><th class="ocu" style="text-align:right">Lista{{ " (c/IVA)" if iva.activo }}</th><th class="ocu" style="text-align:right">Con descuento</th><th></th></tr></thead>
     <tbody class="clientes">
     {% for p in filas %}{% set e = estado_stock(p.stock_actual, p.stock_minimo) %}
     <tr class="st-{{ e }}{{ ' st-inactivo' if not p.activo }}">
@@ -31,7 +31,7 @@
       <td class="ocu">{{ p.categoria or '' }}</td><td class="ocu">{{ p.marca or '' }}</td>
       <td style="text-align:right;white-space:nowrap"><b>{{ fmt_cant(p.stock_actual, p.decimales) }}</b> {{ p.abrev }}
         {% if e=='sin' %}<span class="pill" style="background:#dc2626;color:#fff">Sin stock</span>{% elif e=='bajo' %}<span class="pill" style="background:#f97316;color:#fff">Bajo</span>{% endif %}</td>
-      {% set pl = pfin(p.precio, p.iva) %}{% set pc = pfin(p.precio_contado, p.iva) %}
+      {% set pl = pfin(p.precio, p.iva) %}{% set pc = pfin(p.precio * (1 - p.desc_pct / 100), p.iva) if p.desc_pct and p.precio is not none else None %}
       <td class="ocu" style="text-align:right">{{ ('$ ' ~ (pl|monto_input)) if pl is not none else '' }}</td>
       <td class="ocu" style="text-align:right">{{ ('$ ' ~ (pc|monto_input)) if pc is not none else '' }}</td>
       <td style="white-space:nowrap;text-align:right">

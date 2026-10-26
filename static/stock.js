@@ -34,8 +34,8 @@ async function productoForm(id) {
     if (!auto) return;
     const cat = f.categorias.find(x => String(x.id) === $('#p-cat', c).value), mar = f.marcas.find(x => String(x.id) === $('#p-mar', c).value);
     const regla = k => (mar && mar[k] !== null) ? mar[k] : (cat ? cat[k] : null);
-    const costo = pn($('#p-costo', c).value), desc = regla('descuento') || 0;
-    const calc = k => (costo === null || regla(k) === null || regla(k) === undefined) ? '' : fm(Math.round(costo * (1 + regla(k) / 100) * (1 - desc / 100) * 100) / 100);
+    const costo = pn($('#p-costo', c).value);
+    const calc = k => (costo === null || regla(k) === null || regla(k) === undefined) ? '' : fm(Math.round(costo * (1 + regla(k) / 100) * 100) / 100);
     $('#p-precio', c).value = calc('margen_lista'); $('#p-contado', c).value = calc('margen_contado');
   };
   ['#p-auto', '#p-cat', '#p-mar'].forEach(s => $(s, c).addEventListener('change', recalc));
@@ -91,20 +91,22 @@ async function movimientoForm(pid, tipo, recargar) {
 // Pantalla de rubros, marcas y unidades
 function listaForm(tabla, r) {
   r = r || {};
-  const u = tabla === 'unidades';
+  const u = tabla === 'unidades', fp = tabla === 'formas_pago';
   const c = modal(`<h2>${r.id ? 'Editar' : 'Agregar'}</h2><div id="l-err" class="msg error" style="display:none"></div>
     <label>Nombre</label><input id="l-nombre" class="mayus" value="${esc(r.nombre || '')}" autocomplete="off">
-    ${!u ? `<div class="grid"><div><label>Ganancia precio lista (%)</label><input id="l-ml" inputmode="decimal" value="${nz(r.margen_lista)}"></div>
+    ${fp ? `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="l-ad" style="width:auto" ${r.aplica_descuento ? 'checked' : ''}> Aplicar el descuento en esta forma de pago</label>` : ''}
+    ${!u && !fp ? `<div class="grid"><div><label>Ganancia precio lista (%)</label><input id="l-ml" inputmode="decimal" value="${nz(r.margen_lista)}"></div>
            <div><label>Ganancia precio contado (%)</label><input id="l-mc" inputmode="decimal" value="${nz(r.margen_contado)}"></div>
-           <div><label>Descuento (%)</label><input id="l-ds" inputmode="decimal" value="${nz(r.descuento)}"></div></div>
-           <p class="mut">Vacío = sin regla. Se aplican al costo de los productos con precio automático.</p>` : ''}
+           <div><label>Descuento por pago en efectivo, transferencia, etc. (%)</label><input id="l-ds" inputmode="decimal" value="${nz(r.descuento)}"></div></div>
+           <p class="mut">Vacío = sin regla. Las ganancias se aplican al costo (precio automático); el descuento se aplica al precio de lista solo en las formas de pago que marques.</p>` : ''}
     ${u ? `<label>Abreviatura (ej.: kg, l, u)</label><input id="l-abrev" value="${esc(r.abrev || '')}" maxlength="8">
            <label>Decimales de la cantidad (0 a 3)</label><input id="l-dec" type="number" min="0" max="3" value="${r.decimales ?? 0}">` : ''}
     <div class="row" style="margin-top:12px"><button class="btn pri" id="l-ok">Guardar</button><button class="btn" id="l-no">Cancelar</button></div>`);
   $('#l-no', c).onclick = cerrar;
   $('#l-ok', c).onclick = async () => {
     const d = {id: r.id, nombre: $('#l-nombre', c).value};
-    if (!u) { d.margen_lista = $('#l-ml', c).value; d.margen_contado = $('#l-mc', c).value; d.descuento = $('#l-ds', c).value; }
+    if (fp) d.aplica_descuento = $('#l-ad', c).checked;
+    if (!u && !fp) { d.margen_lista = $('#l-ml', c).value; d.margen_contado = $('#l-mc', c).value; d.descuento = $('#l-ds', c).value; }
     if (u) { d.abrev = $('#l-abrev', c).value; d.decimales = $('#l-dec', c).value; }
     const j = await api('/api/stock/lista/' + tabla, d);
     if (j.ok) location.reload(); else { const e = $('#l-err', c); e.textContent = j.error; e.style.display = 'block'; }

@@ -47,6 +47,10 @@ def crear_tablas(con):
     agregar("stock_productos", "precio_contado", "REAL")
     agregar("stock_productos", "iva", "REAL")                   # vacío = usa el IVA general de la cuenta
     agregar("stock_productos", "precio_auto", "INTEGER NOT NULL DEFAULT 0")
+    con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
+    if con.execute("SELECT COUNT(*) FROM stock_formas_pago").fetchone()[0] == 0:
+        con.executemany("INSERT INTO stock_formas_pago (nombre, aplica_descuento) VALUES (?,?)",
+                        [("Efectivo", 1), ("Transferencia", 1), ("Tarjeta de débito", 0), ("Tarjeta de crédito", 0)])
     if con.execute("SELECT COUNT(*) FROM stock_unidades").fetchone()[0] == 0:
         con.executemany("INSERT INTO stock_unidades (nombre, abrev, decimales) VALUES (?,?,?)", UNIDADES_INICIALES)
 
@@ -104,18 +108,17 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         return n
 
     def calcular(costo, cat, mar):
-        """Precios (sin IVA) según las reglas de la marca (si tiene) o del rubro."""
+        """Precios (sin IVA) según las reglas de la marca (si tiene) o del rubro. El descuento no se aplica acá: depende de la forma de pago."""
         def regla(campo):
             if mar is not None and mar[campo] is not None:
                 return mar[campo]
             return cat[campo] if cat is not None else None
         if costo is None:
             return None, None
-        desc = regla("descuento") or 0
         out = []
         for campo in ("margen_lista", "margen_contado"):
             m = regla(campo)
-            out.append(None if m is None else round(costo * (1 + m / 100) * (1 - desc / 100), 2))
+            out.append(None if m is None else round(costo * (1 + m / 100), 2))
         return out[0], out[1]
 
     def recalcular(con, where="", params=()):
@@ -134,10 +137,20 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             return valor
         return round(valor * (1 + (cfg["defecto"] if iva is None else iva) / 100), 2)
 
+    def migrar(cid):
+        """Una sola vez: los precios automáticos ya no llevan el descuento incorporado."""
+        if core.leer_config(cid, "stock_calc_v2") != "1":
+            with db() as con:
+                recalcular(con)
+            core.guardar_config(cid, "stock_calc_v2", "1")
+
+    def formas(con):
+        return con.execute("SELECT * FROM stock_formas_pago ORDER BY id").fetchall()
+
     def solo(nombre):
         return " ".join((nombre or "").split())
 
-    SQL_PROD = ("SELECT p.*, c.nombre AS categoria, m.nombre AS marca, u.nombre AS unidad, u.abrev, u.decimales "
+    SQL_PROD = ("SELECT p.*, c.nombre AS categoria, IFNULL(m.descuento, c.descuento) AS desc_pct, m.nombre AS marca, u.nombre AS unidad, u.abrev, u.decimales "
                 "FROM stock_productos p LEFT JOIN stock_categorias c ON c.id=p.categoria_id "
                 "LEFT JOIN stock_marcas m ON m.id=p.marca_id JOIN stock_unidades u ON u.id=p.unidad_id")
 
@@ -146,6 +159,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     @login_requerido
     @modulo_requerido("stock")
     def stock():
+        migrar(g.cuenta["id"])
         q = core.sin_acentos((request.args.get("q") or "").strip())
         cat, mar = request.args.get("cat", type=int), request.args.get("mar", type=int)
         ver = request.args.get("ver", "activos")
@@ -186,6 +200,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     @login_requerido
     @modulo_requerido("stock")
     def stock_producto(pid):
+        migrar(g.cuenta["id"])
         with db() as con:
             p = con.execute(SQL_PROD + " WHERE p.id=?", (pid,)).fetchone()
             if not p:
@@ -194,7 +209,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             cats = con.execute("SELECT * FROM stock_categorias ORDER BY nombre COLLATE NOCASE").fetchall()
             mars = con.execute("SELECT * FROM stock_marcas ORDER BY nombre COLLATE NOCASE").fetchall()
             unis = con.execute("SELECT * FROM stock_unidades ORDER BY nombre COLLATE NOCASE").fetchall()
-        return render_template("stock/producto.html", p=p, movs=movs, cats=cats, mars=mars, unis=unis, MOTIVOS=MOTIVOS,
+            fpagos = formas(con)
+        return render_template("stock/producto.html", fpagos=fpagos, p=p, movs=movs, cats=cats, mars=mars, unis=unis, MOTIVOS=MOTIVOS,
                                iva=iva_cfg(g.cuenta["id"]), pfin=lambda v, i: pfin(v, i, iva_cfg(g.cuenta["id"])),
                                lbl=etiquetas(g.cuenta["id"]), fmt_cant=fmt_cant, estado_stock=estado_stock, fmt_fecha=core.fmt_fecha)
 
@@ -331,9 +347,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 return con.execute(f"SELECT t.*, (SELECT COUNT(*) FROM stock_productos p WHERE p.{col}=t.id) AS usos "
                                    f"FROM {tabla} t ORDER BY t.nombre COLLATE NOCASE").fetchall()
             cats, mars, unis = con_uso("stock_categorias", "categoria_id"), con_uso("stock_marcas", "marca_id"), con_uso("stock_unidades", "unidad_id")
-        return render_template("stock/listas.html", cats=cats, mars=mars, unis=unis, lbl=etiquetas(g.cuenta["id"]), iva=iva_cfg(g.cuenta["id"]))
+            fpagos = formas(con)
+        return render_template("stock/listas.html", fpagos=fpagos, cats=cats, mars=mars, unis=unis, lbl=etiquetas(g.cuenta["id"]), iva=iva_cfg(g.cuenta["id"]))
 
-    TABLAS = {"categorias": ("stock_categorias", "categoria_id"), "marcas": ("stock_marcas", "marca_id"), "unidades": ("stock_unidades", "unidad_id")}
+    TABLAS = {"categorias": ("stock_categorias", "categoria_id"), "marcas": ("stock_marcas", "marca_id"), "unidades": ("stock_unidades", "unidad_id"),
+              "formas_pago": ("stock_formas_pago", None)}
 
     @app.route("/api/stock/lista/<tabla>", methods=["POST"])
     @login_requerido
@@ -363,6 +381,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     con.execute("UPDATE stock_unidades SET nombre=?, abrev=?, decimales=? WHERE id=?", (nombre, abrev, dec, rid))
                 else:
                     rid = con.execute("INSERT INTO stock_unidades (nombre, abrev, decimales) VALUES (?,?,?)", (nombre, abrev, dec)).lastrowid
+            elif tabla == "formas_pago":
+                aplica = 1 if d.get("aplica_descuento") else 0
+                if rid:
+                    con.execute("UPDATE stock_formas_pago SET nombre=?, aplica_descuento=? WHERE id=?", (nombre, aplica, rid))
+                else:
+                    rid = con.execute("INSERT INTO stock_formas_pago (nombre, aplica_descuento) VALUES (?,?)", (nombre, aplica)).lastrowid
             else:
                 try:
                     reglas = [pct(d.get(k)) if k in d else None for k in ("margen_lista", "margen_contado", "descuento")]
@@ -387,7 +411,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             return error("Lista desconocida.", 404)
         nombre_tabla, col = TABLAS[tabla]
         with db() as con:
-            usos = con.execute(f"SELECT COUNT(*) FROM stock_productos WHERE {col}=?", (rid,)).fetchone()[0]
+            usos = con.execute(f"SELECT COUNT(*) FROM stock_productos WHERE {col}=?", (rid,)).fetchone()[0] if col else 0
             if usos:
                 return error(f"Está en uso en {usos} producto(s). Cambialo en esos productos antes de eliminarlo.")
             con.execute(f"DELETE FROM {nombre_tabla} WHERE id=?", (rid,))
@@ -427,13 +451,14 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             filas = con.execute(SQL_PROD + " ORDER BY p.nombre COLLATE NOCASE").fetchall()
         buf = io.StringIO()
         w = csv.writer(buf, delimiter=";")
-        w.writerow(["Código", "Producto", lbl["categoria"], lbl["marca"], "Unidad", "Stock", "Stock mínimo", "Costo", "Precio lista", "Precio contado", "IVA %", "Precio lista final", "Precio contado final", "Ubicación", "Activo"])
+        w.writerow(["Código", "Producto", lbl["categoria"], lbl["marca"], "Unidad", "Stock", "Stock mínimo", "Costo", "Precio lista", "Precio contado", "IVA %", "Precio lista final", "Precio contado final", "Descuento %", "Lista con descuento (final)", "Ubicación", "Activo"])
         cfg = iva_cfg(g.cuenta["id"])
         for r in filas:
             w.writerow([r["codigo"] or "", r["nombre"], r["categoria"] or "", r["marca"] or "", r["abrev"], fmt_cant(r["stock_actual"], r["decimales"]),
                         fmt_cant(r["stock_minimo"], r["decimales"]), core.num_ar(r["costo"]), core.num_ar(r["precio"]), core.num_ar(r["precio_contado"]),
                         core.num_ar(r["iva"] if r["iva"] is not None else cfg["defecto"]) if cfg["activo"] else "",
-                        core.num_ar(pfin(r["precio"], r["iva"], cfg)), core.num_ar(pfin(r["precio_contado"], r["iva"], cfg)), r["ubicacion"] or "",
+                        core.num_ar(pfin(r["precio"], r["iva"], cfg)), core.num_ar(pfin(r["precio_contado"], r["iva"], cfg)), core.num_ar(r["desc_pct"]) if r["desc_pct"] else "",
+                        core.num_ar(pfin(r["precio"] * (1 - r["desc_pct"] / 100), r["iva"], cfg)) if r["desc_pct"] and r["precio"] is not None else "", r["ubicacion"] or "",
                         "Sí" if r["activo"] else "No"])
         return Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="stock.csv"'})

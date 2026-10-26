@@ -14,6 +14,7 @@
                     ('Costo', ('$ ' ~ (p.costo|monto_input)) if p.costo is not none else None),
                     ('Precio de lista' ~ (' (sin IVA)' if iva.activo else ''), ('$ ' ~ (p.precio|monto_input)) if p.precio is not none else None),
                     ('Precio contado' ~ (' (sin IVA)' if iva.activo else ''), ('$ ' ~ (p.precio_contado|monto_input)) if p.precio_contado is not none else None),
+                    ('Descuento', (p.desc_pct|monto_input ~ ' % según forma de pago') if p.desc_pct else None),
                     ('IVA', ((p.iva if p.iva is not none else iva.defecto)|monto_input ~ ' %') if iva.activo else None),
                     ('Lista final con IVA', ('$ ' ~ (pfin(p.precio, p.iva)|monto_input)) if iva.activo and p.precio is not none else None),
                     ('Contado final con IVA', ('$ ' ~ (pfin(p.precio_contado, p.iva)|monto_input)) if iva.activo and p.precio_contado is not none else None),
@@ -25,6 +26,10 @@
     {% if p.activo %}<button class="btn" data-acc="desactivar">Desactivar</button>{% else %}<button class="btn" data-acc="activar">Activar</button>{% endif %}
     <button class="btn bad" data-acc="eliminar">Eliminar</button></div>
 </div>
+{% if p.precio is not none %}<div class="card"><h2>Precio según forma de pago</h2>
+  <p class="mut">Precio de lista{{ ' con IVA' if iva.activo }}: <b>$ {{ pfin(p.precio, p.iva)|monto_input }}</b>{% if p.desc_pct %} · el descuento de {{ p.desc_pct|monto_input }}% se aplica a las formas de pago marcadas.{% endif %}</p>
+  <div class="tabla-wrap"><table><tbody class="clientes">{% for f in fpagos %}{% set v = p.precio * (1 - p.desc_pct / 100) if (f.aplica_descuento and p.desc_pct) else p.precio %}
+    <tr><td>{{ f.nombre }}</td><td style="text-align:right"><b>$ {{ pfin(v, p.iva)|monto_input }}</b></td><td class="mut">{{ 'con descuento' if (f.aplica_descuento and p.desc_pct) else '' }}</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
 <div class="card"><h2>Movimientos ({{ movs|length }})</h2><div class="tabla-wrap"><table>
   <thead><tr><th>Fecha</th><th>Tipo</th><th style="text-align:right">Cantidad</th><th style="text-align:right">Stock resultante</th><th>Motivo</th><th>Nota</th></tr></thead><tbody class="clientes">
   {% for m in movs %}<tr><td style="white-space:nowrap">{{ fmt_fecha(m.fecha, True) }}</td>

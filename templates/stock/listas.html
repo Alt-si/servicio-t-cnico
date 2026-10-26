@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card"><div class="row"><h1 style="margin:0">Rubros, marcas y unidades</h1><a class="btn der" href="{{ url_for('stock') }}">← Volver al stock</a></div>
-  <p class="mut">Todo es editable: armá las listas con lo que use tu comercio. Lo que está en uso en algún producto no se puede eliminar.</p>
+  <p class="mut">En cada rubro o marca podés cargar el % de ganancia para precio de lista y contado, y un descuento; los productos con «precio automático» se recalculan solos. Si el producto tiene marca con regla, manda la marca; si no, la del rubro. Todo es editable: armá las listas con lo que use tu comercio. Lo que está en uso en algún producto no se puede eliminar.</p>
+  <h2>IVA</h2>
+  <p class="mut">Activalo si trabajás como responsable inscripto: los precios se cargan sin IVA y el sistema muestra también el precio final. Cada producto puede tener su propio IVA (21, 10,5, 0…).</p>
+  <div class="row"><label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" id="iva-on" style="width:auto" {{ 'checked' if iva.activo }}> Usar IVA</label>
+    <label style="margin:0">IVA general (%)</label><input id="iva-def" inputmode="decimal" style="width:90px" value="{{ iva.defecto|monto_input }}">
+    <button class="btn pri" id="iva-ok">Guardar IVA</button></div>
   <h2>Nombres de las listas</h2>
   <div class="grid"><div><label>Cómo le llamás a «Rubro»</label><input id="lbl-categoria" value="{{ lbl.categoria }}" placeholder="Rubro, Categoría, Familia, Línea…"></div>
     <div><label>Cómo le llamás a «Marca»</label><input id="lbl-marca" value="{{ lbl.marca }}" placeholder="Marca, Fabricante, Proveedor…"></div></div>
@@ -10,8 +15,9 @@
 {% for clave, titulo, lista in (('categorias', lbl.categoria ~ 's', cats), ('marcas', lbl.marca ~ 's', mars)) %}
 <div class="card"><div class="row"><h2 style="margin:0;border:0;padding:0">{{ titulo }} ({{ lista|length }})</h2><button class="btn pri der" onclick="listaForm('{{ clave }}')">+ Agregar</button></div>
   <div class="tabla-wrap"><table><tbody class="clientes">
-  {% for r in lista %}<tr><td><b>{{ r.nombre }}</b></td><td class="mut">{{ r.usos }} producto(s)</td><td style="text-align:right;white-space:nowrap">
-    <button class="btn" onclick='listaForm("{{ clave }}", {{ {"id": r.id, "nombre": r.nombre}|tojson }})'>Editar</button>
+  {% for r in lista %}<tr><td><b>{{ r.nombre }}</b></td><td class="mut" style="font-size:13px">{% if r.margen_lista is not none %}Lista +{{ r.margen_lista|monto_input }}% {% endif %}{% if r.margen_contado is not none %}· Contado +{{ r.margen_contado|monto_input }}% {% endif %}{% if r.descuento %}· Desc. {{ r.descuento|monto_input }}%{% endif %}</td>
+    <td class="mut">{{ r.usos }} producto(s)</td><td style="text-align:right;white-space:nowrap">
+    <button class="btn" onclick='listaForm("{{ clave }}", {{ {"id": r.id, "nombre": r.nombre, "margen_lista": r.margen_lista, "margen_contado": r.margen_contado, "descuento": r.descuento}|tojson }})'>Editar</button>
     <button class="btn" onclick="listaEliminar('{{ clave }}', {{ r.id }})">Eliminar</button></td></tr>
   {% else %}<tr><td class="mut">Todavía no cargaste ninguno.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endfor %}

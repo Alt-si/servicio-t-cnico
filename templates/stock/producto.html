@@ -11,7 +11,13 @@
     <button class="btn" onclick="movimientoForm({{ p.id }}, 'ajuste', true)">Ajustar (conteo)</button></div>
   <div class="ficha">
     {% for t, v in ((lbl.categoria, p.categoria), (lbl.marca, p.marca), ('Unidad', p.unidad ~ ' (' ~ p.abrev ~ ')'), ('Stock mínimo', fmt_cant(p.stock_minimo, p.decimales) ~ ' ' ~ p.abrev if p.stock_minimo else None),
-                    ('Costo', ('$ ' ~ (p.costo|monto_input)) if p.costo is not none else None), ('Precio', ('$ ' ~ (p.precio|monto_input)) if p.precio is not none else None),
+                    ('Costo', ('$ ' ~ (p.costo|monto_input)) if p.costo is not none else None),
+                    ('Precio de lista' ~ (' (sin IVA)' if iva.activo else ''), ('$ ' ~ (p.precio|monto_input)) if p.precio is not none else None),
+                    ('Precio contado' ~ (' (sin IVA)' if iva.activo else ''), ('$ ' ~ (p.precio_contado|monto_input)) if p.precio_contado is not none else None),
+                    ('IVA', ((p.iva if p.iva is not none else iva.defecto)|monto_input ~ ' %') if iva.activo else None),
+                    ('Lista final con IVA', ('$ ' ~ (pfin(p.precio, p.iva)|monto_input)) if iva.activo and p.precio is not none else None),
+                    ('Contado final con IVA', ('$ ' ~ (pfin(p.precio_contado, p.iva)|monto_input)) if iva.activo and p.precio_contado is not none else None),
+                    ('Cálculo de precio', 'Automático (según rubro / marca)' if p.precio_auto else 'Manual'),
                     ('Ubicación', p.ubicacion), ('Descripción', p.descripcion)) %}
     <div><span class="mut">{{ t }}</span><b>{{ v or '—' }}</b></div>{% endfor %}
   </div>

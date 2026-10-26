@@ -1,4 +1,5 @@
 // Control de stock: formularios de producto, movimientos y listas (todo editable por el comercio)
+const nz = v => (v === null || v === undefined) ? '' : Number(v).toLocaleString('es-AR', {maximumFractionDigits: 2});
 const optHtml = (lista, sel) => lista.map(x => `<option value="${x.id}" ${String(x.id) === String(sel) ? 'selected' : ''}>${esc(x.nombre)}${x.abrev ? ' (' + esc(x.abrev) + ')' : ''}</option>`).join('');
 
 async function productoForm(id) {
@@ -14,13 +15,32 @@ async function productoForm(id) {
       <div><label>${esc(L.marca)} <a href="#" id="p-mas-mar">+ nueva</a></label><select id="p-mar"><option value="">—</option>${optHtml(f.marcas, p.marca_id)}</select></div>
       <div><label>Unidad de medida * <a href="/stock/listas">editar unidades</a></label><select id="p-uni">${optHtml(f.unidades, p.unidad_id)}</select></div>
       <div><label>Ubicación</label><input id="p-ubi" class="mayus" value="${esc(p.ubicacion || '')}" placeholder="Estante, depósito…"></div>
-      <div><label>Costo ($)</label><input id="p-costo" class="moneda" inputmode="decimal" value="${num(p.costo)}"></div>
-      <div><label>Precio de venta ($)</label><input id="p-precio" class="moneda" inputmode="decimal" value="${num(p.precio)}"></div>
+      <div><label>Costo ($)${f.iva.activo ? ' sin IVA' : ''}</label><input id="p-costo" class="moneda" inputmode="decimal" value="${num(p.costo)}"></div>
+      <div style="align-self:end"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="p-auto" style="width:auto" ${p.precio_auto ? 'checked' : ''}> Calcular precios con las reglas del ${esc(L.categoria.toLowerCase())} / ${esc(L.marca.toLowerCase())}</label></div>
+      <div><label>Precio de lista ($)</label><input id="p-precio" class="moneda" inputmode="decimal" value="${num(p.precio)}"></div>
+      <div><label>Precio contado ($)</label><input id="p-contado" class="moneda" inputmode="decimal" value="${num(p.precio_contado)}"></div>
+      ${f.iva.activo ? `<div><label>IVA % (vacío = general ${nz(f.iva.defecto)}%)</label><input id="p-iva" inputmode="decimal" value="${nz(p.iva)}"></div>` : ''}
       <div><label>Stock mínimo (aviso)</label><input id="p-min" inputmode="decimal" value="${num(p.stock_minimo || '')}"></div>
       ${id ? '' : '<div><label>Stock inicial</label><input id="p-ini" inputmode="decimal"></div>'}
     </div>
     <label>Descripción</label><textarea id="p-desc" class="mayus">${esc(p.descripcion || '')}</textarea>
     <div class="row" style="margin-top:12px"><button class="btn pri" id="p-ok">Guardar</button><button class="btn" id="p-no">Cancelar</button></div>`);
+  // vista previa del cálculo automático
+  const pn = s => { s = String(s || '').trim(); if (!s) return null; const v = parseFloat(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/\./g, '')); return isNaN(v) ? null : v; };
+  const fm = v => v === null ? '' : v.toLocaleString('es-AR', {maximumFractionDigits: 2});
+  const recalc = () => {
+    const auto = $('#p-auto', c).checked;
+    $('#p-precio', c).readOnly = $('#p-contado', c).readOnly = auto;
+    if (!auto) return;
+    const cat = f.categorias.find(x => String(x.id) === $('#p-cat', c).value), mar = f.marcas.find(x => String(x.id) === $('#p-mar', c).value);
+    const regla = k => (mar && mar[k] !== null) ? mar[k] : (cat ? cat[k] : null);
+    const costo = pn($('#p-costo', c).value), desc = regla('descuento') || 0;
+    const calc = k => (costo === null || regla(k) === null || regla(k) === undefined) ? '' : fm(Math.round(costo * (1 + regla(k) / 100) * (1 - desc / 100) * 100) / 100);
+    $('#p-precio', c).value = calc('margen_lista'); $('#p-contado', c).value = calc('margen_contado');
+  };
+  ['#p-auto', '#p-cat', '#p-mar'].forEach(s => $(s, c).addEventListener('change', recalc));
+  $('#p-costo', c).addEventListener('input', recalc);
+  recalc();
   const nuevo = async (tabla, selId) => {
     const r = await listaPedir(tabla); if (!r) return;
     $(selId, c).insertAdjacentHTML('beforeend', `<option value="${r.id}">${esc(r.nombre)}</option>`); $(selId, c).value = r.id;
@@ -30,7 +50,8 @@ async function productoForm(id) {
   $('#p-no', c).onclick = cerrar;
   $('#p-ok', c).onclick = async () => {
     const d = {id, nombre: $('#p-nombre', c).value, codigo: $('#p-codigo', c).value, categoria_id: $('#p-cat', c).value, marca_id: $('#p-mar', c).value,
-      unidad_id: $('#p-uni', c).value, ubicacion: $('#p-ubi', c).value, costo: $('#p-costo', c).value, precio: $('#p-precio', c).value,
+      unidad_id: $('#p-uni', c).value, ubicacion: $('#p-ubi', c).value, costo: $('#p-costo', c).value, precio: $('#p-precio', c).value, precio_contado: $('#p-contado', c).value, precio_auto: $('#p-auto', c).checked,
+      iva: $('#p-iva', c)?.value || '',
       stock_minimo: $('#p-min', c).value, descripcion: $('#p-desc', c).value, stock_inicial: $('#p-ini', c)?.value || ''};
     const j = await api('/api/stock/producto', d);
     if (j.ok) { location = id ? location.href : '/stock/producto/' + j.id; } else { const e = $('#p-err', c); e.textContent = j.error; e.style.display = 'block'; }
@@ -73,12 +94,18 @@ function listaForm(tabla, r) {
   const u = tabla === 'unidades';
   const c = modal(`<h2>${r.id ? 'Editar' : 'Agregar'}</h2><div id="l-err" class="msg error" style="display:none"></div>
     <label>Nombre</label><input id="l-nombre" class="mayus" value="${esc(r.nombre || '')}" autocomplete="off">
+    ${!u ? `<div class="grid"><div><label>Ganancia precio lista (%)</label><input id="l-ml" inputmode="decimal" value="${nz(r.margen_lista)}"></div>
+           <div><label>Ganancia precio contado (%)</label><input id="l-mc" inputmode="decimal" value="${nz(r.margen_contado)}"></div>
+           <div><label>Descuento (%)</label><input id="l-ds" inputmode="decimal" value="${nz(r.descuento)}"></div></div>
+           <p class="mut">Vacío = sin regla. Se aplican al costo de los productos con precio automático.</p>` : ''}
     ${u ? `<label>Abreviatura (ej.: kg, l, u)</label><input id="l-abrev" value="${esc(r.abrev || '')}" maxlength="8">
            <label>Decimales de la cantidad (0 a 3)</label><input id="l-dec" type="number" min="0" max="3" value="${r.decimales ?? 0}">` : ''}
     <div class="row" style="margin-top:12px"><button class="btn pri" id="l-ok">Guardar</button><button class="btn" id="l-no">Cancelar</button></div>`);
   $('#l-no', c).onclick = cerrar;
   $('#l-ok', c).onclick = async () => {
-    const d = {id: r.id, nombre: $('#l-nombre', c).value}; if (u) { d.abrev = $('#l-abrev', c).value; d.decimales = $('#l-dec', c).value; }
+    const d = {id: r.id, nombre: $('#l-nombre', c).value};
+    if (!u) { d.margen_lista = $('#l-ml', c).value; d.margen_contado = $('#l-mc', c).value; d.descuento = $('#l-ds', c).value; }
+    if (u) { d.abrev = $('#l-abrev', c).value; d.decimales = $('#l-dec', c).value; }
     const j = await api('/api/stock/lista/' + tabla, d);
     if (j.ok) location.reload(); else { const e = $('#l-err', c); e.textContent = j.error; e.style.display = 'block'; }
   };
@@ -90,5 +117,10 @@ async function listaEliminar(tabla, id) {
 }
 $('#lbl-ok')?.addEventListener('click', async () => {
   const j = await api('/api/stock/etiquetas', {categoria: $('#lbl-categoria').value, marca: $('#lbl-marca').value});
+  if (j.ok) location.reload(); else aviso(j.error);
+});
+
+$('#iva-ok')?.addEventListener('click', async () => {
+  const j = await api('/api/stock/iva', {activo: $('#iva-on').checked, defecto: $('#iva-def').value});
   if (j.ok) location.reload(); else aviso(j.error);
 });

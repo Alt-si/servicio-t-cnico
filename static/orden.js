@@ -75,8 +75,8 @@ if ($('#estado')) $('#estado').addEventListener('change', () => {
 function elegirTecnico(actual) {
   return new Promise(res => {
     const opts = [...$('#tecnico_reparacion').options].filter(o => o.value && o.value !== '__nuevo__').map(o => o.value);
-    const c = modal(`<h2>¿Qué técnico la reparó?</h2><p class="mut">Dato interno: no se le informa al cliente.</p>
-      <select id="e-tec"><option value="">— Sin indicar —</option>${opts.map(o => `<option ${o === actual ? 'selected' : ''}>${esc(o)}</option>`).join('')}<option value="__nuevo__">＋ Agregar técnico…</option></select>
+    const c = modal(`<h2>¿Qué técnico la reparó?</h2><p class="mut">Dato interno: no se le informa al cliente. Es obligatorio.</p><div id="e-err" class="msg error" style="display:none">Elegí el técnico.</div>
+      <select id="e-tec"><option value="">— Elegir técnico —</option>${opts.map(o => `<option ${o === actual ? 'selected' : ''}>${esc(o)}</option>`).join('')}<option value="__nuevo__">＋ Agregar técnico…</option></select>
       <div class="row" style="margin-top:12px"><button class="btn pri" id="e-ok">Continuar</button><button class="btn" id="e-no">Cancelar</button></div>`);
     const sel = $('#e-tec', c); let prev = sel.value;
     sel.addEventListener('change', async () => {
@@ -86,7 +86,7 @@ function elegirTecnico(actual) {
       }
       prev = sel.value;
     });
-    $('#e-ok', c).onclick = () => { const v = sel.value; cerrar(); res(v); };
+    $('#e-ok', c).onclick = () => { const v = sel.value; if (!v || v === '__nuevo__') { $('#e-err', c).style.display = 'block'; return; } cerrar(); res(v); };
     $('#e-no', c).onclick = () => { cerrar(); res(null); };
   });
 }
@@ -152,6 +152,9 @@ $('#guardar').onclick = async () => {
   mostrarError('');
   const d = datos();
   let j;
+  const hayPres = (num(d.monto) || 0) > 0 || (d.detalle || '').trim() || d.opciones.some(o => (o.detalle || '').trim() || (num(o.monto) || 0) > 0);
+  if (hayPres && !d.tecnico_presupuesto) return mostrarError('Elegí el técnico que presupuesta.');
+  if (ORDEN.id && ['Listo para retirar'].includes(d.estado) && ORDEN.estado !== 'Listo para retirar' && !d.tecnico_reparacion) return mostrarError('Elegí el técnico que reparó el equipo.');
   if (!ORDEN.id) {
     if (!ORDEN.cliente_id) return mostrarError('Elegí el cliente.');
     d.cliente_id = ORDEN.cliente_id; d.equipo_id = $('#prev-equipo')?.value || null;

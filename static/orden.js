@@ -93,6 +93,22 @@ function elegirTecnico(actual) {
   });
 }
 
+// Ventana para elegir una o varias opciones aceptadas por el cliente; muestra el total que se va sumando
+function elegirOpciones(previas) {
+  return new Promise(res => {
+    const ops = [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat((ORDEN.extra || []).map(o => ({monto: o.monto, detalle: o.detalle})));
+    const c = modal(`<h2>¿Qué presupuestos aceptó el cliente?</h2><p class="mut">Podés tildar más de uno: se suman.</p>
+      ${ops.map((o, i) => `<label class="modulo"><input type="checkbox" class="o-ac" value="${i + 1}" ${previas.includes(i + 1) ? 'checked' : ''}><span><b>Opción ${i + 1}: ${fmt(o.monto)}</b><br><span class="mut">${esc((o.detalle || '').trim() || 'Sin detalle')}</span></span></label>`).join('')}
+      <div style="font-size:20px;margin:10px 0">Total aceptado: <b id="o-total">$ 0</b></div><div id="o-err" class="msg error" style="display:none">Tildá al menos una opción. Si no acepta ninguna, usá «El cliente rechazó el presupuesto».</div>
+      <div class="row"><button class="btn pri" id="o-ok">Confirmar</button><button class="btn" id="o-no">Cancelar</button></div>`);
+    const marcadas = () => [...c.querySelectorAll('.o-ac:checked')].map(x => +x.value);
+    const total = () => { $('#o-total', c).textContent = fmt(marcadas().reduce((s, n) => s + (ops[n - 1].monto || 0), 0)); };
+    c.querySelectorAll('.o-ac').forEach(x => x.addEventListener('change', total)); total();
+    $('#o-no', c).onclick = () => { cerrar(); res(null); };
+    $('#o-ok', c).onclick = () => { const m = marcadas(); if (!m.length) { $('#o-err', c).style.display = 'block'; return; } cerrar(); res(m); };
+  });
+}
+
 // ----- bloqueos según respuesta del presupuesto
 if (ORDEN.id) {
   if (ORDEN.resp) { $('#monto').disabled = true; $('#detalle').disabled = true; }
@@ -102,7 +118,7 @@ if (ORDEN.id) {
 
 // opciones = [{monto: número|null, detalle}]; con una sola opción el texto es el de siempre
 function textoPresupuestoOpciones(id, equipo, opciones) {
-  const valor = o => o.monto !== null ? `VALOR DEL PRESUPUESTO $ ${fmt(o.monto)}` : '';
+  const valor = o => o.monto !== null ? `VALOR DEL PRESUPUESTO ${fmt(o.monto)}` : '';
   const bloque = (o, i) => {
     const det = (o.detalle || '').replace(/\s+/g, ' ').trim();
     const lineas = opciones.length === 1 ? [det ? `Presupuesto: ${det}` : '', valor(o)] : [`Opción ${i + 1}: ${det}`.trim(), valor(o)];
@@ -242,8 +258,8 @@ function botones() {
       let aceptadas;
       if ((ORDEN.extra || []).length) {
         if (document.querySelectorAll('.opcion-extra').length !== ORDEN.extra.length) return mostrarError('Guardá la orden antes de marcar la opción que acepta el cliente.');
-        aceptadas = tildadas();
-        if (!aceptadas.length) return mostrarError('Tildá ✔ Acepta al lado del presupuesto que acepta el cliente. Si no acepta ninguno, usá «El cliente rechazó el presupuesto».');
+        aceptadas = await elegirOpciones(tildadas());
+        if (aceptadas === null) return;
       }
       if (await accion('aceptar', {aceptadas})) location.reload();
     });

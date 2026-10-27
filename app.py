@@ -361,13 +361,17 @@ def ordenes():
     if estado in ESTADOS:
         where.append("o.estado=?")
         params.append(estado)
-    if q:
-        like = f"%{core.sin_acentos(q).lstrip('#')}%"
-        where.append("(" + " OR ".join(f"lower_u({c}) LIKE ?" for c in (
-            "c.nombre", "c.apellido", "c.razon_social", "c.telefono", "e.tipo", "e.marca", "e.modelo", "e.serie", "o.falla", "o.estado")) +
-            " OR CAST(o.id AS TEXT) LIKE ?)")
-        params += [like] * 10
-        params[-1] = f"%{q.lstrip('#').lstrip('0') or q}%"
+    for palabra in core.sin_acentos(q).replace(",", " ").split():          # cada palabra tiene que aparecer en algún dato de la orden
+        num = palabra.lstrip("#")
+        campos = ("c.nombre", "c.apellido", "c.razon_social", "c.telefono", "e.tipo", "e.marca", "e.modelo", "e.serie",
+                  "e.descripcion", "o.falla", "o.accesorios", "o.estado", "o.presupuesto_detalle", "o.tecnico_presupuesto",
+                  "o.tecnico_reparacion", "o.imposible_motivo")
+        cond = " OR ".join(f"lower_u({c}) LIKE ?" for c in campos)
+        params += [f"%{palabra}%"] * len(campos)
+        if num.isdigit():                                                  # número de orden: #11, 0011 o 00011
+            cond += " OR o.id = ? OR CAST(o.id AS TEXT) LIKE ?"
+            params += [int(num), f"{num.lstrip('0') or '0'}%"]
+        where.append(f"({cond})")
     sql = ("SELECT o.*, c.nombre, c.apellido, c.razon_social, c.telefono, e.tipo, e.marca, e.modelo, e.en_garantia "
            "FROM ordenes o JOIN clientes c ON c.id=o.cliente_id LEFT JOIN equipos e ON e.id=o.equipo_id")
     if where:

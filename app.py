@@ -466,6 +466,38 @@ def pide_codigo(d, motivo):
     return error("Código de validación incorrecto." if d.get("codigo") else motivo, 403, necesita_codigo=True)
 
 
+def lista_tecnicos():
+    with db() as con:
+        return [r["nombre"] for r in con.execute("SELECT nombre FROM tecnicos ORDER BY nombre COLLATE NOCASE")]
+
+
+app.jinja_env.globals["lista_tecnicos"] = lista_tecnicos
+
+
+def asegurar_tecnico(con, nombre):
+    """Devuelve el nombre normalizado (o None) y lo agrega a la lista de técnicos si no estaba."""
+    nombre = " ".join(U(nombre).split()) if nombre else ""
+    if not nombre:
+        return None
+    if not con.execute("SELECT 1 FROM tecnicos WHERE lower(nombre)=lower(?)", (nombre,)).fetchone():
+        con.execute("INSERT INTO tecnicos (nombre) VALUES (?)", (nombre,))
+    return nombre
+
+
+@app.route("/api/tecnicos", methods=["GET", "POST"])
+@login_requerido
+@modulo_requerido("ordenes")
+def api_tecnicos():
+    if request.method == "POST":
+        d = request.get_json(force=True, silent=True) or {}
+        with db() as con:
+            nombre = asegurar_tecnico(con, d.get("nombre"))
+        if not nombre:
+            return error("Escribí el nombre del técnico.")
+        return jsonify(ok=True, nombre=nombre, tecnicos=lista_tecnicos())
+    return jsonify(ok=True, tecnicos=lista_tecnicos())
+
+
 @app.route("/api/orden", methods=["POST"])
 @login_requerido
 @modulo_requerido("ordenes")
@@ -504,11 +536,14 @@ def api_orden_crear():
         detalle = U(d.get("detalle"))
         tiene_pres = bool((monto and monto > 0) or detalle or extra)
         estado = E_PENDIENTE if tiene_pres else E_NUEVO
+        tec_p = asegurar_tecnico(con, d.get("tecnico_presupuesto"))
         oid = con.execute(
             "INSERT INTO ordenes (cliente_id, equipo_id, fecha_ingreso, estado, falla, accesorios, presupuesto_monto, "
-            "presupuesto_detalle, fecha_presupuesto, sena_monto, actualizado, espera_repuesto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "presupuesto_detalle, fecha_presupuesto, sena_monto, actualizado, espera_repuesto, tecnico_presupuesto) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (cliente["id"], equipo_id, ahora, estado, falla, U(d.get("accesorios")), monto, detalle,
-             ahora if monto is not None else None, sena, ahora, int(bool(d.get("espera_repuesto"))))).lastrowid
+             ahora if monto is not None else None, sena, ahora, int(bool(d.get("espera_repuesto"))), tec_p)).lastrowid
+        if tec_p:
+            core.registrar_evento(con, oid, estado, f"Técnico que presupuesta: {tec_p}")
         core.registrar_evento(con, oid, estado, "Ingreso del equipo al taller")
         if monto is not None or detalle:
             core.registrar_evento(con, oid, estado, core.texto_evento_presupuesto(monto, detalle, True))
@@ -574,10 +609,17 @@ def api_orden_guardar(oid):
         f_pres = o["fecha_presupuesto"] or (ahora if monto is not None else None)
         if estado == E_LISTO:
             f_ret = None
+        tec_p = asegurar_tecnico(con, d.get("tecnico_presupuesto")) if "tecnico_presupuesto" in d else o["tecnico_presupuesto"]
+        tec_r = asegurar_tecnico(con, d.get("tecnico_reparacion")) if "tecnico_reparacion" in d else o["tecnico_reparacion"]
         con.execute("UPDATE ordenes SET estado=?, falla=?, accesorios=?, presupuesto_monto=?, presupuesto_detalle=?, sena_monto=?, "
-                    "espera_repuesto=?, fecha_presupuesto=?, fecha_finalizado=?, fecha_retiro=?, fecha_archivada=?, actualizado=? WHERE id=?",
+                    "espera_repuesto=?, fecha_presupuesto=?, fecha_finalizado=?, fecha_retiro=?, fecha_archivada=?, actualizado=?, "
+                    "tecnico_presupuesto=?, tecnico_reparacion=? WHERE id=?",
                     (estado, falla, U(d.get("accesorios")), monto, detalle, sena, repuesto, f_pres, f_fin, f_ret,
-                     f_arch, ahora, oid))
+                     f_arch, ahora, tec_p, tec_r, oid))
+        if tec_p != o["tecnico_presupuesto"]:
+            core.registrar_evento(con, oid, estado, f"Técnico que presupuesta: {tec_p}" if tec_p else "Técnico que presupuesta quitado")
+        if tec_r != o["tecnico_reparacion"]:
+            core.registrar_evento(con, oid, estado, f"Técnico que reparó: {tec_r}" if tec_r else "Técnico que reparó quitado")
         if o["equipo_id"]:
             con.execute("UPDATE equipos SET tipo=?, marca=?, modelo=?, serie=?, descripcion=?, clave_acceso=?, en_garantia=? WHERE id=?",
                         [U(d.get("tipo")), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
@@ -661,6 +703,10 @@ def api_orden_accion(oid):
         elif accion == "listo":
             if estado in ESTADOS_FINALES or estado == E_RETIRADO:
                 return error("La orden ya no está en curso.")
+            tec = asegurar_tecnico(con, d.get("tecnico"))
+            if tec and tec != o["tecnico_reparacion"]:
+                con.execute("UPDATE ordenes SET tecnico_reparacion=? WHERE id=?", (tec, oid))
+                core.registrar_evento(con, oid, E_LISTO, f"Técnico que reparó: {tec}")
             cambiar(E_LISTO, ", espera_repuesto=0, fecha_finalizado=COALESCE(fecha_finalizado, ?), fecha_retiro=NULL", (ahora,))
             core.registrar_evento(con, oid, E_LISTO, core.texto_evento_estado(estado, E_LISTO, saldo_a_abonar(monto, sena, dev, resp == "rechazado"), bool(dev)))
         elif accion == "retirar":

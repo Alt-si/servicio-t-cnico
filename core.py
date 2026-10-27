@@ -401,7 +401,12 @@ def crear_base(cuenta_id):
             CREATE INDEX IF NOT EXISTS ix_ordenes_cliente ON ordenes(cliente_id);
             CREATE INDEX IF NOT EXISTS ix_ordenes_estado ON ordenes(estado);
             CREATE INDEX IF NOT EXISTS ix_hist_orden ON historial_ordenes(orden_id);
+            CREATE TABLE IF NOT EXISTS tecnicos (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL);
         """)
+        cols = [r[1] for r in con.execute("PRAGMA table_info(ordenes)")]
+        for col in ("tecnico_presupuesto", "tecnico_reparacion"):      # dato interno: nunca se le envía al cliente
+            if col not in cols:
+                con.execute(f"ALTER TABLE ordenes ADD COLUMN {col} TEXT")
 
 
 def leer_config(cuenta_id, clave, defecto=None):
@@ -500,7 +505,7 @@ def importar_base(cuenta_id, ruta):
                 filas = src.execute(f"SELECT {','.join(cols)} FROM {tabla}").fetchall()
                 dst.executemany(f"INSERT INTO {tabla} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", filas)
                 resumen[tabla] = len(filas)
-            for tabla in ("stock_categorias", "stock_marcas", "stock_unidades", "stock_formas_pago", "stock_productos", "stock_movimientos", "ventas", "venta_items"):
+            for tabla in ("tecnicos", "stock_categorias", "stock_marcas", "stock_unidades", "stock_formas_pago", "stock_productos", "stock_movimientos", "ventas", "venta_items"):
                 if tabla in tablas:                      # respaldo con stock: se reemplaza el stock actual
                     dst.execute(f"DELETE FROM {tabla}")
                     cols_d = [r[1] for r in dst.execute(f"PRAGMA table_info({tabla})")]

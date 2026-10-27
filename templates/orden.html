@@ -34,6 +34,12 @@
     <div><label>Seña ($)</label><input id="sena" class="moneda" inputmode="decimal" value="{{ o.sena_monto|monto_input if o and o.sena_monto is not none else '' }}"></div>
     <div><label>Saldo a abonar</label><div class="saldo" id="saldo">—</div></div>
   </div>
+  <div class="grid">
+    <div><label>Técnico que presupuesta <small class="mut">(dato interno)</small></label>
+      <select id="tecnico_presupuesto" class="sel-tecnico">{% set tp = o.tecnico_presupuesto if o else '' %}<option value="">—</option>{% for t in lista_tecnicos() %}<option {{ 'selected' if t==tp }}>{{ t }}</option>{% endfor %}{% if tp and tp not in lista_tecnicos() %}<option selected>{{ tp }}</option>{% endif %}<option value="__nuevo__">＋ Agregar técnico…</option></select></div>
+    <div id="wrap-trep" style="{{ '' if o and o.estado in ('Listo para retirar','Equipo retirado') else 'display:none' }}"><label>Técnico que reparó <small class="mut">(dato interno)</small></label>
+      <select id="tecnico_reparacion" class="sel-tecnico">{% set tr = o.tecnico_reparacion if o else '' %}<option value="">—</option>{% for t in lista_tecnicos() %}<option {{ 'selected' if t==tr }}>{{ t }}</option>{% endfor %}{% if tr and tr not in lista_tecnicos() %}<option selected>{{ tr }}</option>{% endif %}<option value="__nuevo__">＋ Agregar técnico…</option></select></div>
+  </div>
   <label id="lbl-detalle">Detalle del presupuesto</label><textarea id="detalle" class="mayus">{{ o.presupuesto_detalle if o and o.presupuesto_detalle else '' }}</textarea>
   <div id="opciones-extra"></div>
   <p><button type="button" class="btn" id="mas-opcion" title="Agregar otra opción de presupuesto para el cliente">＋ Agregar otra opción de presupuesto</button></p>

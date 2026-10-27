@@ -32,7 +32,63 @@ function datos() {
   d.opciones = [...document.querySelectorAll('.opcion-extra')].map(b => ({monto: $('.ex-monto', b).value, detalle: $('.ex-detalle', b).value}));
   d.en_garantia = chk('en_garantia'); d.espera_repuesto = chk('espera_repuesto');
   if ($('#estado')) d.estado = val('estado');
+  d.tecnico_presupuesto = val('tecnico_presupuesto');
+  if ($('#wrap-trep').style.display !== 'none') d.tecnico_reparacion = val('tecnico_reparacion');
   return d;
+}
+
+// ----- técnicos (dato interno, no se le envía al cliente)
+function opcionTecnico(nombre) {
+  document.querySelectorAll('.sel-tecnico').forEach(s => {
+    if (![...s.options].some(o => o.value === nombre)) s.insertBefore(new Option(nombre, nombre), s.querySelector('[value="__nuevo__"]'));
+  });
+}
+// Ventana para agregar un técnico nuevo; devuelve el nombre o null si se cancela
+function pedirTecnico() {
+  return new Promise(res => {
+    const c = modal(`<h2>Agregar técnico</h2><div id="t-err" class="msg error" style="display:none"></div><input id="t-nombre" class="mayus" autocomplete="off" placeholder="Nombre del técnico">
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="t-ok">Agregar</button><button class="btn" id="t-no">Cancelar</button></div>`);
+    setTimeout(() => $('#t-nombre', c).focus(), 50);
+    const ok = async () => {
+      const j = await api('/api/tecnicos', {nombre: $('#t-nombre', c).value});
+      if (!j.ok) { const e = $('#t-err', c); e.textContent = j.error; e.style.display = 'block'; return; }
+      cerrar(); opcionTecnico(j.nombre); res(j.nombre);
+    };
+    $('#t-ok', c).onclick = ok; $('#t-no', c).onclick = () => { cerrar(); res(null); };
+    $('#t-nombre', c).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ok(); } });
+  });
+}
+document.querySelectorAll('.sel-tecnico').forEach(s => {
+  s.dataset.prev = s.value;
+  s.addEventListener('change', async () => {
+    if (s.value === '__nuevo__') { const n = await pedirTecnico(); s.value = n || s.dataset.prev; }
+    s.dataset.prev = s.value;
+  });
+});
+// Al pasar a «Listo para retirar» desde el selector de estado, se pide también el técnico que reparó
+if ($('#estado')) $('#estado').addEventListener('change', () => {
+  const listo = ['Listo para retirar', 'Equipo retirado'].includes($('#estado').value);
+  $('#wrap-trep').style.display = listo ? '' : 'none';
+  if (listo && !$('#tecnico_reparacion').value && $('#tecnico_presupuesto').value) $('#tecnico_reparacion').value = $('#tecnico_presupuesto').value;
+});
+// Pregunta quién reparó (para el botón «Marcar listo para retirar»); devuelve nombre, '' si ninguno, null si cancela
+function elegirTecnico(actual) {
+  return new Promise(res => {
+    const opts = [...$('#tecnico_reparacion').options].filter(o => o.value && o.value !== '__nuevo__').map(o => o.value);
+    const c = modal(`<h2>¿Qué técnico la reparó?</h2><p class="mut">Dato interno: no se le informa al cliente.</p>
+      <select id="e-tec"><option value="">— Sin indicar —</option>${opts.map(o => `<option ${o === actual ? 'selected' : ''}>${esc(o)}</option>`).join('')}<option value="__nuevo__">＋ Agregar técnico…</option></select>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="e-ok">Continuar</button><button class="btn" id="e-no">Cancelar</button></div>`);
+    const sel = $('#e-tec', c); let prev = sel.value;
+    sel.addEventListener('change', async () => {
+      if (sel.value === '__nuevo__') {
+        const n = await pedirTecnico();
+        elegirTecnico(n || prev).then(res); return;
+      }
+      prev = sel.value;
+    });
+    $('#e-ok', c).onclick = () => { const v = sel.value; cerrar(); res(v); };
+    $('#e-no', c).onclick = () => { cerrar(); res(null); };
+  });
 }
 
 // ----- bloqueos según respuesta del presupuesto
@@ -186,7 +242,9 @@ function botones() {
   }
   if (ORDEN.resp) add('Deshacer respuesta del cliente', '', async () => { if (await accion('deshacer')) location.reload(); });
   if (!final && !ret && est !== 'Listo para retirar') add('Marcar listo para retirar', 'ok', async () => {
-    if (!await accion('listo')) return;
+    const tec = await elegirTecnico($('#tecnico_presupuesto').value);
+    if (tec === null) return;
+    if (!await accion('listo', {tecnico: tec})) return;
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
     location.reload();
   });

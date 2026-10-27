@@ -139,7 +139,7 @@ function textoPresupuestoOpciones(id, equipo, opciones) {
 }
 function textoImposible(id, equipo, motivo) {
   return [`Hola, ${ORDEN.nombre}, en ${ORDEN.empresa} hemos actualizado la orden #${String(id).padStart(4, '0')}`, equipo,
-          `IMPOSIBLE REPARAR: ${(motivo || '').replace(/\s+/g, ' ').trim()}`].join('\n');
+          `IMPOSIBLE REPARAR: ${(motivo || '').replace(/\s+/g, ' ').trim()}`, 'En breve le avisamos para que pueda retirar el equipo.'].join('\n');
 }
 function textoPresupuesto(id, d) {
   const equipo = [d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ');

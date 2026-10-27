@@ -265,7 +265,7 @@ def cliente_ver(cid):
             abort(404)
         equipos = con.execute("SELECT * FROM equipos WHERE cliente_id=? ORDER BY id DESC", (cid,)).fetchall()
         ords = con.execute(
-            "SELECT o.id, o.fecha_ingreso, o.estado, o.falla, o.presupuesto_respuesta, o.fecha_retiro, e.tipo, e.marca, e.modelo "
+            "SELECT o.id, o.fecha_ingreso, o.estado, o.falla, o.presupuesto_respuesta, o.fecha_retiro, o.imposible_reparar, o.imposible_motivo, e.tipo, e.marca, e.modelo "
             "FROM ordenes o LEFT JOIN equipos e ON e.id=o.equipo_id WHERE o.cliente_id=? ORDER BY o.id DESC", (cid,)).fetchall()
     return render_template("cliente.html", c=c, equipos=equipos, ords=ords, IVA=core.IVA_OPCIONES,
                            fmt_fecha=fmt_fecha, texto_equipo=texto_equipo)
@@ -770,6 +770,22 @@ def api_orden_accion(oid):
             core.registrar_evento(con, oid, nuevo_estado, core.TEXTO_RESPUESTA[nueva])
             if nuevo_estado != estado:
                 core.registrar_evento(con, oid, nuevo_estado, core.texto_evento_estado(estado, nuevo_estado))
+        elif accion in ("imposible", "quitar_imposible"):
+            if estado in ESTADOS_FINALES or estado == E_RETIRADO:
+                return error("La orden ya no está en curso.")
+            if accion == "quitar_imposible":
+                con.execute("UPDATE ordenes SET imposible_reparar=0, imposible_motivo=NULL, actualizado=? WHERE id=?", (ahora, oid))
+                core.registrar_evento(con, oid, estado, "Se quitó la marca de imposible reparar")
+            else:
+                motivo = U(d.get("motivo"))
+                if not motivo:
+                    return error("Escribí la descripción de por qué es imposible reparar el equipo.")
+                nuevo_estado = E_PENDIENTE if estado == E_NUEVO else estado
+                con.execute("UPDATE ordenes SET imposible_reparar=1, imposible_motivo=?, estado=?, actualizado=? WHERE id=?", (motivo, nuevo_estado, ahora, oid))
+                core.registrar_evento(con, oid, nuevo_estado, f"Imposible reparar: {motivo}")
+                if nuevo_estado != estado:
+                    core.registrar_evento(con, oid, nuevo_estado, core.texto_evento_estado(estado, nuevo_estado))
+                return jsonify(ok=True, motivo=motivo)
         elif accion == "deshacer":
             if not resp:
                 return error("No hay respuesta para deshacer.")

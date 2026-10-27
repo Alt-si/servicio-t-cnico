@@ -22,7 +22,7 @@
   <thead><tr><th>N°</th><th>Ingreso</th><th>Equipo</th><th>Falla</th><th>Estado</th><th>Retiro</th></tr></thead><tbody>
   {% for o in ords %}<tr class="fila-orden e-{{ o.estado.lower().replace(' ','-') }}" onclick="location='{{ url_for('orden_ver', oid=o.id) }}'">
     <td>#{{ '%05d' % o.id }}</td><td>{{ fmt_fecha(o.fecha_ingreso) }}</td><td>{{ texto_equipo(o.tipo, o.marca, o.modelo) }}</td><td>{{ o.falla or '' }}</td>
-    <td>{{ o.estado }}{% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">No aceptado</span>{% endif %}</td><td>{{ fmt_fecha(o.fecha_retiro) if o.fecha_retiro else '' }}</td></tr>
+    <td>{{ o.estado }}{% if o.imposible_reparar %}<span class="pill" style="background:#7f1d1d;color:#fff" title="{{ o.imposible_motivo }}">Imposible reparar</span>{% endif %}{% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">No aceptado</span>{% endif %}</td><td>{{ fmt_fecha(o.fecha_retiro) if o.fecha_retiro else '' }}</td></tr>
   {% else %}<tr><td colspan="6" class="mut">Sin órdenes.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endif %}
 {% endblock %}

@@ -263,6 +263,21 @@ function botones() {
     const tk = await api(`/api/orden/${ORDEN.id}/ticket`);
     if (tk.ok) await ofrecerWhatsApp('Comprobante de ingreso por WhatsApp', tk.wa, tk.texto);
   });
+  if (!final && !ret) add(ORDEN.imposible ? 'Modificar imposible reparar' : 'Imposible reparar', 'bad', async () => {
+    const c = modal(`<h2>Imposible reparar</h2><p class="mut">La descripción queda en la ficha de la orden y se puede enviar al cliente por WhatsApp.</p>
+      <div id="ir-err" class="msg error" style="display:none"></div><label>Descripción *</label><textarea id="ir-motivo" class="mayus" rows="4"></textarea>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="ir-ok">Guardar</button><button class="btn" id="ir-no">Cancelar</button></div>`);
+    $('#ir-motivo', c).value = ORDEN.imposible_motivo || ''; setTimeout(() => $('#ir-motivo', c).focus(), 50);
+    $('#ir-no', c).onclick = cerrar;
+    $('#ir-ok', c).onclick = async () => {
+      const j = await api(`/api/orden/${ORDEN.id}/accion`, {accion: 'imposible', motivo: $('#ir-motivo', c).value});
+      if (!j.ok) { const e = $('#ir-err', c); e.textContent = j.error; e.style.display = 'block'; return; }
+      cerrar();
+      await ofrecerWhatsApp('El equipo no se puede reparar: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoImposible(ORDEN.id, ORDEN.equipo_txt, j.motivo));
+      location.reload();
+    };
+  });
+  if (ORDEN.imposible && !final && !ret) add('Quitar imposible reparar', '', async () => { if (await accion('quitar_imposible')) location.reload(); });
   if (ORDEN.imposible && ORDEN.imposible_motivo) add('Enviar aviso: imposible reparar', 'wa', async () => {
     await ofrecerWhatsApp('Avisar por WhatsApp que no se puede reparar', ORDEN.wa, textoImposible(ORDEN.id, ORDEN.equipo_txt, ORDEN.imposible_motivo));
   });

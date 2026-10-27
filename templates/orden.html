@@ -7,6 +7,7 @@
       {% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">Presupuesto no aceptado</span>{% elif o.presupuesto_respuesta=='aceptado' %}<span class="pill" style="background:#e5e7eb;color:#111">Presupuesto aceptado</span>{% endif %}
       {% if o.imposible_reparar %}<span class="pill" style="background:#7f1d1d;color:#fff">Imposible reparar</span>{% endif %}{% endif %}
     <a class="btn der" href="{{ url_for('ordenes') }}">← Volver</a></div>
+  {% if o and o.imposible_reparar %}<div class="msg error" style="margin-top:10px"><b>IMPOSIBLE REPARAR:</b> {{ o.imposible_motivo }}</div>{% endif %}
   <div id="err" class="msg error" style="display:none;margin-top:10px"></div>
 
   <h2 style="margin-top:14px">Cliente</h2>

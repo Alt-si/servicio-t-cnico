@@ -32,8 +32,10 @@ function datos() {
   d.opciones = [...document.querySelectorAll('.opcion-extra')].map(b => ({monto: $('.ex-monto', b).value, detalle: $('.ex-detalle', b).value}));
   d.en_garantia = chk('en_garantia'); d.espera_repuesto = chk('espera_repuesto');
   if ($('#estado')) d.estado = val('estado');
-  d.tecnico_presupuesto = val('tecnico_presupuesto');
-  if ($('#wrap-trep').style.display !== 'none') d.tecnico_reparacion = val('tecnico_reparacion');
+  if ($('#tecnico_presupuesto')) {
+    d.tecnico_presupuesto = val('tecnico_presupuesto');
+    if ($('#wrap-trep').style.display !== 'none') d.tecnico_reparacion = val('tecnico_reparacion');
+  }
   return d;
 }
 
@@ -66,7 +68,7 @@ document.querySelectorAll('.sel-tecnico').forEach(s => {
   });
 });
 // Al pasar a «Listo para retirar» desde el selector de estado, se pide también el técnico que reparó
-if ($('#estado')) $('#estado').addEventListener('change', () => {
+if ($('#estado') && $('#tecnico_presupuesto')) $('#estado').addEventListener('change', () => {
   const listo = ['Listo para retirar', 'Equipo retirado'].includes($('#estado').value);
   $('#wrap-trep').style.display = listo ? '' : 'none';
   if (listo && !$('#tecnico_reparacion').value && $('#tecnico_presupuesto').value) $('#tecnico_reparacion').value = $('#tecnico_presupuesto').value;
@@ -153,8 +155,8 @@ $('#guardar').onclick = async () => {
   const d = datos();
   let j;
   const hayPres = (num(d.monto) || 0) > 0 || (d.detalle || '').trim() || d.opciones.some(o => (o.detalle || '').trim() || (num(o.monto) || 0) > 0);
-  if (hayPres && !d.tecnico_presupuesto) return mostrarError('Elegí el técnico que presupuesta.');
-  if (ORDEN.id && ['Listo para retirar'].includes(d.estado) && ORDEN.estado !== 'Listo para retirar' && !d.tecnico_reparacion) return mostrarError('Elegí el técnico que reparó el equipo.');
+  if ($('#tecnico_presupuesto') && hayPres && !d.tecnico_presupuesto) return mostrarError('Elegí el técnico que presupuesta.');
+  if ($('#tecnico_presupuesto') && ORDEN.id && ['Listo para retirar'].includes(d.estado) && ORDEN.estado !== 'Listo para retirar' && !d.tecnico_reparacion) return mostrarError('Elegí el técnico que reparó el equipo.');
   if (!ORDEN.id) {
     if (!ORDEN.cliente_id) return mostrarError('Elegí el cliente.');
     d.cliente_id = ORDEN.cliente_id; d.equipo_id = $('#prev-equipo')?.value || null;
@@ -245,8 +247,8 @@ function botones() {
   }
   if (ORDEN.resp) add('Deshacer respuesta del cliente', '', async () => { if (await accion('deshacer')) location.reload(); });
   if (!final && !ret && est !== 'Listo para retirar') add('Marcar listo para retirar', 'ok', async () => {
-    const tec = await elegirTecnico($('#tecnico_presupuesto').value);
-    if (tec === null) return;
+    let tec = '';
+    if ($('#tecnico_presupuesto')) { tec = await elegirTecnico($('#tecnico_presupuesto').value); if (tec === null) return; }
     if (!await accion('listo', {tecnico: tec})) return;
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
     location.reload();

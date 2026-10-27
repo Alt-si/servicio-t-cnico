@@ -102,10 +102,14 @@ if (ORDEN.id) {
 
 // opciones = [{monto: número|null, detalle}]; con una sola opción el texto es el de siempre
 function textoPresupuestoOpciones(id, equipo, opciones) {
-  const una = o => `${(o.detalle || '').trim()} ${o.monto !== null ? fmt(o.monto) : ''}`.trim();
-  const cuerpo = opciones.length === 1 ? una(opciones[0]) : opciones.map((o, i) => `Opción ${i + 1}: ${una(o)}.`).join(' ');
-  return `Hola, ${ORDEN.nombre} en ${ORDEN.empresa} hemos actualizado la orden ${String(id).padStart(5, '0')} (${equipo}) ` +
-         `Presupuesto: ${cuerpo}${opciones.length === 1 ? '.' : ''} Esperamos su respuesta.`.replace(/\s+/g, ' ');
+  const valor = o => o.monto !== null ? `VALOR DEL PRESUPUESTO $ ${fmt(o.monto)}` : '';
+  const bloque = (o, i) => {
+    const det = (o.detalle || '').replace(/\s+/g, ' ').trim();
+    const lineas = opciones.length === 1 ? [det ? `Presupuesto: ${det}` : '', valor(o)] : [`Opción ${i + 1}: ${det}`.trim(), valor(o)];
+    return lineas.filter(Boolean).join('\n');
+  };
+  return [`Hola, ${ORDEN.nombre}, en ${ORDEN.empresa} hemos actualizado la orden #${String(id).padStart(4, '0')}`, equipo,
+          opciones.map(bloque).join('\n\n'), 'Esperamos su respuesta.'].join('\n');
 }
 function textoPresupuesto(id, d) {
   const equipo = [d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ');

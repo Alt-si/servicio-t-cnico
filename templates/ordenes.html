@@ -27,7 +27,7 @@
       <td>#{{ '%05d' % f.id }}</td><td>{{ fmt_fecha(f.fecha_ingreso) }}</td>
       <td>{{ f|nombre_cliente }}</td><td>{{ texto_equipo(f.tipo, f.marca, f.modelo) }}</td>
       <td>{{ f.falla or '' }}</td>
-      <td style="text-align:center">{% if f.espera_repuesto %}<span class="aviso-rep" title="Esperando repuesto">!</span>{% endif %}</td>
+      <td style="text-align:center">{% if f.espera_repuesto %}<span class="aviso-rep" title="Esperando repuesto"><span>!</span></span>{% endif %}</td>
       <td>{{ f.estado }}{% if f.imposible_reparar %}<span class="pill" style="background:#7f1d1d;color:#fff">Imposible reparar</span>{% endif %}{% if f.presupuesto_respuesta=='rechazado' %}<span class="pill rech">No aceptado</span>{% endif %}</td>
       <td>{{ fmt_fecha(f.fecha_retiro) if f.fecha_retiro else '' }}</td>
     </tr>

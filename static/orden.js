@@ -274,7 +274,7 @@ function botones() {
       if (!j.ok) { const e = $('#ir-err', c); e.textContent = j.error; e.style.display = 'block'; return; }
       cerrar();
       await ofrecerWhatsApp('El equipo no se puede reparar: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoImposible(ORDEN.id, ORDEN.equipo_txt, j.motivo));
-      location.reload();
+      location = '/ordenes';
     };
   });
   if (ORDEN.imposible && !final && !ret) add('Quitar imposible reparar', '', async () => { if (await accion('quitar_imposible')) location.reload(); });
@@ -305,7 +305,7 @@ function botones() {
     if ($('#tecnico_presupuesto')) { tec = await elegirTecnico($('#tecnico_presupuesto').value); if (tec === null) return; }
     if (!await accion('listo', {tecnico: tec})) return;
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
-    location.reload();
+    location = '/ordenes';
   });
   if (est === 'Listo para retirar') add('Retirar', 'ok', async () => {
     const texto = `Hola, ${ORDEN.nombre}. ${ORDEN.empresa} le informa que su equipo (${ORDEN.equipo_txt}) está listo para ser retirado. Gracias.`;
@@ -314,14 +314,14 @@ function botones() {
   });
   if (!final) add(ORDEN.dev ? 'Modificar devolución' : 'Registrar devolución', '', async () => {
     const f = await formulario('Devolución de dinero', [{k: 'dev_monto', t: 'Monto a devolver', num: 1}, {k: 'dev_motivo', t: 'Motivo', area: 1}], 'Registrar');
-    if (f && await accion('devolver', f)) location.reload();
+    if (f && await accion('devolver', f)) location = '/ordenes';
   });
   if (!final) add('Comprar el equipo', '', async () => {
     const f = await formulario('Compra del equipo', [{k: 'compra_monto', t: 'Monto pagado', num: 1}, {k: 'compra_condiciones', t: 'Condiciones de la compra', area: 1}], 'Confirmar compra');
-    if (f && await accion('comprar', f)) location.reload();
+    if (f && await accion('comprar', f)) location = '/ordenes';
   });
   if (est !== 'Scrap' && !ret) add('Pasar a Scrap', 'bad', async () => {
-    if (await confirmar('¿Pasar la orden a Scrap?') && await accion('scrap')) location.reload();
+    if (await confirmar('¿Pasar la orden a Scrap?') && await accion('scrap')) location = '/ordenes';
   });
   cont.innerHTML = '';
   b.forEach(([t, cls, fn]) => { const e = document.createElement('button'); e.className = 'btn ' + cls; e.textContent = t; e.onclick = fn; cont.appendChild(e); });

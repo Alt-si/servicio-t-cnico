@@ -49,7 +49,35 @@
 <form method="post" action="{{ url_for('configuracion_tecnicos') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
   <label class="modulo"><input type="checkbox" name="usar_tecnicos" {{ 'checked' if usa_tecnicos() }}><span><b>Usar técnicos en las órdenes</b><br><span class="mut">Si está activado, en cada orden se elige el técnico que presupuesta y el que repara (dato interno, obligatorio). Si lo desactivás, esos campos no aparecen y no se piden. Los datos ya cargados se conservan.</span></span></label>
   <div class="row"><button class="btn pri">Guardar</button></div>
-</form></div>
+</form>
+<h2 style="margin-top:16px">Lista de técnicos</h2>
+<div class="row" style="margin-bottom:8px"><button class="btn pri" onclick="tecForm()">+ Agregar técnico</button></div>
+<div class="tabla-wrap"><table><tbody class="clientes">
+{% for t in tecnicos_filas() %}<tr><td><b>{{ t.nombre }}</b></td><td class="mut">{{ t.usos }} orden(es)</td><td style="text-align:right;white-space:nowrap">
+  <button class="btn" onclick='tecForm({{ {"id": t.id, "nombre": t.nombre}|tojson }})'>Editar</button>
+  <button class="btn" onclick='tecBorrar({{ t.id }}, {{ t.nombre|tojson }}, {{ t.usos }})'>Borrar</button></td></tr>
+{% else %}<tr><td class="mut">Todavía no cargaste técnicos. También se agregan desde la orden.</td></tr>{% endfor %}</tbody></table></div>
+<p class="mut">Al editar un nombre se actualiza en las órdenes que lo tienen asignado. Al borrar un técnico, las órdenes ya cargadas conservan su nombre.</p>
+<script>
+function tecForm(t) {
+  t = t || {};
+  const c = modal(`<h2>${t.id ? 'Editar técnico' : 'Agregar técnico'}</h2><div id="tc-err" class="msg error" style="display:none"></div>
+    <input id="tc-nombre" class="mayus" autocomplete="off" value="${esc(t.nombre || '')}">
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="tc-ok">Guardar</button><button class="btn" id="tc-no">Cancelar</button></div>`);
+  setTimeout(() => c.querySelector('#tc-nombre').focus(), 50);
+  const ok = async () => {
+    const j = await api(t.id ? '/api/tecnicos/' + t.id : '/api/tecnicos', {nombre: c.querySelector('#tc-nombre').value});
+    if (j.ok) location.reload(); else { const e = c.querySelector('#tc-err'); e.textContent = j.error; e.style.display = 'block'; }
+  };
+  c.querySelector('#tc-ok').onclick = ok; c.querySelector('#tc-no').onclick = cerrar;
+  c.querySelector('#tc-nombre').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ok(); } });
+}
+async function tecBorrar(id, nombre, usos) {
+  if (!await confirmar(`¿Borrar a ${nombre} de la lista?` + (usos ? ` Las ${usos} orden(es) ya cargadas conservan su nombre.` : ''))) return;
+  const j = await api(`/api/tecnicos/${id}/eliminar`, {}); if (j.ok) location.reload(); else aviso(j.error);
+}
+</script>
+</div>
 {% endif %}
 
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>

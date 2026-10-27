@@ -479,6 +479,46 @@ app.jinja_env.globals["lista_tecnicos"] = lista_tecnicos
 app.jinja_env.globals["usa_tecnicos"] = usa_tecnicos
 
 
+def tecnicos_filas():
+    with db() as con:
+        return [dict(r, usos=con.execute("SELECT COUNT(*) FROM ordenes WHERE lower(tecnico_presupuesto)=lower(?) OR lower(tecnico_reparacion)=lower(?)",
+                                         (r["nombre"], r["nombre"])).fetchone()[0])
+                for r in con.execute("SELECT * FROM tecnicos ORDER BY nombre COLLATE NOCASE")]
+
+
+app.jinja_env.globals["tecnicos_filas"] = tecnicos_filas
+
+
+@app.route("/api/tecnicos/<int:tid>", methods=["POST"])
+@login_requerido
+@modulo_requerido("ordenes")
+def api_tecnico_editar(tid):
+    d = request.get_json(force=True, silent=True) or {}
+    nuevo = " ".join(U(d.get("nombre")).split())
+    if not nuevo:
+        return error("Escribí el nombre del técnico.")
+    with db() as con:
+        t = con.execute("SELECT * FROM tecnicos WHERE id=?", (tid,)).fetchone()
+        if not t:
+            return error("No existe el técnico.", 404)
+        if con.execute("SELECT 1 FROM tecnicos WHERE lower(nombre)=lower(?) AND id<>?", (nuevo, tid)).fetchone():
+            return error("Ya existe un técnico con ese nombre.")
+        con.execute("UPDATE tecnicos SET nombre=? WHERE id=?", (nuevo, tid))
+        # las órdenes que lo tenían asignado pasan a mostrar el nombre corregido
+        con.execute("UPDATE ordenes SET tecnico_presupuesto=? WHERE lower(tecnico_presupuesto)=lower(?)", (nuevo, t["nombre"]))
+        con.execute("UPDATE ordenes SET tecnico_reparacion=? WHERE lower(tecnico_reparacion)=lower(?)", (nuevo, t["nombre"]))
+    return jsonify(ok=True)
+
+
+@app.route("/api/tecnicos/<int:tid>/eliminar", methods=["POST"])
+@login_requerido
+@modulo_requerido("ordenes")
+def api_tecnico_eliminar(tid):
+    with db() as con:
+        con.execute("DELETE FROM tecnicos WHERE id=?", (tid,))      # las órdenes ya cargadas conservan el nombre en su historial
+    return jsonify(ok=True)
+
+
 @app.route("/configuracion/tecnicos", methods=["POST"])
 @login_requerido
 @modulo_requerido("ordenes")

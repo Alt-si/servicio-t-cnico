@@ -31,7 +31,12 @@ function datos() {
   ['tipo', 'marca', 'modelo', 'serie', 'clave_acceso', 'descripcion', 'falla', 'accesorios', 'monto', 'sena', 'detalle'].forEach(k => d[k] = val(k));
   d.opciones = [...document.querySelectorAll('.opcion-extra')].map(b => ({monto: $('.ex-monto', b).value, detalle: $('.ex-detalle', b).value}));
   d.en_garantia = chk('en_garantia'); d.espera_repuesto = chk('espera_repuesto');
-  if ($('#estado')) d.estado = val('estado');
+  if ($('#estado')) {
+    d.estado = val('estado');
+    const imp = d.estado === 'Imposible reparar' || (ORDEN.imposible && !['Nuevo', 'Pendiente'].includes(d.estado));
+    d.imposible = imp; d.imposible_motivo = val('imposible_motivo');
+    if (d.estado === 'Imposible reparar') d.estado = ['Nuevo', 'Pendiente'].includes(ORDEN.estado) ? 'Pendiente' : ORDEN.estado;
+  }
   if ($('#tecnico_presupuesto')) {
     d.tecnico_presupuesto = val('tecnico_presupuesto');
     if ($('#wrap-trep').style.display !== 'none') d.tecnico_reparacion = val('tecnico_reparacion');
@@ -66,6 +71,11 @@ document.querySelectorAll('.sel-tecnico').forEach(s => {
     if (s.value === '__nuevo__') { const n = await pedirTecnico(); s.value = n || s.dataset.prev; }
     s.dataset.prev = s.value;
   });
+});
+if ($('#estado')) $('#estado').addEventListener('change', () => {
+  const imp = $('#estado').value === 'Imposible reparar' || (ORDEN.imposible && !['Nuevo', 'Pendiente'].includes($('#estado').value));
+  $('#wrap-imposible').style.display = imp ? '' : 'none';
+  if (imp) $('#imposible_motivo').focus();
 });
 // Al pasar a «Listo para retirar» desde el selector de estado, se pide también el técnico que reparó
 if ($('#estado') && $('#tecnico_presupuesto')) $('#estado').addEventListener('change', () => {

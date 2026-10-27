@@ -404,9 +404,11 @@ def crear_base(cuenta_id):
             CREATE TABLE IF NOT EXISTS tecnicos (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL);
         """)
         cols = [r[1] for r in con.execute("PRAGMA table_info(ordenes)")]
-        for col in ("tecnico_presupuesto", "tecnico_reparacion"):      # dato interno: nunca se le envía al cliente
+        for col in ("tecnico_presupuesto", "tecnico_reparacion", "imposible_motivo"):      # datos internos: nunca se le envían al cliente
             if col not in cols:
                 con.execute(f"ALTER TABLE ordenes ADD COLUMN {col} TEXT")
+        if "imposible_reparar" not in cols:
+            con.execute("ALTER TABLE ordenes ADD COLUMN imposible_reparar INTEGER NOT NULL DEFAULT 0")
 
 
 def leer_config(cuenta_id, clave, defecto=None):

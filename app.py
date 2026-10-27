@@ -643,8 +643,19 @@ def api_orden_guardar(oid):
         if not falla or not (d.get("tipo") or "").strip():
             return error("Completá el tipo de equipo y la falla.")
         estado = d.get("estado") or o["estado"]
+        if estado == "Imposible reparar":          # no es un estado propio: la orden sigue en Pendiente con la marca y su descripción
+            estado = E_PENDIENTE if o["estado"] in (E_NUEVO, E_PENDIENTE) else o["estado"]
+            d["imposible"] = True
         if estado not in ESTADOS:
             return error("Estado inválido.")
+        imp = int(bool(d.get("imposible"))) if "imposible" in d else o["imposible_reparar"]
+        imp_motivo = U(d.get("imposible_motivo")) if "imposible_motivo" in d else (o["imposible_motivo"] or "")
+        if imp and not imp_motivo:
+            return error("Escribí la descripción de por qué es imposible reparar el equipo.")
+        if imp and estado == E_NUEVO:
+            estado = E_PENDIENTE
+        if not imp:
+            imp_motivo = ""
         if estado == E_COMPRADO and estado != o["estado"]:
             return error("Para pasar a «Equipo comprado» usá el botón Comprar.")
         if core.requiere_codigo(o["estado"], estado):
@@ -674,9 +685,13 @@ def api_orden_guardar(oid):
             return error("Elegí el técnico que reparó el equipo.")
         con.execute("UPDATE ordenes SET estado=?, falla=?, accesorios=?, presupuesto_monto=?, presupuesto_detalle=?, sena_monto=?, "
                     "espera_repuesto=?, fecha_presupuesto=?, fecha_finalizado=?, fecha_retiro=?, fecha_archivada=?, actualizado=?, "
-                    "tecnico_presupuesto=?, tecnico_reparacion=? WHERE id=?",
+                    "tecnico_presupuesto=?, tecnico_reparacion=?, imposible_reparar=?, imposible_motivo=? WHERE id=?",
                     (estado, falla, U(d.get("accesorios")), monto, detalle, sena, repuesto, f_pres, f_fin, f_ret,
-                     f_arch, ahora, tec_p, tec_r, oid))
+                     f_arch, ahora, tec_p, tec_r, imp, imp_motivo or None, oid))
+        if imp and (not o["imposible_reparar"] or imp_motivo != (o["imposible_motivo"] or "")):
+            core.registrar_evento(con, oid, estado, f"Imposible reparar: {imp_motivo}")
+        elif not imp and o["imposible_reparar"]:
+            core.registrar_evento(con, oid, estado, "Se quitó la marca de imposible reparar")
         if tec_p != o["tecnico_presupuesto"]:
             core.registrar_evento(con, oid, estado, f"Técnico que presupuesta: {tec_p}" if tec_p else "Técnico que presupuesta quitado")
         if tec_r != o["tecnico_reparacion"]:

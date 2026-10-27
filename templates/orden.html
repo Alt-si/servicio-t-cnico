@@ -4,7 +4,8 @@
 <div class="card">
   <div class="row"><h1 style="margin:0">{% if o %}Orden #{{ '%05d' % o.id }}{% else %}Nueva orden{% endif %}</h1>
     {% if o %}<span class="pill e-{{ o.estado.lower().replace(' ','-') }}" id="pill-estado">{{ o.estado }}</span>
-      {% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">Presupuesto no aceptado</span>{% elif o.presupuesto_respuesta=='aceptado' %}<span class="pill" style="background:#e5e7eb;color:#111">Presupuesto aceptado</span>{% endif %}{% endif %}
+      {% if o.presupuesto_respuesta=='rechazado' %}<span class="pill rech">Presupuesto no aceptado</span>{% elif o.presupuesto_respuesta=='aceptado' %}<span class="pill" style="background:#e5e7eb;color:#111">Presupuesto aceptado</span>{% endif %}
+      {% if o.imposible_reparar %}<span class="pill" style="background:#7f1d1d;color:#fff">Imposible reparar</span>{% endif %}{% endif %}
     <a class="btn der" href="{{ url_for('ordenes') }}">← Volver</a></div>
   <div id="err" class="msg error" style="display:none;margin-top:10px"></div>
 
@@ -47,7 +48,10 @@
   <p><button type="button" class="btn" id="mas-opcion" title="Agregar otra opción de presupuesto para el cliente">＋ Agregar otra opción de presupuesto</button></p>
   <label><input type="checkbox" id="espera_repuesto" {{ 'checked' if o and o.espera_repuesto }}>Esperando repuesto</label>
   {% if o %}<div class="grid" style="margin-top:6px"><div><label>Estado</label>
-    <select id="estado">{% for e in ESTADOS %}<option {{ 'selected' if o.estado==e }}>{{ e }}</option>{% endfor %}</select></div></div>{% endif %}
+    <select id="estado">{% for e in ESTADOS %}<option {{ 'selected' if o.estado==e and not (o.imposible_reparar and e in ('Nuevo','Pendiente')) }}>{{ e }}</option>
+      {% if e=='Pendiente' %}<option value="Imposible reparar" {{ 'selected' if o.imposible_reparar and o.estado in ('Nuevo','Pendiente') }}>Imposible reparar</option>{% endif %}{% endfor %}</select></div></div>
+  <div id="wrap-imposible" style="{{ '' if o.imposible_reparar else 'display:none' }}"><label>Imposible reparar: descripción * <small class="mut">(dato interno)</small></label>
+    <textarea id="imposible_motivo" class="mayus" placeholder="Explicá por qué no se puede reparar">{{ o.imposible_motivo or '' }}</textarea></div>{% endif %}
 
   <div class="row" style="margin-top:16px">
     <button class="btn pri" id="guardar">{{ 'Guardar cambios' if o else 'Crear orden' }}</button>
@@ -68,7 +72,7 @@ const ORDEN = {{ ({
   'equipo_id': (o.equipo_id if o else None), 'wa': wa_numero if o else '', 'nombre': nombre_pila if o else '',
   'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre,
   'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else '',
-  'extra': extras if extras is defined else []
+  'imposible': (o.imposible_reparar if o else 0), 'extra': extras if extras is defined else []
 }) | tojson }};
 </script>
 <script src="{{ url_for('static', filename='orden.js') }}"></script>

@@ -137,6 +137,10 @@ function textoPresupuestoOpciones(id, equipo, opciones) {
   return [`Hola, ${ORDEN.nombre}, en ${ORDEN.empresa} hemos actualizado la orden #${String(id).padStart(4, '0')}`, equipo,
           opciones.map(bloque).join('\n\n'), 'Esperamos su respuesta.'].join('\n');
 }
+function textoImposible(id, equipo, motivo) {
+  return [`Hola, ${ORDEN.nombre}, en ${ORDEN.empresa} hemos actualizado la orden #${String(id).padStart(4, '0')}`, equipo,
+          `IMPOSIBLE REPARAR: ${(motivo || '').replace(/\s+/g, ' ').trim()}`].join('\n');
+}
 function textoPresupuesto(id, d) {
   const equipo = [d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ');
   const ops = [{monto: num(d.monto), detalle: d.detalle}].concat((d.opciones || []).map(o => ({monto: num(o.monto), detalle: o.detalle})));
@@ -203,6 +207,8 @@ $('#guardar').onclick = async () => {
   j = await apiCodigo('/api/orden/' + ORDEN.id, d);
   if (j.cancelado) return;
   if (!j.ok) return mostrarError(j.error);
+  if (j.ofrecer_imposible) await ofrecerWhatsApp('El equipo no se puede reparar: ¿avisar al cliente por WhatsApp?', ORDEN.wa,
+    textoImposible(ORDEN.id, [d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' '), j.imposible_motivo));
   if (j.ofrecer_presupuesto) await ofrecerWhatsApp('La orden pasó a Pendiente: ¿enviar el presupuesto por WhatsApp?', ORDEN.wa, textoPresupuesto(ORDEN.id, d));
   if (j.estado === 'Listo para retirar' && ORDEN.estado !== 'Listo para retirar')
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo([d.tipo, d.marca, d.modelo].filter(x => x && x.trim()).join(' ')));
@@ -256,6 +262,9 @@ function botones() {
   add('Enviar comprobante de ingreso', 'wa', async () => {
     const tk = await api(`/api/orden/${ORDEN.id}/ticket`);
     if (tk.ok) await ofrecerWhatsApp('Comprobante de ingreso por WhatsApp', tk.wa, tk.texto);
+  });
+  if (ORDEN.imposible && ORDEN.imposible_motivo) add('Enviar aviso: imposible reparar', 'wa', async () => {
+    await ofrecerWhatsApp('Avisar por WhatsApp que no se puede reparar', ORDEN.wa, textoImposible(ORDEN.id, ORDEN.equipo_txt, ORDEN.imposible_motivo));
   });
   if (ORDEN.monto !== null && ORDEN.monto > 0 && !final && !ret) add('Enviar presupuesto', 'wa', async () => {
     const texto = textoPresupuestoOpciones(ORDEN.id, ORDEN.equipo_txt,

@@ -72,7 +72,7 @@ const ORDEN = {{ ({
   'equipo_id': (o.equipo_id if o else None), 'wa': wa_numero if o else '', 'nombre': nombre_pila if o else '',
   'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre,
   'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else '',
-  'imposible': (o.imposible_reparar if o else 0), 'extra': extras if extras is defined else []
+  'imposible': (o.imposible_reparar if o else 0), 'imposible_motivo': ((o.imposible_motivo or '') if o else ''), 'extra': extras if extras is defined else []
 }) | tojson }};
 </script>
 <script src="{{ url_for('static', filename='orden.js') }}"></script>

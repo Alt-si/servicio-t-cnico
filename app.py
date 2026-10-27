@@ -715,7 +715,9 @@ def api_orden_guardar(oid):
         if falla != (o["falla"] or "") or U(d.get("accesorios")) != (o["accesorios"] or ""):
             core.registrar_evento(con, oid, estado, "Datos de ingreso modificados")
     return jsonify(ok=True, id=oid, estado=estado,
-                   ofrecer_presupuesto=bool(o["estado"] == E_NUEVO and estado == E_PENDIENTE))
+                   ofrecer_presupuesto=bool(o["estado"] == E_NUEVO and estado == E_PENDIENTE and not imp),
+                   ofrecer_imposible=bool(imp and (not o["imposible_reparar"] or imp_motivo != (o["imposible_motivo"] or ""))),
+                   imposible_motivo=imp_motivo)
 
 
 @app.route("/api/orden/<int:oid>/accion", methods=["POST"])

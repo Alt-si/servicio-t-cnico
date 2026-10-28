@@ -18,7 +18,7 @@ E_NUEVO, E_PENDIENTE, E_LISTO, E_RETIRADO, E_SCRAP, E_COMPRADO = ESTADOS
 # (fondo, texto) de cada estado, tema claro / oscuro
 COLORES = {
     "Nuevo ingreso": (("#3b82f6", "#ffffff"), ("#1d4ed8", "#ffffff")),
-    "Pendiente": (("#f97316", "#ffffff"), ("#c2410c", "#ffffff")),
+    "Pendiente": (("#fdba74", "#431407"), ("#8a4a1c", "#ffedd5")),
     "Listo para retirar": (("#bbf7d0", "#166534"), ("#14532d", "#86efac")),
     "Equipo retirado": (("#9ca3af", "#111827"), ("#4b5563", "#f3f4f6")),
     "Scrap": (("#dc2626", "#ffffff"), ("#991b1b", "#ffffff")),

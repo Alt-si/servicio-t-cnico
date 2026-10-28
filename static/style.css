@@ -52,8 +52,8 @@ tbody.clientes tr{border-bottom:1px solid var(--bd)}
 /* estados */
 .e-nuevo-ingreso{background:#3b82f6;color:#ffffff}
 :root[data-theme=dark] .e-nuevo-ingreso{background:#1d4ed8;color:#ffffff}
-.e-pendiente{background:#f97316;color:#ffffff}
-:root[data-theme=dark] .e-pendiente{background:#c2410c;color:#ffffff}
+.e-pendiente{background:#fdba74;color:#431407}
+:root[data-theme=dark] .e-pendiente{background:#8a4a1c;color:#ffedd5}
 .e-listo-para-retirar{background:#bbf7d0;color:#166534}
 :root[data-theme=dark] .e-listo-para-retirar{background:#14532d;color:#86efac}
 .e-equipo-retirado{background:#9ca3af;color:#111827}

@@ -7,5 +7,5 @@
 <div style="margin:0 0 18px;line-height:1.7">
 {% for i in items %}<div style="display:flex;justify-content:space-between;gap:12px"><span>{% if i.cantidad != 1 %}{{ ('%g' % i.cantidad)|replace('.', ',') }} x {% endif %}{{ i.descripcion }}</span>{% if pd.mostrar_precios %}<span style="white-space:nowrap">$ {{ i.total|monto_input }}</span>{% endif %}</div>{% endfor %}</div>
 <p style="font-size:17px;font-weight:700;font-style:italic;margin:0 0 6px">TOTAL: $ {{ p.total|monto_input }}.-{% if pd.forma_pago %} ({{ pd.forma_pago }}){% endif %}</p>
-{% if p.validez %}<p style="margin:0 0 6px">Válido hasta: {{ p.validez }}</p>{% endif %}{% if p.nota %}<p style="margin:0 0 6px">{{ p.nota }}</p>{% endif %}
+{% if pd.validez %}<p style="margin:0 0 6px">Válido hasta: {{ pd.validez }}</p>{% endif %}{% if p.nota %}<p style="margin:0 0 6px">{{ p.nota }}</p>{% endif %}
 {% if pd.aviso %}<p style="margin-top:60px;text-transform:uppercase">{{ pd.aviso }}</p>{% endif %}

@@ -417,6 +417,7 @@ def crear_tablas(con):
         agregar("facturas", col, tipo)
     agregar("afip_cuentas", "nombre_fantasia", "TEXT")
     agregar("presupuestos_doc", "forma_pago", "TEXT")
+    agregar("presupuestos_doc", "aviso", "TEXT")
     agregar("presupuestos_doc", "mostrar_precios", "INTEGER")
     agregar("presupuestos_doc", "token", "TEXT")
 
@@ -910,7 +911,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 cliente = con.execute("SELECT * FROM clientes WHERE id=?", (request.args.get("cliente", type=int),)).fetchone()
         if not cliente:
             return redirect(url_for("clientes"))
-        return render_template("facturacion/presupuesto.html", cliente=cliente)
+        return render_template("facturacion/presupuesto.html", cliente=cliente, aviso_defecto=core.leer_config(g.cuenta["id"], "pres_aviso") or "")
 
     MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
@@ -919,7 +920,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         d = core.parse_fecha(p["fecha"])
         fecha = f"{d.day} de {MESES[d.month - 1]} de {d.year}" if d else core.fmt_fecha(p["fecha"])
         localidad = (core.leer_config(cid, "pres_localidad") or "").strip()
-        return {"fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
+        val = (p["validez"] or "").strip()
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", val):
+            val = f"{val[8:10]}/{val[5:7]}/{val[:4]}"
+        aviso = p["aviso"] if p["aviso"] is not None else (core.leer_config(cid, "pres_aviso") or "")
+        return {"validez": val, "fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": aviso.strip(),
                 "marca": core.marca(cid), "logo": logo_uri(cid), "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"])}
 
     @app.route("/facturacion/presupuesto/<int:pid>/editar")
@@ -933,7 +938,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             cliente = con.execute("SELECT * FROM clientes WHERE id=?", (p["cliente_id"],)).fetchone()
         items = json.loads(p["items"])
         edit = {"id": p["id"], "items": items, "modo": "total" if items and all(not i.get("total") for i in items) else "items", "total": p["total"],
-                "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"]), "validez": p["validez"] or "", "nota": p["nota"] or ""}
+                "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"]), "validez": p["validez"] or "", "nota": p["nota"] or "",
+                "aviso": p["aviso"] if p["aviso"] is not None else (core.leer_config(g.cuenta["id"], "pres_aviso") or "")}
         return render_template("facturacion/presupuesto.html", cliente=cliente or {"id": p["cliente_id"], "nombre": p["cliente_nombre"], "apellido": ""}, edit=edit, p=p)
 
     @app.route("/api/facturacion/presupuesto/<int:pid>/eliminar", methods=["POST"])
@@ -983,21 +989,22 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if not items:
             return error("Agregá al menos un renglón.")
         forma = " ".join(U(d.get("forma_pago")).split()) or None
+        aviso = (d.get("aviso") or "").strip()[:600]
         with db() as con:
             if d.get("id"):                       # edición de un presupuesto existente: conserva número, fecha y enlace
                 pid = d.get("id")
                 if not con.execute("SELECT 1 FROM presupuestos_doc WHERE id=?", (pid,)).fetchone():
                     return error("No existe el presupuesto.", 404)
-                con.execute("UPDATE presupuestos_doc SET items=?, total=?, nota=?, validez=?, forma_pago=?, mostrar_precios=? WHERE id=?",
+                con.execute("UPDATE presupuestos_doc SET items=?, total=?, nota=?, validez=?, forma_pago=?, mostrar_precios=?, aviso=? WHERE id=?",
                             (json.dumps(items), r2(total), U(d.get("nota")) or None, (d.get("validez") or "").strip() or None, forma,
-                             1 if d.get("mostrar_precios") else 0, pid))
+                             1 if d.get("mostrar_precios") else 0, aviso, pid))
                 return jsonify(ok=True, id=pid)
             cli = con.execute("SELECT * FROM clientes WHERE id=?", (d.get("cliente_id"),)).fetchone()
             if not cli:
                 return error("Falta el cliente.")
-            pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez, token, forma_pago, mostrar_precios) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez, token, forma_pago, mostrar_precios, aviso) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                               (core.ahora(), cli["id"], core.nombre_cliente(cli), json.dumps(items), r2(total), U(d.get("nota")) or None,
-                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16), forma, 1 if d.get("mostrar_precios") else 0)).lastrowid
+                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16), forma, 1 if d.get("mostrar_precios") else 0, aviso)).lastrowid
         return jsonify(ok=True, id=pid)
 
     @app.route("/facturacion/presupuesto/<int:pid>")
@@ -1017,8 +1024,9 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             cant = f"{i['cantidad']:g}"
             lineas.append(f"{cant} x {i['descripcion']}: {core.fmt_monto(i['total'])}" if i["total"] else i["descripcion"])
         lineas.append(f"TOTAL: {core.fmt_monto(p['total'])}" + (f" ({p['forma_pago']})" if p["forma_pago"] else ""))
-        if p["validez"]:
-            lineas.append(f"Válido hasta: {p['validez']}")
+        pdd = datos_presupuesto(g.cuenta["id"], p)
+        if pdd["validez"]:
+            lineas.append(f"Válido hasta: {pdd['validez']}")
         lineas.append("Documento no válido como factura.")
         with db() as con:
             tok = asegurar_token(con, "presupuestos_doc", p)

@@ -181,9 +181,9 @@ def pdf_presupuesto(p, items, pd, logo_b64=""):
     story.append(Spacer(1, 14))
     total = f"TOTAL: {_monto_entero(p['total'])}.-" + (f" ({pd['forma_pago']})" if pd["forma_pago"] else "")
     story.append(_p(total, ParagraphStyle("tt", parent=NORMAL, fontName="Helvetica-BoldOblique", fontSize=12.5, leading=16)))
-    if p.get("validez"):
+    if pd.get("validez"):
         story.append(Spacer(1, 4))
-        story.append(_p(f"Válido hasta: {p['validez']}"))
+        story.append(_p(f"Válido hasta: {pd['validez']}"))
     if p.get("nota"):
         story.append(Spacer(1, 4))
         story.append(_p(p["nota"]))

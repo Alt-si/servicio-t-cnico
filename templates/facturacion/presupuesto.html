@@ -13,7 +13,9 @@
   <div id="tot-fijo" style="display:none;text-align:right"><label>Valor total</label><input id="p-total" class="moneda" inputmode="decimal" placeholder="Ej.: 1.080.000" style="max-width:220px;margin-left:auto;text-align:right"></div>
   <div class="grid"><div><label>Forma de pago</label><input id="p-forma" list="p-formas" value="Contado" placeholder="Contado, transferencia…"><datalist id="p-formas"><option>Contado</option><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option><option>Billetera virtual</option></datalist></div>
     <label class="modulo" style="align-self:end" id="p-precios-l"><input type="checkbox" id="p-precios"><span>Mostrar el precio de cada renglón (si no, solo el total)</span></label></div>
-  <div class="grid"><div><label>Válido hasta (opcional)</label><input id="p-validez" placeholder="Ej.: 15 días / 30/11/2026"></div><div><label>Nota (opcional)</label><input id="p-nota" class="mayus"></div></div>
+  <div class="grid"><div><label>Válido hasta (opcional)</label><input id="p-validez" type="date"></div><div><label>Nota (opcional)</label><input id="p-nota" class="mayus"></div></div>
+  <label>Nota permanente al pie del presupuesto (opcional)</label><textarea id="p-aviso" rows="2" placeholder="Ej.: El precio está expresado en pesos, puede sufrir modificaciones si el valor del dólar cambia.">{{ edit.aviso if edit else aviso_defecto }}</textarea>
+  <p class="mut" style="margin:2px 0 0;font-size:13px">Se carga sola desde <a href="{{ url_for('configuracion') }}#presupuesto">Configuración → Formato del presupuesto</a>; acá podés cambiarla solo para este presupuesto.</p>
   <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">{{ "Guardar cambios" if edit else "Generar presupuesto" }}</button></div>
 </div>
 {% endblock %}

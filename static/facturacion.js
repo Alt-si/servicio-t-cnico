@@ -38,6 +38,7 @@ if ($f('#f-items')) {
     if (j.ok) { location = '/facturacion/comprobante/' + j.id + '?nuevo=1'; return; }
     b.disabled = false; b.textContent = 'Reintentar'; mostrarErr(j.error);
   });
+  $f('#p-validez')?.addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} });
   $f('#p-modo')?.addEventListener('change', () => {
     const t = $f('#p-modo').value === 'total';
     $f('#p-tabla').classList.toggle('modo-total', t);
@@ -46,7 +47,7 @@ if ($f('#f-items')) {
   $f('#p-guardar')?.addEventListener('click', async () => {
     mostrarErr('');
     const unico = $f('#p-modo').value === 'total';
-    const j = await api('/api/facturacion/presupuesto', {id: FACT.edit?.id, cliente_id: FACT.cliente_id, items: leerRenglones(), total_unico: unico ? $f('#p-total').value : '', validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
+    const j = await api('/api/facturacion/presupuesto', {id: FACT.edit?.id, cliente_id: FACT.cliente_id, items: leerRenglones(), total_unico: unico ? $f('#p-total').value : '', aviso: $f('#p-aviso').value, validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
     if (j.ok) location = '/facturacion/presupuesto/' + j.id + (FACT.edit ? '' : '?nuevo=1'); else mostrarErr(j.error);
   });
 }
@@ -54,6 +55,6 @@ if ($f('#f-items')) {
 // Edición de un presupuesto: carga los datos guardados
 if (FACT.edit) {
   const e = FACT.edit;
-  $f('#p-forma').value = e.forma_pago; $f('#p-precios').checked = e.mostrar_precios; $f('#p-validez').value = e.validez; $f('#p-nota').value = e.nota;
+  $f('#p-forma').value = e.forma_pago; $f('#p-precios').checked = e.mostrar_precios; $f('#p-validez').value = /^\d{4}-\d{2}-\d{2}$/.test(e.validez) ? e.validez : ''; $f('#p-nota').value = e.nota;
   if (e.modo === 'total') { $f('#p-modo').value = 'total'; $f('#p-total').value = String(e.total).replace('.', ','); $f('#p-modo').dispatchEvent(new Event('change')); }
 }

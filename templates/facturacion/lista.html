@@ -3,14 +3,15 @@
 <div class="card">
   <div class="row"><h1 style="margin:0">Facturación</h1><div class="der row"><a class="btn" href="{{ url_for('configuracion') }}#afip">Cuentas de AFIP</a><a class="btn pri" href="{{ url_for('clientes') }}">+ Facturar a un cliente</a></div></div>
   {% if not hay_cuentas %}<div class="msg error" style="margin-top:10px">Todavía no configuraste ninguna cuenta de AFIP. Hacelo en <a href="{{ url_for('configuracion') }}#afip">Configuración → Facturación</a>. Los presupuestos no válidos como factura se pueden hacer igual.</div>{% endif %}
-  <h2>Facturas emitidas</h2>
-  <div class="tabla-wrap"><table><thead><tr><th>Fecha</th><th>Comprobante</th><th>Cliente</th><th style="text-align:right">Total</th><th></th></tr></thead><tbody class="clientes">
+  <form class="row" style="margin-top:12px" onsubmit="return false"><input name="q" data-vivo value="{{ q }}" autocomplete="off" placeholder="Buscar por cliente, N° de comprobante, CUIT/DNI, fecha, importe…" style="flex:1;min-width:200px"></form>
+  <div class="tabla-wrap"><h2>Facturas emitidas</h2>
+  <div><table><thead><tr><th>Fecha</th><th>Comprobante</th><th>Cliente</th><th style="text-align:right">Total</th><th></th></tr></thead><tbody class="clientes">
   {% for f in facs %}<tr><td>{{ fmt_fecha(f.fecha) }}</td><td>{{ TIPOS[f.tipo_cbte] }} {{ '%04d' % f.pto_vta }}-{{ '%08d' % f.numero }}{% if f.anulada_por %} <span class="pill" style="background:#7f1d1d;color:#fff">ANULADA</span>{% endif %}{% if f.ambiente=='homologacion' %} <span class="pill" style="background:#6b7280;color:#fff">PRUEBA</span>{% endif %}</td>
-    <td>{{ f.receptor_nombre }}</td><td style="text-align:right"><b>{{ '− ' if f.tipo_cbte in (3, 8, 13) }}$ {{ f.total|monto_input }}</b></td><td style="text-align:right"><a class="btn" href="{{ url_for('factura_ver', fid=f.id) }}">Ver</a></td></tr>
-  {% else %}<tr><td colspan="5" class="mut">Todavía no emitiste facturas.</td></tr>{% endfor %}</tbody></table></div>
+    <td>{{ f.receptor_nombre }}</td><td style="text-align:right"><b>{{ '− ' if f.tipo_cbte in (3, 8, 13) }}$ {{ f.total|monto_input }}</b></td><td style="text-align:right"><a class="btn" href="{{ url_for('factura_ver', fid=f.id) }}">Ver</a> <a class="btn" href="{{ url_for('factura_ver', fid=f.id) }}?nuevo=enviar">Enviar</a> <a class="btn" target="_blank" href="{{ url_for('facturacion_pdf', tipo='factura', did=f.id) }}">PDF</a></td></tr>
+  {% else %}<tr><td colspan="5" class="mut">{{ 'No hay facturas que coincidan.' if q else 'Todavía no emitiste facturas.' }}</td></tr>{% endfor %}</tbody></table></div>
   <h2>Presupuestos (no válidos como factura)</h2>
   <div class="tabla-wrap"><table><thead><tr><th>Fecha</th><th>N°</th><th>Cliente</th><th style="text-align:right">Total</th><th></th></tr></thead><tbody class="clientes">
-  {% for p in pres %}<tr><td>{{ fmt_fecha(p.fecha) }}</td><td>{{ '%04d' % p.id }}</td><td>{{ p.cliente_nombre }}</td><td style="text-align:right"><b>$ {{ p.total|monto_input }}</b></td><td style="text-align:right"><a class="btn" href="{{ url_for('presupuesto_ver', pid=p.id) }}">Ver</a></td></tr>
-  {% else %}<tr><td colspan="5" class="mut">Todavía no hiciste presupuestos.</td></tr>{% endfor %}</tbody></table></div>
+  {% for p in pres %}<tr><td>{{ fmt_fecha(p.fecha) }}</td><td>{{ '%04d' % p.id }}</td><td>{{ p.cliente_nombre }}</td><td style="text-align:right"><b>$ {{ p.total|monto_input }}</b></td><td style="text-align:right"><a class="btn" href="{{ url_for('presupuesto_ver', pid=p.id) }}">Ver</a> <a class="btn" href="{{ url_for('presupuesto_ver', pid=p.id) }}?nuevo=enviar">Enviar</a> <a class="btn" target="_blank" href="{{ url_for('facturacion_pdf', tipo='presupuesto', did=p.id) }}">PDF</a></td></tr>
+  {% else %}<tr><td colspan="5" class="mut">{{ 'No hay presupuestos que coincidan.' if q else 'Todavía no hiciste presupuestos.' }}</td></tr>{% endfor %}</tbody></table></div></div>
 </div>
 {% endblock %}

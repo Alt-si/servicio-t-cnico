@@ -19,8 +19,9 @@ document.getElementById('env-mail').onclick = () => {
     if (j.ok) { cerrar(); aviso('Mail enviado.'); } else { b.disabled = false; b.textContent = 'Enviar'; const e = c.querySelector('#m-err'); e.textContent = j.error; e.style.display = 'block'; }
   };
 };
-if (new URLSearchParams(location.search).get('nuevo')) window.addEventListener('load', () => {
-  const c = modal(`<h2>${ENVIO.tipo === 'factura' ? 'Comprobante emitido' : 'Presupuesto guardado'}</h2><p>¿Querés enviárselo al cliente ahora?</p>
+const NUEVO = new URLSearchParams(location.search).get('nuevo');
+if (NUEVO) window.addEventListener('load', () => {
+  const c = modal(`<h2>${NUEVO === 'enviar' ? 'Enviar al cliente' : ENVIO.tipo === 'factura' ? 'Comprobante emitido' : 'Presupuesto guardado'}</h2><p>${NUEVO === 'enviar' ? '¿Cómo querés enviarlo?' : '¿Querés enviárselo al cliente ahora?'}</p>
     <div class="row" style="margin-top:12px"><a class="btn wapp" id="n-wa" target="_blank" rel="noopener" href="${esc(document.querySelector('a.btn.wapp').href)}">WhatsApp</a>
     <button class="btn" id="n-mail" type="button">Mail (PDF)</button><button class="btn" id="n-no" type="button">Cancelar</button></div>`);
   c.querySelector('#n-no').onclick = cerrar;

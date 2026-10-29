@@ -537,11 +537,36 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     @login_requerido
     @modulo_requerido("facturacion")
     def facturacion():
+        q = core.sin_acentos((request.args.get("q") or "").strip()).lower()
         with db() as con:
-            facs = con.execute("SELECT * FROM facturas ORDER BY id DESC LIMIT 300").fetchall()
-            pres = con.execute("SELECT * FROM presupuestos_doc ORDER BY id DESC LIMIT 300").fetchall()
+            facs = con.execute("SELECT * FROM facturas ORDER BY id DESC" + ("" if q else " LIMIT 300")).fetchall()
+            pres = con.execute("SELECT * FROM presupuestos_doc ORDER BY id DESC" + ("" if q else " LIMIT 300")).fetchall()
             hay = con.execute("SELECT COUNT(*) FROM afip_cuentas").fetchone()[0]
-        return render_template("facturacion/lista.html", facs=facs, pres=pres, hay_cuentas=hay, TIPOS=TIPOS_CBTE, fmt_fecha=core.fmt_fecha)
+        if q:
+            def coincide(texto):
+                t = core.sin_acentos(texto).lower()
+                return all(p in t for p in q.split())
+            facs = [f for f in facs if coincide(" ".join(str(x) for x in (
+                f["receptor_nombre"], f["receptor_doc"], TIPOS_CBTE.get(f["tipo_cbte"]), f"{f['pto_vta']:04d}-{f['numero']:08d}", f"{f['pto_vta']:04d}{f['numero']:08d}",
+                f["numero"], core.fmt_fecha(f["fecha"]), f["fecha"][:10], f["cae"], f"{f['total']:.2f}", f["forma_pago"], "anulada" if f["anulada_por"] else "",
+                "prueba" if f["ambiente"] == "homologacion" else "")))]
+            pres = [p for p in pres if coincide(" ".join(str(x) for x in (
+                p["cliente_nombre"], f"{p['id']:04d}", "presupuesto", core.fmt_fecha(p["fecha"]), p["fecha"][:10], f"{p['total']:.2f}")))]
+        return render_template("facturacion/lista.html", facs=facs, pres=pres, hay_cuentas=hay, TIPOS=TIPOS_CBTE, fmt_fecha=core.fmt_fecha, q=request.args.get("q") or "")
+
+    @app.route("/facturacion/pdf/<tipo>/<int:did>")
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def facturacion_pdf(tipo, did):
+        tabla = "facturas" if tipo == "factura" else "presupuestos_doc"
+        with db() as con:
+            fila = con.execute(f"SELECT * FROM {tabla} WHERE id=?", (did,)).fetchone()
+            if not fila:
+                abort(404)
+            nombre, datos = pdf_de(con, tabla, fila)
+        r = Response(datos, mimetype="application/pdf")
+        r.headers["Content-Disposition"] = f'inline; filename="{nombre}"'
+        return r
 
     # ---------------- nueva factura
     @app.route("/facturacion/nueva")

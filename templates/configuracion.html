@@ -44,6 +44,15 @@
 </form></div>
 {% endif %}
 
+<div class="card"><h1>Seguridad: cierre de sesión</h1>
+<form method="post" action="{{ url_for('configuracion_sesion') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <p class="mut">El sistema pide usuario y contraseña al abrirlo y vuelve a pedirlos si pasa este tiempo sin usarlo.</p>
+  {% set sm = session.get('inact', 60) %}
+  <label>Cerrar la sesión después de</label>
+  <select name="minutos">{% for v, n in ((15, '15 minutos'), (30, '30 minutos'), (60, '1 hora'), (120, '2 horas'), (240, '4 horas'), (480, '8 horas'), (0, 'Nunca (recordar este navegador)')) %}<option value="{{ v }}" {{ 'selected' if sm == v }}>{{ n }}</option>{% endfor %}</select>
+  <div class="row" style="margin-top:10px"><button class="btn pri">Guardar</button></div>
+</form></div>
+
 {% if 'ordenes' in modulos %}
 <div class="card"><h1>Técnicos</h1>
 <form method="post" action="{{ url_for('configuracion_tecnicos') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">

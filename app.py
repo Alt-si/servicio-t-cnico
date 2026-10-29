@@ -25,7 +25,7 @@ app.secret_key = os.environ.get("SECRET_KEY") or _clave_secreta.read_text().stri
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("INSECURE_COOKIES") != "1",
-    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14, MAX_CONTENT_LENGTH=64 * 1024 * 1024)
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30, MAX_CONTENT_LENGTH=64 * 1024 * 1024)
 core.crear_cuentas()
 
 _bases_listas = set()
@@ -65,6 +65,18 @@ def antes():
             else:
                 abort(400, "Sesión vencida: actualizá la página.")
     g.cuenta = None
+    if session.get("cuenta_id"):
+        ahora = time.time()
+        inact = session.get("inact", 60)                  # minutos sin usar el sistema antes de pedir la clave (0 = nunca)
+        if session.get("v") != 2 or (inact and ahora - session.get("ultimo", ahora) > inact * 60):
+            era_v2 = session.get("v") == 2
+            session.clear()
+            if era_v2:
+                session["expiro"] = 1
+            if request.path.startswith("/api/"):
+                return jsonify(ok=False, error="Sesión vencida"), 401
+        elif ahora - session.get("ultimo", 0) > 30 and request.endpoint != "static":
+            session["ultimo"] = ahora
     if session.get("cuenta_id"):
         with core.conectar_cuentas() as con:
             g.cuenta = con.execute("SELECT * FROM cuentas WHERE id=?", (session["cuenta_id"],)).fetchone()
@@ -188,13 +200,18 @@ def login():
             if fila and fila["activa"]:
                 session.clear()
                 session["cuenta_id"] = fila["id"]
-                session.permanent = True
+                session["v"] = 2
+                session["ultimo"] = time.time()
+                session["inact"] = minutos_inactividad(fila["id"])
+                session.permanent = session["inact"] == 0      # si nunca se cierra por inactividad, también recuerda el navegador
                 g.modulos = core.modulos_de(fila)
                 csrf_token()
                 dest = request.args.get("siguiente", "")
                 return redirect(dest if dest.startswith("/") and not dest.startswith("//") else inicio_url())
             _intentos.setdefault(clave_ip, []).append(time.time())
             msg = "Mail o clave incorrectos." if not fila else "La cuenta está desactivada. Escribinos."
+    if not msg and session.pop("expiro", None):
+        msg = "Por seguridad, la sesión se cerró por inactividad. Ingresá de nuevo."
     csrf_token()
     return render_template("login.html", msg=msg)
 
@@ -531,6 +548,31 @@ def api_tecnico_eliminar(tid):
 def configuracion_tecnicos():
     core.guardar_config(g.cuenta["id"], "usar_tecnicos", "1" if request.form.get("usar_tecnicos") else "0")
     flash("Configuración de técnicos guardada.", "ok")
+    return redirect(url_for("configuracion"))
+
+
+def minutos_inactividad(cid):
+    """Minutos sin actividad antes de cerrar la sesión (0 = nunca). Por defecto, 1 hora."""
+    try:
+        m = int(core.leer_config(cid, "sesion_minutos", "60"))
+    except ValueError:
+        m = 60
+    return max(0, m)
+
+
+@app.route("/configuracion/sesion", methods=["POST"])
+@login_requerido
+def configuracion_sesion():
+    try:
+        m = int(request.form.get("minutos", "60"))
+    except ValueError:
+        m = 60
+    m = m if m in (0, 15, 30, 60, 120, 240, 480) else 60
+    core.guardar_config(g.cuenta["id"], "sesion_minutos", m)
+    session["inact"] = m
+    session["ultimo"] = time.time()
+    session.permanent = m == 0
+    flash("Tiempo de sesión guardado.", "ok")
     return redirect(url_for("configuracion"))
 
 

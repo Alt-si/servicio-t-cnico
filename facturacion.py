@@ -3,11 +3,14 @@ import base64
 import hashlib
 import json
 import re
+import secrets
+import smtplib
 import ssl
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
+from email.message import EmailMessage
 from xml.sax.saxutils import escape
 
 from flask import abort, current_app, g, jsonify, redirect, render_template, request, url_for
@@ -19,8 +22,9 @@ URLS = {
     "homologacion": {"wsaa": "https://wsaahomo.afip.gov.ar/ws/services/LoginCms", "wsfe": "https://wswhomo.afip.gov.ar/wsfev1/service.asmx"},
     "produccion": {"wsaa": "https://wsaa.afip.gov.ar/ws/services/LoginCms", "wsfe": "https://servicios1.afip.gov.ar/wsfev1/service.asmx"},
 }
-TIPOS_CBTE = {1: "Factura A", 6: "Factura B", 11: "Factura C"}
-LETRA = {1: "A", 6: "B", 11: "C"}
+TIPOS_CBTE = {1: "Factura A", 6: "Factura B", 11: "Factura C", 3: "Nota de crédito A", 8: "Nota de crédito B", 13: "Nota de crédito C"}
+LETRA = {1: "A", 6: "B", 11: "C", 3: "A", 8: "B", 13: "C"}
+NC_DE = {1: 3, 6: 8, 11: 13}                  # factura -> nota de crédito que la anula
 ALICUOTAS = {0: 3, 2.5: 9, 5: 8, 10.5: 4, 21: 5, 27: 6}          # % -> id AFIP
 CONDICION_RECEPTOR = {"Responsable Inscripto": 1, "Exento": 4, "Consumidor Final": 5, "Monotributo": 6}
 CONDICIONES_EMISOR = ["Responsable Inscripto", "Monotributo", "Exento"]
@@ -244,8 +248,13 @@ def solicitar_cae(con, cuenta, datos):
     if datos["concepto"] in (2, 3):
         d, h, v = datos["serv"]
         serv = f"<ar:FchServDesde>{f(d)}</ar:FchServDesde><ar:FchServHasta>{f(h)}</ar:FchServHasta><ar:FchVtoPago>{f(v)}</ar:FchVtoPago>"
+    asoc = ""
+    if datos.get("asoc"):
+        a = datos["asoc"]
+        asoc = (f"<ar:CbtesAsoc><ar:CbteAsoc><ar:Tipo>{a['tipo']}</ar:Tipo><ar:PtoVta>{a['pto']}</ar:PtoVta><ar:Nro>{a['nro']}</ar:Nro>"
+                f"<ar:Cuit>{solo_digitos(a['cuit'])}</ar:Cuit><ar:CbteFch>{f(a['fecha'])}</ar:CbteFch></ar:CbteAsoc></ar:CbtesAsoc>")
     iva_xml = ""
-    if datos["alicuotas"] and tipo != 11:
+    if datos["alicuotas"] and tipo not in (11, 13):
         iva_xml = "<ar:Iva>" + "".join(f"<ar:AlicIva><ar:Id>{a['id']}</ar:Id><ar:BaseImp>{a['base']:.2f}</ar:BaseImp><ar:Importe>{a['importe']:.2f}</ar:Importe></ar:AlicIva>"
                                         for a in datos["alicuotas"]) + "</ar:Iva>"
     cuerpo = (f"<ar:FeCAEReq><ar:FeCabReq><ar:CantReg>1</ar:CantReg><ar:PtoVta>{pv}</ar:PtoVta><ar:CbteTipo>{tipo}</ar:CbteTipo></ar:FeCabReq>"
@@ -254,7 +263,7 @@ def solicitar_cae(con, cuenta, datos):
               f"<ar:CbteFch>{f(datos['fecha'])}</ar:CbteFch><ar:ImpTotal>{datos['total']:.2f}</ar:ImpTotal><ar:ImpTotConc>0.00</ar:ImpTotConc>"
               f"<ar:ImpNeto>{datos['neto']:.2f}</ar:ImpNeto><ar:ImpOpEx>0.00</ar:ImpOpEx><ar:ImpTrib>0.00</ar:ImpTrib><ar:ImpIVA>{datos['iva']:.2f}</ar:ImpIVA>"
               f"{serv}<ar:MonId>PES</ar:MonId><ar:MonCotiz>1</ar:MonCotiz><ar:CondicionIVAReceptorId>{datos['cond_receptor_id']}</ar:CondicionIVAReceptorId>"
-              f"{iva_xml}</ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>")
+              f"{asoc}{iva_xml}</ar:FECAEDetRequest></ar:FeDetReq></ar:FeCAEReq>")
     raiz, errores = _wsfe(con, cuenta, "FECAESolicitar", cuerpo)
     det = raiz.find(".//FECAEDetResponse")
     obs = [f"{_texto(o, 'Code')}: {_texto(o, 'Msg')}" for o in raiz.findall(".//FECAEDetResponse/Observaciones/Obs")]
@@ -285,6 +294,74 @@ def qr_svg(url):
         return ""
 
 
+# ------------------------------------------------------------------ logo y mail
+def normalizar_logo(datos):
+    """Imagen subida -> PNG de hasta 600 px, en base64."""
+    import io
+    from PIL import Image
+    im = Image.open(io.BytesIO(datos)).convert("RGBA")
+    im.thumbnail((600, 600))
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def logo_uri(cid):
+    """Logo de comprobantes (o, si no hay, el logo del comercio) como data URI para incrustar en la página."""
+    datos = core.leer_config(cid, "fact_logo") or core.leer_config(cid, "marca_logo")
+    return f"data:image/png;base64,{datos}" if datos else ""
+
+
+MAIL_CLAVES = ("mail_host", "mail_port", "mail_seg", "mail_user", "mail_remitente", "mail_nombre")
+
+
+def mail_config(cid):
+    c = {k: core.leer_config(cid, k, "") or "" for k in MAIL_CLAVES}
+    c["tiene_clave"] = bool(core.leer_config(cid, "mail_clave"))
+    c["mail_seg"] = c["mail_seg"] or "ssl"
+    return c
+
+
+def configurado(cid):
+    c = mail_config(cid)
+    return bool(c["mail_host"] and c["mail_port"] and c["mail_remitente"])
+
+
+def enviar_mail(cid, destino, asunto, texto, html=None):
+    c = mail_config(cid)
+    if not (c["mail_host"] and c["mail_port"] and c["mail_remitente"]):
+        raise AfipError("Todavía no configuraste el envío de mails. Hacelo en Configuración → Envío de mails.")
+    msg = EmailMessage()
+    msg["Subject"] = asunto
+    msg["From"] = f"{c['mail_nombre']} <{c['mail_remitente']}>" if c["mail_nombre"] else c["mail_remitente"]
+    msg["To"] = destino
+    msg.set_content(texto)
+    if html:
+        msg.add_alternative(html, subtype="html")
+    clave = core.leer_config(cid, "mail_clave")
+    try:
+        puerto = int(c["mail_port"])
+        if c["mail_seg"] == "ssl":
+            srv = smtplib.SMTP_SSL(c["mail_host"], puerto, timeout=25, context=ssl.create_default_context())
+        else:
+            srv = smtplib.SMTP(c["mail_host"], puerto, timeout=25)
+            if c["mail_seg"] == "starttls":
+                srv.starttls(context=ssl.create_default_context())
+        with srv:
+            if c["mail_user"] and clave:
+                srv.login(c["mail_user"], descifrar(clave))
+            srv.send_message(msg)
+    except smtplib.SMTPAuthenticationError:
+        raise AfipError("El servidor de mail rechazó el usuario o la contraseña. Si usás Gmail necesitás una «contraseña de aplicación».")
+    except (smtplib.SMTPException, OSError, ValueError) as e:
+        raise AfipError(f"No se pudo enviar el mail ({e}).")
+
+
+def url_publica(cid, token):
+    esquema = request.headers.get("X-Forwarded-Proto", request.scheme).split(",")[0].strip()
+    return f"{esquema}://{request.host}/c/{cid}/{token}"
+
+
 # ------------------------------------------------------------------ base de datos
 def crear_tablas(con):
     con.executescript("""
@@ -305,6 +382,12 @@ def crear_tablas(con):
             id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, cliente_id INTEGER, cliente_nombre TEXT,
             items TEXT NOT NULL, total REAL NOT NULL, nota TEXT, validez TEXT);
     """)
+    def agregar(tabla, col, tipo):
+        if col not in [r[1] for r in con.execute(f"PRAGMA table_info({tabla})")]:
+            con.execute(f"ALTER TABLE {tabla} ADD COLUMN {col} {tipo}")
+    for col, tipo in (("token", "TEXT"), ("anulada_por", "INTEGER"), ("asociado_id", "INTEGER"), ("serv_desde", "TEXT"), ("serv_hasta", "TEXT"), ("vto_pago", "TEXT")):
+        agregar("facturas", col, tipo)
+    agregar("presupuestos_doc", "token", "TEXT")
 
 
 def registrar(app, login_requerido, modulo_requerido, db, U, error):
@@ -319,6 +402,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 "csr": c["csr"] or "", "cert_vence": c["cert_vence"] or ""}
 
     app.jinja_env.globals["afip_cuentas"] = lambda: [publico(c) for c in cuentas(db())]
+    app.jinja_env.globals["mail_cfg"] = lambda: mail_config(g.cuenta["id"])
+    app.jinja_env.globals["logo_comprobantes"] = lambda: ("data:image/png;base64," + core.leer_config(g.cuenta["id"], "fact_logo")) if core.leer_config(g.cuenta["id"], "fact_logo") else ""
 
     def doc_del_cliente(c):
         cuit = solo_digitos(c["cuit"])
@@ -521,25 +606,197 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                       "ingresos_brutos": c["ingresos_brutos"], "inicio_actividades": c["inicio_actividades"]}
             fid = con.execute(
                 "INSERT INTO facturas (fecha, cuenta_id, cuenta_nombre, emisor_json, cliente_id, receptor_nombre, receptor_doc_tipo, receptor_doc, receptor_condicion, "
-                "receptor_domicilio, tipo_cbte, pto_vta, numero, concepto, items, neto, iva, total, cae, cae_vto, observaciones, ambiente, forma_pago) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "receptor_domicilio, tipo_cbte, pto_vta, numero, concepto, items, neto, iva, total, cae, cae_vto, observaciones, ambiente, forma_pago, "
+                "token, serv_desde, serv_hasta, vto_pago) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (fecha.strftime("%Y-%m-%d") + " " + core.ahora()[11:19], c["id"], c["nombre"], json.dumps(emisor), cli["id"], core.nombre_cliente(cli),
                  doc_tipo, doc_nro, cli["condicion_iva"], (cli["domicilio"] or ""), tipo, int(c["punto_venta"]), res["numero"], concepto,
-                 json.dumps(lineas), neto, iva, total, res["cae"], res["cae_vto"], res["observaciones"], c["ambiente"], (d.get("forma_pago") or "").strip())).lastrowid
+                 json.dumps(lineas), neto, iva, total, res["cae"], res["cae_vto"], res["observaciones"], c["ambiente"], (d.get("forma_pago") or "").strip(),
+                 secrets.token_urlsafe(16), *(x.strftime("%Y-%m-%d") if serv else None for x in (serv or (None, None, None))))).lastrowid
         return jsonify(ok=True, id=fid)
+
+    def asegurar_token(con, tabla, fila):
+        if fila["token"]:
+            return fila["token"]
+        tok = secrets.token_urlsafe(16)
+        con.execute(f"UPDATE {tabla} SET token=? WHERE id=?", (tok, fila["id"]))
+        return tok
+
+    def contexto_factura(con, f):
+        emisor = json.loads(f["emisor_json"] or "{}")
+        qr = url_qr(f, emisor.get("cuit", "0")) if f["cae"] else ""
+        asoc = None
+        if f["asociado_id"]:
+            asoc = con.execute("SELECT tipo_cbte, pto_vta, numero FROM facturas WHERE id=?", (f["asociado_id"],)).fetchone()
+        anuladora = con.execute("SELECT id, tipo_cbte, pto_vta, numero FROM facturas WHERE id=?", (f["anulada_por"],)).fetchone() if f["anulada_por"] else None
+        return dict(f=f, emisor=emisor, items=json.loads(f["items"]), TIPOS=TIPOS_CBTE, LETRA=LETRA, qr_url=qr, qr=qr_svg(qr) if qr else "",
+                    fmt_fecha=core.fmt_fecha, CONCEPTOS=CONCEPTOS, asoc=asoc, anuladora=anuladora, logo=logo_uri(g.cuenta["id"] if g.get("cuenta") else 0))
 
     @app.route("/facturacion/comprobante/<int:fid>")
     @login_requerido
     @modulo_requerido("facturacion")
     def factura_ver(fid):
+        cid = g.cuenta["id"]
         with db() as con:
             f = con.execute("SELECT * FROM facturas WHERE id=?", (fid,)).fetchone()
             if not f:
                 abort(404)
-        emisor = json.loads(f["emisor_json"] or "{}")
-        qr = url_qr(f, emisor.get("cuit", "0"))
-        return render_template("facturacion/comprobante.html", f=f, emisor=emisor, items=json.loads(f["items"]), TIPOS=TIPOS_CBTE, LETRA=LETRA,
-                               qr_url=qr, qr=qr_svg(qr), fmt_fecha=core.fmt_fecha, CONCEPTOS=CONCEPTOS)
+            tok = asegurar_token(con, "facturas", f)
+            ctx = contexto_factura(con, f)
+            cli = con.execute("SELECT * FROM clientes WHERE id=?", (f["cliente_id"],)).fetchone()
+        url = url_publica(cid, tok)
+        nombre = ((cli["nombre"] if cli else "") or "").strip().title()
+        marca = core.marca(cid)
+        numero = f"{f['pto_vta']:04d}-{f['numero']:08d}"
+        texto = (f"Hola, {nombre}, en {marca['nombre']} le enviamos su {TIPOS_CBTE[f['tipo_cbte']]} N° {numero}\n"
+                 f"Total: {core.fmt_monto(f['total'])}\nPuede verla e imprimirla acá: {url}")
+        return render_template("facturacion/comprobante.html", **ctx, url=url, texto=texto, wa=core.telefono_whatsapp(cli["telefono"]) if cli else "",
+                               mail_cliente=(cli["mail"] if cli else "") or "", mail_ok=configurado(cid), asunto=f"{TIPOS_CBTE[f['tipo_cbte']]} N° {numero} - {marca['nombre']}",
+                               puede_anular=bool(f["tipo_cbte"] in NC_DE and not f["anulada_por"] and f["cae"]), tipo_doc="factura")
+
+    @app.route("/c/<int:cid>/<token>")
+    def comprobante_publico(cid, token):
+        """Vista pública (sin iniciar sesión) del comprobante, para el cliente: se llega con el enlace que se le envía."""
+        cuenta = core.conectar_cuentas().execute("SELECT * FROM cuentas WHERE id=?", (cid,)).fetchone()
+        if not cuenta or not cuenta["activa"] or "facturacion" not in core.modulos_de(cuenta):
+            abort(404)
+        g.cuenta = cuenta
+        with core.conectar(cid) as con:
+            f = con.execute("SELECT * FROM facturas WHERE token=?", (token,)).fetchone() if token else None
+            if f:
+                ctx = contexto_factura(con, f)
+                ctx["logo"] = logo_uri(cid)
+                return render_template("facturacion/publico.html", tipo_doc="factura", **ctx)
+            p = con.execute("SELECT * FROM presupuestos_doc WHERE token=?", (token,)).fetchone() if token else None
+            if p:
+                return render_template("facturacion/publico.html", tipo_doc="presupuesto", p=p, items=json.loads(p["items"]), marca=core.marca(cid),
+                                       logo=logo_uri(cid), fmt_fecha=core.fmt_fecha)
+        abort(404)
+
+    @app.route("/api/facturacion/<int:fid>/anular", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_anular_factura(fid):
+        """Anula una factura emitiendo la nota de crédito por el total, asociada a ella."""
+        with db() as con:
+            f = con.execute("SELECT * FROM facturas WHERE id=?", (fid,)).fetchone()
+            if not f:
+                return error("No existe el comprobante.", 404)
+            if f["tipo_cbte"] not in NC_DE:
+                return error("Solo se pueden anular facturas.")
+            if f["anulada_por"]:
+                return error("Esa factura ya fue anulada con una nota de crédito.")
+            c = con.execute("SELECT * FROM afip_cuentas WHERE id=?", (f["cuenta_id"],)).fetchone()
+            if not c:
+                return error("La cuenta de AFIP con la que se emitió ya no está configurada. Volvé a cargarla para poder anular la factura.")
+            emisor = json.loads(f["emisor_json"] or "{}")
+            items = json.loads(f["items"])
+            try:
+                lineas, neto, iva, total, alic = calcular(items, c["condicion_iva"])
+                serv = None
+                if f["concepto"] in (2, 3):
+                    serv = tuple(datetime.strptime((f[k] or f["fecha"])[:10], "%Y-%m-%d").date() for k in ("serv_desde", "serv_hasta", "vto_pago"))
+                tipo_nc = NC_DE[f["tipo_cbte"]]
+                hoy = core.ahora_dt().date()
+                res = solicitar_cae(con, c, {"tipo": tipo_nc, "concepto": f["concepto"], "doc_tipo": f["receptor_doc_tipo"], "doc_nro": f["receptor_doc"],
+                                              "fecha": hoy, "cond_receptor_id": CONDICION_RECEPTOR.get(f["receptor_condicion"], 5), "neto": neto, "iva": iva,
+                                              "total": total, "alicuotas": alic, "serv": serv,
+                                              "asoc": {"tipo": f["tipo_cbte"], "pto": f["pto_vta"], "nro": f["numero"], "cuit": c["cuit"],
+                                                       "fecha": datetime.strptime(f["fecha"][:10], "%Y-%m-%d").date()}})
+            except AfipError as e:
+                return error(str(e))
+            nid = con.execute(
+                "INSERT INTO facturas (fecha, cuenta_id, cuenta_nombre, emisor_json, cliente_id, receptor_nombre, receptor_doc_tipo, receptor_doc, receptor_condicion, "
+                "receptor_domicilio, tipo_cbte, pto_vta, numero, concepto, items, neto, iva, total, cae, cae_vto, observaciones, ambiente, forma_pago, "
+                "token, serv_desde, serv_hasta, vto_pago, asociado_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (core.ahora(), f["cuenta_id"], f["cuenta_nombre"], f["emisor_json"], f["cliente_id"], f["receptor_nombre"], f["receptor_doc_tipo"], f["receptor_doc"],
+                 f["receptor_condicion"], f["receptor_domicilio"], tipo_nc, f["pto_vta"], res["numero"], f["concepto"], json.dumps(lineas), neto, iva, total,
+                 res["cae"], res["cae_vto"], res["observaciones"], f["ambiente"], f["forma_pago"], secrets.token_urlsafe(16), f["serv_desde"], f["serv_hasta"],
+                 f["vto_pago"], fid)).lastrowid
+            con.execute("UPDATE facturas SET anulada_por=? WHERE id=?", (nid, fid))
+        return jsonify(ok=True, id=nid)
+
+    # ---------------- logo de los comprobantes
+    @app.route("/api/facturacion/logo", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_fact_logo():
+        archivo = request.files.get("logo")
+        cid = g.cuenta["id"]
+        if request.form.get("quitar"):
+            core.guardar_config(cid, "fact_logo", None)
+            return redirect(url_for("configuracion") + "#comprobantes")
+        if not archivo or not archivo.filename:
+            return redirect(url_for("configuracion") + "#comprobantes")
+        try:
+            core.guardar_config(cid, "fact_logo", normalizar_logo(archivo.read()))
+        except Exception:
+            from flask import flash
+            flash("No se pudo usar esa imagen. Probá con un PNG o JPG.", "error")
+        return redirect(url_for("configuracion") + "#comprobantes")
+
+    # ---------------- mail
+    @app.route("/api/mail/config", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_mail_config():
+        d = request.get_json(force=True, silent=True) or {}
+        cid = g.cuenta["id"]
+        host, remitente = (d.get("host") or "").strip(), (d.get("remitente") or "").strip()
+        if not host or not remitente or "@" not in remitente:
+            return error("Completá el servidor y el mail desde el que se envía.")
+        try:
+            puerto = int(d.get("puerto"))
+        except (TypeError, ValueError):
+            return error("El puerto tiene que ser un número (465 o 587).")
+        if d.get("seguridad") not in ("ssl", "starttls", "ninguna"):
+            return error("Elegí el tipo de seguridad.")
+        for clave, valor in (("mail_host", host), ("mail_port", str(puerto)), ("mail_seg", d["seguridad"]), ("mail_user", (d.get("usuario") or "").strip()),
+                             ("mail_remitente", remitente), ("mail_nombre", (d.get("nombre") or "").strip())):
+            core.guardar_config(cid, clave, valor)
+        if d.get("clave"):
+            core.guardar_config(cid, "mail_clave", cifrar(d["clave"]))
+        return jsonify(ok=True)
+
+    @app.route("/api/mail/probar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_mail_probar():
+        d = request.get_json(force=True, silent=True) or {}
+        destino = (d.get("destino") or "").strip()
+        if "@" not in destino:
+            return error("Escribí el mail al que querés mandar la prueba.")
+        try:
+            enviar_mail(g.cuenta["id"], destino, "Prueba de envío de mails", "Este es un mail de prueba. Si lo recibiste, el envío está bien configurado.")
+        except AfipError as e:
+            return error(str(e))
+        return jsonify(ok=True)
+
+    @app.route("/api/facturacion/mail", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_facturacion_mail():
+        d = request.get_json(force=True, silent=True) or {}
+        destino = (d.get("destino") or "").strip()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", destino):
+            return error("Revisá el mail del destinatario.")
+        cid = g.cuenta["id"]
+        tabla = "facturas" if d.get("tipo") == "factura" else "presupuestos_doc"
+        with db() as con:
+            fila = con.execute(f"SELECT * FROM {tabla} WHERE id=?", (d.get("id"),)).fetchone()
+            if not fila:
+                return error("No existe el comprobante.", 404)
+            tok = asegurar_token(con, tabla, fila)
+        url = url_publica(cid, tok)
+        mensaje = (d.get("mensaje") or "").strip()
+        texto = (mensaje + "\n\n" if mensaje else "") + f"Podés ver e imprimir el comprobante acá:\n{url}"
+        html = ("<div style='font-family:Arial,sans-serif;font-size:15px'>" + (f"<p>{escape(mensaje).replace(chr(10), '<br>')}</p>" if mensaje else "") +
+                f"<p><a href='{escape(url)}' style='background:#2f5bea;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Ver comprobante</a></p>"
+                f"<p style='color:#6b7280;font-size:12px'>Si el botón no funciona, copiá este enlace: {escape(url)}</p></div>")
+        try:
+            enviar_mail(cid, destino, (d.get("asunto") or "Comprobante").strip()[:150], texto, html)
+        except AfipError as e:
+            return error(str(e))
+        return jsonify(ok=True)
 
     # ---------------- presupuesto no válido como factura
     @app.route("/facturacion/presupuesto")
@@ -577,9 +834,9 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             cli = con.execute("SELECT * FROM clientes WHERE id=?", (d.get("cliente_id"),)).fetchone()
             if not cli:
                 return error("Falta el cliente.")
-            pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez) VALUES (?,?,?,?,?,?,?)",
+            pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez, token) VALUES (?,?,?,?,?,?,?,?)",
                               (core.ahora(), cli["id"], core.nombre_cliente(cli), json.dumps(items), r2(total), U(d.get("nota")) or None,
-                               (d.get("validez") or "").strip() or None)).lastrowid
+                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16))).lastrowid
         return jsonify(ok=True, id=pid)
 
     @app.route("/facturacion/presupuesto/<int:pid>")
@@ -602,5 +859,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if p["validez"]:
             lineas.append(f"Válido hasta: {p['validez']}")
         lineas.append("Documento no válido como factura.")
+        with db() as con:
+            tok = asegurar_token(con, "presupuestos_doc", p)
+        url = url_publica(g.cuenta["id"], tok)
+        lineas.append(f"Puede verlo e imprimirlo acá: {url}")
         return render_template("facturacion/presupuesto_ver.html", p=p, items=items, cli=cli, marca=marca, fmt_fecha=core.fmt_fecha,
-                               wa=core.telefono_whatsapp(cli["telefono"]) if cli else "", texto="\n".join(lineas))
+                               wa=core.telefono_whatsapp(cli["telefono"]) if cli else "", texto="\n".join(lineas), url=url, logo=logo_uri(g.cuenta["id"]),
+                               mail_cliente=(cli["mail"] if cli else "") or "", mail_ok=configurado(g.cuenta["id"]), tipo_doc="presupuesto",
+                               asunto=f"Presupuesto N° {p['id']:04d} - {marca['nombre']}")

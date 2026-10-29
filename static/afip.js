@@ -60,3 +60,38 @@ function afipCert(c) {
     cerrar(); await aviso(`Certificado guardado. Vence el ${j.vence}. Probá la conexión para verificar que AFIP lo acepta.`); location.reload();
   };
 }
+
+// Envío de mails (SMTP)
+function mailConfig() {
+  const c0 = JSON.parse(document.getElementById('mail-datos').textContent);
+  const m = modal(`<h2>Envío de mails</h2><div id="ml-err" class="msg error" style="display:none"></div>
+    <div class="grid">
+      <div><label>Servidor (SMTP) *</label><input id="ml-host" value="${esc(c0.mail_host)}" placeholder="smtp.gmail.com"></div>
+      <div><label>Puerto *</label><input id="ml-port" inputmode="numeric" value="${esc(c0.mail_port || '465')}"></div>
+      <div><label>Seguridad</label><select id="ml-seg"><option value="ssl" ${c0.mail_seg === 'ssl' ? 'selected' : ''}>SSL (puerto 465)</option><option value="starttls" ${c0.mail_seg === 'starttls' ? 'selected' : ''}>STARTTLS (puerto 587)</option><option value="ninguna" ${c0.mail_seg === 'ninguna' ? 'selected' : ''}>Ninguna</option></select></div>
+      <div><label>Usuario</label><input id="ml-user" value="${esc(c0.mail_user)}" autocomplete="off" placeholder="tu@correo.com"></div>
+      <div><label>Contraseña ${c0.tiene_clave ? '(dejá vacío para no cambiarla)' : ''}</label><input id="ml-clave" type="password" autocomplete="new-password"></div>
+      <div><label>Mail desde el que se envía *</label><input id="ml-rem" value="${esc(c0.mail_remitente)}" placeholder="tu@correo.com"></div>
+      <div><label>Nombre que ve el cliente</label><input id="ml-nombre" value="${esc(c0.mail_nombre)}" placeholder="Mi Comercio"></div>
+    </div>
+    <p class="mut" style="font-size:13px">Gmail: servidor smtp.gmail.com, puerto 465 (SSL) y una <b>contraseña de aplicación</b> (no la común). Outlook: smtp-mail.outlook.com, puerto 587 (STARTTLS).</p>
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="ml-ok">Guardar</button><button class="btn" id="ml-no">Cancelar</button></div>`);
+  const q = s => m.querySelector(s);
+  q('#ml-no').onclick = cerrar;
+  q('#ml-ok').onclick = async () => {
+    const j = await api('/api/mail/config', {host: q('#ml-host').value, puerto: q('#ml-port').value, seguridad: q('#ml-seg').value, usuario: q('#ml-user').value,
+      clave: q('#ml-clave').value, remitente: q('#ml-rem').value, nombre: q('#ml-nombre').value});
+    if (j.ok) location.reload(); else { const e = q('#ml-err'); e.textContent = j.error; e.style.display = 'block'; }
+  };
+}
+function mailProbar() {
+  const m = modal(`<h2>Mail de prueba</h2><div id="mp-err" class="msg error" style="display:none"></div><label>Enviar la prueba a</label><input id="mp-dest" type="email" placeholder="tu@correo.com">
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="mp-ok">Enviar</button><button class="btn" id="mp-no">Cancelar</button></div>`);
+  m.querySelector('#mp-no').onclick = cerrar;
+  m.querySelector('#mp-ok').onclick = async () => {
+    const b = m.querySelector('#mp-ok'); b.disabled = true; b.textContent = 'Enviando…';
+    const j = await api('/api/mail/probar', {destino: m.querySelector('#mp-dest').value});
+    if (j.ok) { cerrar(); aviso('Mail de prueba enviado. Revisá la bandeja de entrada (y el correo no deseado).'); }
+    else { b.disabled = false; b.textContent = 'Enviar'; const e = m.querySelector('#mp-err'); e.textContent = j.error; e.style.display = 'block'; }
+  };
+}

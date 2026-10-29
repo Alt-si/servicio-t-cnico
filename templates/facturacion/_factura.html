@@ -1,0 +1,25 @@
+{% if f.ambiente=='homologacion' %}<div class="msg" style="background:#fef3c7;color:#92400e;text-align:center"><b>COMPROBANTE DE PRUEBA — SIN VALIDEZ FISCAL</b></div>{% endif %}
+{% if anuladora %}<div class="msg error" style="text-align:center"><b>ANULADA</b> con {{ TIPOS[anuladora.tipo_cbte] }} N° {{ '%04d' % anuladora.pto_vta }}-{{ '%08d' % anuladora.numero }}</div>{% endif %}
+<div style="display:grid;grid-template-columns:1fr 70px 1fr;gap:8px;align-items:start;border:1.5px solid var(--tx);padding:10px">
+  <div>{% if logo %}<img src="{{ logo }}" alt="" style="max-height:80px;max-width:100%;margin-bottom:6px;display:block">{% endif %}
+    <div style="font-size:20px;font-weight:800">{{ emisor.razon_social }}</div>
+    <div>{{ emisor.condicion_iva }}</div>{% if emisor.domicilio %}<div>{{ emisor.domicilio }}</div>{% endif %}</div>
+  <div style="text-align:center;border:1.5px solid var(--tx);padding:2px"><div style="font-size:34px;font-weight:800;line-height:1">{{ LETRA[f.tipo_cbte] }}</div><div style="font-size:10px">COD. {{ '%02d' % f.tipo_cbte }}</div></div>
+  <div><div style="font-size:18px;font-weight:700">{{ TIPOS[f.tipo_cbte]|upper }}</div>
+    <div><b>N° {{ '%04d' % f.pto_vta }}-{{ '%08d' % f.numero }}</b></div><div>Fecha: {{ fmt_fecha(f.fecha) }}</div>
+    <div>CUIT: {{ emisor.cuit }}</div>{% if emisor.ingresos_brutos %}<div>Ing. Brutos: {{ emisor.ingresos_brutos }}</div>{% endif %}{% if emisor.inicio_actividades %}<div>Inicio de actividades: {{ emisor.inicio_actividades }}</div>{% endif %}</div>
+</div>
+<div style="border:1.5px solid var(--tx);border-top:0;padding:10px"><b>{{ f.receptor_nombre }}</b>
+  <div>{% if f.receptor_doc_tipo == 80 %}CUIT{% elif f.receptor_doc_tipo == 96 %}DNI{% else %}Documento{% endif %}: {{ f.receptor_doc if f.receptor_doc_tipo != 99 else 'Sin identificar' }} · {{ f.receptor_condicion }}</div>
+  {% if f.receptor_domicilio %}<div>{{ f.receptor_domicilio }}</div>{% endif %}{% if f.forma_pago %}<div>Forma de pago: {{ f.forma_pago }}</div>{% endif %}
+  {% if asoc %}<div><b>Comprobante asociado:</b> {{ TIPOS[asoc.tipo_cbte] }} N° {{ '%04d' % asoc.pto_vta }}-{{ '%08d' % asoc.numero }}</div>{% endif %}</div>
+<table style="margin-top:10px"><thead><tr><th>Descripción</th><th style="text-align:right">Cant.</th><th style="text-align:right">Precio unit.</th>{% if f.tipo_cbte in (1, 3) %}<th style="text-align:right">IVA</th>{% endif %}<th style="text-align:right">Subtotal</th></tr></thead><tbody>
+{% for i in items %}{% set k = 1 + (i.iva / 100) if f.tipo_cbte in (1, 3) else 1 %}<tr><td>{{ i.descripcion }}</td><td style="text-align:right">{{ ('%g' % i.cantidad)|replace('.', ',') }}</td>
+  <td style="text-align:right">$ {{ (i.precio / k)|monto_input }}</td>{% if f.tipo_cbte in (1, 3) %}<td style="text-align:right">{{ i.iva|monto_input }}%</td>{% endif %}<td style="text-align:right">$ {{ (i.total / k)|monto_input }}</td></tr>{% endfor %}</tbody></table>
+<div style="text-align:right;margin-top:10px">
+  {% if f.tipo_cbte in (1, 3) %}<div>Importe neto: $ {{ f.neto|monto_input }}</div><div>IVA: $ {{ f.iva|monto_input }}</div>{% endif %}
+  <div style="font-size:22px">TOTAL: <b>$ {{ f.total|monto_input }}</b></div></div>
+<div style="display:flex;gap:14px;align-items:center;margin-top:14px;border-top:1.5px solid var(--tx);padding-top:10px">
+  <div style="width:120px;height:120px">{% if qr %}{{ qr|safe }}{% else %}<a href="{{ qr_url }}" target="_blank" rel="noopener">Ver en AFIP</a>{% endif %}</div>
+  <div><div><b>CAE N°:</b> {{ f.cae }}</div><div><b>Vencimiento del CAE:</b> {{ fmt_fecha(f.cae_vto) }}</div>{% if f.observaciones %}<div class="mut">Obs. AFIP: {{ f.observaciones }}</div>{% endif %}<div class="mut" style="font-size:12px">Comprobante autorizado</div></div>
+</div>

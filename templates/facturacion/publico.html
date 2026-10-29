@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="es" translate="no"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<meta name="google" content="notranslate"><title>Comprobante</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body><main><div class="card hoja">
+  <div class="row no-print"><button class="btn der" onclick="window.print()">Imprimir / guardar como PDF</button></div>
+  {% if tipo_doc == 'factura' %}{% include "facturacion/_factura.html" %}{% else %}{% include "facturacion/_presupuesto.html" %}{% endif %}
+</div></main></body></html>

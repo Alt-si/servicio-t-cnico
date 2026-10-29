@@ -93,6 +93,22 @@ async function tecBorrar(id, nombre, usos) {
       <button class="btn" onclick='afipBorrar({{ c.id }}, {{ c.nombre|tojson }})'>Borrar</button></td></tr>
   {% else %}<tr><td class="mut">Todavía no hay cuentas de AFIP.</td></tr>{% endfor %}</tbody></table></div>
 </div>
+
+<div class="card" id="comprobantes"><h1>Logo de facturas y presupuestos</h1>
+  <p class="mut">Elegí la imagen que querés que aparezca arriba en las facturas, notas de crédito y presupuestos. Si no cargás ninguna, se usa el logo del comercio.</p>
+  <form method="post" action="{{ url_for('api_fact_logo') }}" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    {% set lg = logo_comprobantes() %}{% if lg %}<p><img src="{{ lg }}" alt="Logo" style="max-height:90px;max-width:260px;border:1px solid var(--bd);padding:6px;background:#fff"></p>{% endif %}
+    <div class="row"><input type="file" name="logo" accept="image/png,image/jpeg" style="max-width:320px"><button class="btn pri">Guardar logo</button>
+      {% if lg %}<button class="btn" name="quitar" value="1" formnovalidate>Quitar logo</button>{% endif %}</div>
+  </form>
+</div>
+
+<script type="application/json" id="mail-datos">{{ mail_cfg() | tojson }}</script>
+<div class="card" id="mail"><div class="row"><h1 style="margin:0">Envío de mails</h1><button class="btn pri der" onclick="mailConfig()">{{ 'Editar' if mail_cfg().mail_host else 'Configurar' }}</button></div>
+  <p class="mut">Con esto el sistema envía las facturas y presupuestos por mail. Se configura una sola vez con los datos del correo de tu comercio.</p>
+  {% set m = mail_cfg() %}{% if m.mail_host %}<p>Servidor: <b>{{ m.mail_host }}:{{ m.mail_port }}</b> · Desde: <b>{{ m.mail_remitente }}</b></p>
+  <button class="btn" onclick="mailProbar()">Enviar mail de prueba</button>{% else %}<p><b>Sin configurar.</b></p>{% endif %}
+</div>
 {% endif %}
 
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>

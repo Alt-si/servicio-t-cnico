@@ -34,7 +34,7 @@ if ($f('#f-items')) {
     const b = $f('#f-emitir'); b.disabled = true; b.textContent = 'Pidiendo el CAE a AFIP…';
     const j = await api('/api/facturacion/emitir', {cuenta_id: FACT.cuenta_id, cliente_id: FACT.cliente_id, concepto: $f('#f-concepto').value, fecha: $f('#f-fecha').value,
       serv_desde: $f('#f-desde').value, serv_hasta: $f('#f-hasta').value, vto_pago: $f('#f-vto').value, forma_pago: $f('#f-pago').value, items: leerRenglones()});
-    if (j.ok) { location = '/facturacion/comprobante/' + j.id; return; }
+    if (j.ok) { location = '/facturacion/comprobante/' + j.id + '?nuevo=1'; return; }
     b.disabled = false; b.textContent = 'Reintentar'; mostrarErr(j.error);
   });
   $f('#p-guardar')?.addEventListener('click', async () => {

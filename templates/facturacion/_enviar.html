@@ -1,0 +1,21 @@
+<div class="row no-print" style="margin:8px 0">
+  <a class="btn wapp" target="_blank" rel="noopener" href="https://wa.me/{{ wa or '' }}?text={{ texto|urlencode }}">Enviar por WhatsApp</a>
+  <button class="btn" id="env-mail" type="button">Enviar por mail</button>
+  <button class="btn" onclick="window.print()">Imprimir</button>
+</div>
+<script>
+const ENVIO = {{ {'tipo': tipo_doc, 'id': (f.id if tipo_doc=='factura' else p.id), 'mail': mail_cliente, 'ok': mail_ok, 'asunto': asunto} | tojson }};
+document.getElementById('env-mail').onclick = () => {
+  if (!ENVIO.ok) return aviso('Todavía no configuraste el envío de mails. Hacelo en Configuración → Envío de mails (solo se hace una vez).');
+  const c = modal(`<h2>Enviar por mail</h2><div id="m-err" class="msg error" style="display:none"></div>
+    <label>Mail del cliente</label><input id="m-dest" type="email" value="${esc(ENVIO.mail)}" placeholder="cliente@correo.com">
+    <label>Asunto</label><input id="m-asunto" value="${esc(ENVIO.asunto)}"><label>Mensaje (opcional)</label><textarea id="m-msg" rows="3">Hola, le enviamos su comprobante. Gracias.</textarea>
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="m-ok">Enviar</button><button class="btn" id="m-no">Cancelar</button></div>`);
+  c.querySelector('#m-no').onclick = cerrar;
+  c.querySelector('#m-ok').onclick = async () => {
+    const b = c.querySelector('#m-ok'); b.disabled = true; b.textContent = 'Enviando…';
+    const j = await api('/api/facturacion/mail', {tipo: ENVIO.tipo, id: ENVIO.id, destino: c.querySelector('#m-dest').value, asunto: c.querySelector('#m-asunto').value, mensaje: c.querySelector('#m-msg').value});
+    if (j.ok) { cerrar(); aviso('Mail enviado.'); } else { b.disabled = false; b.textContent = 'Enviar'; const e = c.querySelector('#m-err'); e.textContent = j.error; e.style.display = 'block'; }
+  };
+};
+</script>

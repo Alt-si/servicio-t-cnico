@@ -7,6 +7,8 @@
   <div class="tabla-wrap"><table><thead><tr><th>Descripción</th><th style="width:90px">Cant.</th><th style="width:130px">Precio unit.</th><th style="width:120px;text-align:right">Subtotal</th><th style="width:40px"></th></tr></thead><tbody id="f-items"></tbody></table></div>
   <p><button class="btn" type="button" id="f-mas">＋ Agregar renglón</button></p>
   <div style="font-size:22px;text-align:right">Total: <b id="f-total">$ 0</b></div>
+  <div class="grid"><div><label>Forma de pago</label><input id="p-forma" list="p-formas" value="Contado" placeholder="Contado, transferencia…"><datalist id="p-formas"><option>Contado</option><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option><option>Billetera virtual</option></datalist></div>
+    <label class="modulo" style="align-self:end"><input type="checkbox" id="p-precios"><span>Mostrar el precio de cada renglón (si no, solo el total)</span></label></div>
   <div class="grid"><div><label>Válido hasta (opcional)</label><input id="p-validez" placeholder="Ej.: 15 días / 30/11/2026"></div><div><label>Nota (opcional)</label><input id="p-nota" class="mayus"></div></div>
   <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">Generar presupuesto</button></div>
 </div>

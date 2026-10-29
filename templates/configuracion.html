@@ -103,6 +103,16 @@ async function tecBorrar(id, nombre, usos) {
   {% else %}<tr><td class="mut">Todavía no hay cuentas de AFIP.</td></tr>{% endfor %}</tbody></table></div>
 </div>
 
+<div class="card" id="presupuesto"><h1>Formato del presupuesto</h1>
+  <p class="mut">Datos que salen en el presupuesto (el logo se elige en la tarjeta de abajo). Lo que dejes vacío no se muestra; el pie de página, si está vacío, usa el nombre del comercio y las cuentas de AFIP.</p>
+  <form method="post" action="{{ url_for('api_presupuesto_formato') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>Localidad (sale junto a la fecha)</label><input name="localidad" value="{{ cfg_pres('pres_localidad') }}" placeholder="Ej.: 9 de Julio">
+    <label>Aviso al pie del presupuesto</label><textarea name="aviso" rows="2" placeholder="Ej.: El precio está expresado en pesos, puede sufrir modificaciones si el valor del dólar cambia.">{{ cfg_pres('pres_aviso') }}</textarea>
+    <div class="grid"><div><label>Pie de página, izquierda</label><textarea name="pie_izq" rows="3" placeholder="Nombre del comercio&#10;Dirección&#10;Teléfono">{{ cfg_pres('pres_pie_izq') }}</textarea></div>
+    <div><label>Pie de página, derecha</label><textarea name="pie_der" rows="3" placeholder="Nombre y CUIT del titular">{{ cfg_pres('pres_pie_der') }}</textarea></div></div>
+    <div class="row" style="margin-top:10px"><button class="btn pri">Guardar</button></div>
+  </form></div>
+
 <div class="card" id="comprobantes"><h1>Logo de facturas y presupuestos</h1>
   <p class="mut">Elegí la imagen que querés que aparezca arriba en las facturas, notas de crédito y presupuestos. Si no cargás ninguna, se usa el logo del comercio.</p>
   <form method="post" action="{{ url_for('api_fact_logo') }}" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf_token() }}">

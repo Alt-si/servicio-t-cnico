@@ -416,6 +416,8 @@ def crear_tablas(con):
     for col, tipo in (("token", "TEXT"), ("anulada_por", "INTEGER"), ("asociado_id", "INTEGER"), ("serv_desde", "TEXT"), ("serv_hasta", "TEXT"), ("vto_pago", "TEXT")):
         agregar("facturas", col, tipo)
     agregar("afip_cuentas", "nombre_fantasia", "TEXT")
+    agregar("presupuestos_doc", "forma_pago", "TEXT")
+    agregar("presupuestos_doc", "mostrar_precios", "INTEGER")
     agregar("presupuestos_doc", "token", "TEXT")
 
 
@@ -431,6 +433,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 "nombre_fantasia": c["nombre_fantasia"] or "", "csr": c["csr"] or "", "cert_vence": c["cert_vence"] or ""}
 
     app.jinja_env.globals["afip_cuentas"] = lambda: [publico(c) for c in cuentas(db())]
+    app.jinja_env.globals["cfg_pres"] = lambda clave: core.leer_config(g.cuenta["id"], clave) or ""
     app.jinja_env.globals["mail_cfg"] = lambda: mail_config(g.cuenta["id"])
     app.jinja_env.globals["logo_comprobantes"] = lambda: ("data:image/png;base64," + core.leer_config(g.cuenta["id"], "fact_logo")) if core.leer_config(g.cuenta["id"], "fact_logo") else ""
 
@@ -684,7 +687,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             datos = comprobante_pdf.pdf_factura(fila, ctx["emisor"], ctx["items"], TIPOS_CBTE, LETRA, asoc=ctx["asoc"], anuladora=ctx["anuladora"],
                                                 qr_url=ctx["qr_url"], logo_b64=logo)
             return f"{TIPOS_CBTE[fila['tipo_cbte']]} {fila['pto_vta']:04d}-{fila['numero']:08d}.pdf".replace(" ", "_"), datos
-        datos = comprobante_pdf.pdf_presupuesto(fila, json.loads(fila["items"]), core.marca(cid)["nombre"], logo_b64=logo)
+        datos = comprobante_pdf.pdf_presupuesto(fila, json.loads(fila["items"]), datos_presupuesto(cid, fila), logo_b64=logo)
         return f"Presupuesto_{fila['id']:04d}.pdf", datos
 
     def contexto_factura(con, f):
@@ -744,8 +747,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 return render_template("facturacion/publico.html", tipo_doc="factura", **ctx)
             p = con.execute("SELECT * FROM presupuestos_doc WHERE token=?", (token,)).fetchone() if token else None
             if p:
-                return render_template("facturacion/publico.html", tipo_doc="presupuesto", p=p, items=json.loads(p["items"]), marca=core.marca(cid),
-                                       logo=logo_uri(cid), fmt_fecha=core.fmt_fecha)
+                return render_template("facturacion/publico.html", tipo_doc="presupuesto", p=p, items=json.loads(p["items"]), pd=datos_presupuesto(cid, p),
+                                       fmt_fecha=core.fmt_fecha)
         abort(404)
 
     @app.route("/api/facturacion/<int:fid>/anular", methods=["POST"])
@@ -809,6 +812,19 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             from flask import flash
             flash("No se pudo usar esa imagen. Probá con un PNG o JPG.", "error")
         return redirect(url_for("configuracion") + "#comprobantes")
+
+    @app.route("/api/facturacion/presupuesto/formato", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_presupuesto_formato():
+        cid = g.cuenta["id"]
+        for clave, campo in (("pres_localidad", "localidad"), ("pres_aviso", "aviso"), ("pres_pie_izq", "pie_izq")):
+            if campo:
+                core.guardar_config(cid, clave, (request.form.get(campo) or "").strip()[:600] or None)
+        core.guardar_config(cid, "pres_pie_der", (request.form.get("pie_der") or "").strip()[:600] or None)
+        from flask import flash
+        flash("Formato del presupuesto guardado.", "ok")
+        return redirect(url_for("configuracion") + "#presupuesto")
 
     # ---------------- mail
     @app.route("/api/mail/config", methods=["POST"])
@@ -898,6 +914,36 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             return redirect(url_for("clientes"))
         return render_template("facturacion/presupuesto.html", cliente=cliente)
 
+    MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+    def datos_presupuesto(cid, p):
+        """Todo lo que el presupuesto muestra además de sus renglones: fecha larga, aviso, pie de página, logo."""
+        d = core.parse_fecha(p["fecha"])
+        fecha = f"{d.day} de {MESES[d.month - 1]} de {d.year}" if d else core.fmt_fecha(p["fecha"])
+        localidad = (core.leer_config(cid, "pres_localidad") or "").strip()
+        marca = core.marca(cid)
+        izq = (core.leer_config(cid, "pres_pie_izq") or "").strip()
+        der = (core.leer_config(cid, "pres_pie_der") or "").strip()
+        if not der:
+            with core.conectar(cid) as con:
+                der = "\n".join(f"{c['razon_social']}\n{c['cuit'][:2]}-{c['cuit'][2:10]}-{c['cuit'][10:]}"
+                                 for c in con.execute("SELECT razon_social, cuit FROM afip_cuentas ORDER BY id"))
+        return {"fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
+                "pie_izq": izq or marca["nombre"], "pie_der": der, "marca": marca, "logo": logo_uri(cid),
+                "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"])}
+
+    @app.route("/api/facturacion/presupuesto/<int:pid>/eliminar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_presupuesto_eliminar(pid):
+        d = request.get_json(force=True, silent=True) or {}
+        if not core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
+            return jsonify(ok=False, necesita_codigo=True,
+                           error="Código de validación incorrecto." if d.get("codigo") else "Eliminar un presupuesto requiere el código de validación."), 403
+        with db() as con:
+            con.execute("DELETE FROM presupuestos_doc WHERE id=?", (pid,))
+        return jsonify(ok=True)
+
     @app.route("/api/facturacion/presupuesto", methods=["POST"])
     @login_requerido
     @modulo_requerido("facturacion")
@@ -921,9 +967,10 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             cli = con.execute("SELECT * FROM clientes WHERE id=?", (d.get("cliente_id"),)).fetchone()
             if not cli:
                 return error("Falta el cliente.")
-            pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez, token) VALUES (?,?,?,?,?,?,?,?)",
+            pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez, token, forma_pago, mostrar_precios) VALUES (?,?,?,?,?,?,?,?,?,?)",
                               (core.ahora(), cli["id"], core.nombre_cliente(cli), json.dumps(items), r2(total), U(d.get("nota")) or None,
-                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16))).lastrowid
+                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16), " ".join(U(d.get("forma_pago")).split()) or None,
+                               1 if d.get("mostrar_precios") else 0)).lastrowid
         return jsonify(ok=True, id=pid)
 
     @app.route("/facturacion/presupuesto/<int:pid>")
@@ -942,7 +989,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         for i in items:
             cant = f"{i['cantidad']:g}"
             lineas.append(f"{cant} x {i['descripcion']}: {core.fmt_monto(i['total'])}")
-        lineas.append(f"TOTAL: {core.fmt_monto(p['total'])}")
+        lineas.append(f"TOTAL: {core.fmt_monto(p['total'])}" + (f" ({p['forma_pago']})" if p["forma_pago"] else ""))
         if p["validez"]:
             lineas.append(f"Válido hasta: {p['validez']}")
         lineas.append("Documento no válido como factura.")
@@ -950,7 +997,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             tok = asegurar_token(con, "presupuestos_doc", p)
         url = url_publica(g.cuenta["id"], tok)
         lineas.append(f"Descargue el PDF acá: {url}.pdf")
-        return render_template("facturacion/presupuesto_ver.html", p=p, items=items, cli=cli, marca=marca, fmt_fecha=core.fmt_fecha,
-                               wa=core.telefono_whatsapp(cli["telefono"]) if cli else "", texto="\n".join(lineas), url=url, logo=logo_uri(g.cuenta["id"]),
+        return render_template("facturacion/presupuesto_ver.html", p=p, items=items, cli=cli, pd=datos_presupuesto(g.cuenta["id"], p), fmt_fecha=core.fmt_fecha,
+                               wa=core.telefono_whatsapp(cli["telefono"]) if cli else "", texto="\n".join(lineas), url=url,
                                mail_cliente=(cli["mail"] if cli else "") or "", mail_ok=configurado(g.cuenta["id"]), tipo_doc="presupuesto",
                                asunto=f"Presupuesto N° {p['id']:04d} - {marca['nombre']}")

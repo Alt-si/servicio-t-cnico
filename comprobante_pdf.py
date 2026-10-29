@@ -153,35 +153,61 @@ def pdf_factura(f, emisor, items, tipos, letras, asoc=None, anuladora=None, qr_u
     return _construir(story, f"{tipos[f['tipo_cbte']]} {f['pto_vta']:04d}-{f['numero']:08d}")
 
 
-def pdf_presupuesto(p, items, nombre_comercio, logo_b64=""):
+def _monto_entero(v):
+    v = round(float(v), 2)
+    s = f"{v:,.0f}" if v == int(v) else f"{v:,.2f}"
+    return "$ " + s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def pdf_presupuesto(p, items, pd, logo_b64=""):
+    """Presupuesto con el formato del comercio: logo y fecha arriba, título con número, detalle, total con forma de pago, aviso y pie."""
     p = dict(p)
     story = []
     logo = _logo(logo_b64, alto=24 * mm)
-    if logo:
-        logo.hAlign = "CENTER"
-        story += [logo, Spacer(1, 4)]
-    story.append(_p(nombre_comercio, ParagraphStyle("gc", parent=GRANDE, alignment=1)))
-    story.append(Spacer(1, 4))
-    story.append(Table([[_p(f"PRESUPUESTO N° {p['id']:04d}", ParagraphStyle("pg", parent=GRANDE, alignment=1))]], colWidths=[80 * mm], hAlign="CENTER",
-                       style=[("BOX", (0, 0), (-1, -1), 1.5, colors.black), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-    story.append(Spacer(1, 4))
-    story.append(_p("DOCUMENTO NO VÁLIDO COMO FACTURA", ParagraphStyle("nv", parent=NEGRITA, alignment=1)))
-    story.append(Spacer(1, 10))
-    story.append(_p(f"Fecha: {_fecha(p['fecha'])}"))
+    cab = [[logo or "", _p(pd["fecha_larga"], DER)]]
+    story.append(Table(cab, colWidths=[ANCHO * 0.5, ANCHO * 0.5], style=[("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(Spacer(1, 14))
+    story.append(_p("PRESUPUESTO", ParagraphStyle("pg", parent=GRANDE, fontSize=17, alignment=1, leading=20)))
+    story.append(_p(f"N° {p['id']:04d}", CENTRO))
+    story.append(_p("DOCUMENTO NO VÁLIDO COMO FACTURA", ParagraphStyle("nv", parent=NEGRITA, fontSize=8.5, alignment=1)))
+    story.append(Spacer(1, 16))
     story.append(_pb(f"Cliente: <b>{escape(p['cliente_nombre'] or '')}</b>"))
-    story.append(Spacer(1, 8))
-    filas = [[_p("Descripción", NEGRITA)] + [_p(h, ParagraphStyle("h", parent=NEGRITA, alignment=2)) for h in ("Cant.", "Precio", "Subtotal")]]
+    story.append(Spacer(1, 10))
+    linea = ParagraphStyle("li", parent=NORMAL, fontSize=10.5, leading=17)
+    filas = []
     for i in items:
-        filas.append([_p(i["descripcion"]), _p(_cant(i["cantidad"]), DER), _p(_monto(i["precio"]), DER), _p(_monto(i["total"]), DER)])
-    story.append(Table(filas, colWidths=[ANCHO - 76 * mm, 20 * mm, 28 * mm, 28 * mm], repeatRows=1, style=[
-        ("LINEBELOW", (0, 0), (-1, 0), 1, colors.black), ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    story.append(Spacer(1, 8))
-    story.append(_pb(f"TOTAL: <b>{_monto(p['total'])}</b>", TOTAL))
-    story.append(Spacer(1, 8))
+        txt = (f"{_cant(i['cantidad'])} x " if float(i["cantidad"]) != 1 else "") + i["descripcion"]
+        filas.append([_p(txt, linea)] + ([_p(_monto_entero(i["total"]), ParagraphStyle("lr", parent=linea, alignment=2))] if pd["mostrar_precios"] else []))
+    story.append(Table(filas, colWidths=[ANCHO - 35 * mm, 35 * mm] if pd["mostrar_precios"] else [ANCHO], style=[("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0)]))
+    story.append(Spacer(1, 14))
+    total = f"TOTAL: {_monto_entero(p['total'])}.-" + (f" ({pd['forma_pago']})" if pd["forma_pago"] else "")
+    story.append(_p(total, ParagraphStyle("tt", parent=NORMAL, fontName="Helvetica-BoldOblique", fontSize=12.5, leading=16)))
     if p.get("validez"):
+        story.append(Spacer(1, 4))
         story.append(_p(f"Válido hasta: {p['validez']}"))
     if p.get("nota"):
+        story.append(Spacer(1, 4))
         story.append(_p(p["nota"]))
-    story.append(Spacer(1, 6))
-    story.append(_p("Documento no válido como factura.", ParagraphStyle("pie", parent=CHICO, alignment=1)))
-    return _construir(story, f"Presupuesto {p['id']:04d}")
+
+    def pie(canvas, doc):
+        canvas.saveState()
+        y = 14 * mm
+        izq = Paragraph("<br/>".join(escape(x) for x in pd["pie_izq"].split("\n")), ParagraphStyle("pi", parent=CHICO, textColor=colors.black))
+        der = Paragraph("<br/>".join(escape(x) for x in pd["pie_der"].split("\n")), ParagraphStyle("pd", parent=CHICO, textColor=colors.black, alignment=2))
+        t = Table([[izq, der]], colWidths=[ANCHO / 2, ANCHO / 2], style=[("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)])
+        w, h = t.wrap(ANCHO, 40 * mm)
+        t.drawOn(canvas, 15 * mm, y)
+        canvas.setStrokeColor(colors.HexColor("#444444"))
+        canvas.setLineWidth(2.2)
+        canvas.line(15 * mm, y + h + 3.5 * mm, 15 * mm + ANCHO, y + h + 3.5 * mm)
+        canvas.setLineWidth(0.6)
+        canvas.line(15 * mm, y + h + 2.2 * mm, 15 * mm + ANCHO, y + h + 2.2 * mm)
+        if pd["aviso"]:
+            av = Paragraph(escape(pd["aviso"].upper()), ParagraphStyle("av", parent=NORMAL, fontSize=9.5, leading=15))
+            aw, ah = av.wrap(ANCHO - 10 * mm, 40 * mm)
+            av.drawOn(canvas, 20 * mm, y + h + 10 * mm)
+        canvas.restoreState()
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm, topMargin=14 * mm, bottomMargin=48 * mm,
+                      title=f"Presupuesto {p['id']:04d}", author="").build(story, onFirstPage=pie, onLaterPages=pie)
+    return buf.getvalue()

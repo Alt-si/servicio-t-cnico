@@ -39,7 +39,7 @@ if ($f('#f-items')) {
   });
   $f('#p-guardar')?.addEventListener('click', async () => {
     mostrarErr('');
-    const j = await api('/api/facturacion/presupuesto', {cliente_id: FACT.cliente_id, items: leerRenglones(), validez: $f('#p-validez').value, nota: $f('#p-nota').value});
+    const j = await api('/api/facturacion/presupuesto', {cliente_id: FACT.cliente_id, items: leerRenglones(), validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
     if (j.ok) location = '/facturacion/presupuesto/' + j.id + '?nuevo=1'; else mostrarErr(j.error);
   });
 }

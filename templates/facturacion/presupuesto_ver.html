@@ -1,8 +1,15 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card hoja">
-  <div class="row no-print"><a class="btn" href="{{ url_for('facturacion') }}">← Comprobantes</a></div>
+  <div class="row no-print"><a class="btn" href="{{ url_for('facturacion') }}">← Comprobantes</a><button class="btn bad der" id="p-borrar" type="button">Eliminar presupuesto</button></div>
   {% include "facturacion/_enviar.html" %}
   {% include "facturacion/_presupuesto.html" %}
 </div>
 {% endblock %}
+{% block js %}<script>
+document.getElementById('p-borrar').onclick = async () => {
+  if (!await confirmar('¿Eliminar el presupuesto N° {{ '%04d' % p.id }}? Esto no se puede deshacer.')) return;
+  const j = await apiCodigo('/api/facturacion/presupuesto/{{ p.id }}/eliminar', {});
+  if (j.ok) location = '/facturacion'; else if (!j.cancelado) aviso(j.error);
+};
+</script>{% endblock %}

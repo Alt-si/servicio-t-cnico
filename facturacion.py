@@ -353,22 +353,33 @@ def enviar_mail(cid, destino, asunto, texto, html=None, adjuntos=()):
     for nombre_adj, datos_adj in adjuntos:
         msg.add_attachment(datos_adj, maintype="application", subtype="pdf", filename=nombre_adj)
     clave = core.leer_config(cid, "mail_clave")
-    try:
-        puerto = int(c["mail_port"])
-        if c["mail_seg"] == "ssl":
-            srv = smtplib.SMTP_SSL(c["mail_host"], puerto, timeout=25, context=ssl.create_default_context())
-        else:
-            srv = smtplib.SMTP(c["mail_host"], puerto, timeout=25)
-            if c["mail_seg"] == "starttls":
-                srv.starttls(context=ssl.create_default_context())
-        with srv:
-            if c["mail_user"] and clave:
-                srv.login(c["mail_user"], descifrar(clave))
-            srv.send_message(msg)
-    except smtplib.SMTPAuthenticationError:
-        raise AfipError("El servidor de mail rechazó el usuario o la contraseña. Si usás Gmail necesitás una «contraseña de aplicación».")
-    except (smtplib.SMTPException, OSError, ValueError) as e:
-        raise AfipError(f"No se pudo enviar el mail ({e}).")
+    puerto = int(c["mail_port"] or 465)
+    intentos = [(puerto, c["mail_seg"])]
+    alterna = (587, "starttls") if c["mail_seg"] == "ssl" else (465, "ssl") if c["mail_seg"] == "starttls" else None
+    if alterna and alterna[0] != puerto:
+        intentos.append(alterna)           # si el servidor corta la conexión, se prueba la otra forma habitual
+    ultimo = None
+    for pto, seg in intentos:
+        try:
+            if seg == "ssl":
+                srv = smtplib.SMTP_SSL(c["mail_host"], pto, timeout=25, context=ssl.create_default_context())
+            else:
+                srv = smtplib.SMTP(c["mail_host"], pto, timeout=25)
+                if seg == "starttls":
+                    srv.ehlo()
+                    srv.starttls(context=ssl.create_default_context())
+                    srv.ehlo()
+            with srv:
+                if c["mail_user"] and clave:
+                    srv.login(c["mail_user"], descifrar(clave))
+                srv.send_message(msg)
+            return
+        except smtplib.SMTPAuthenticationError:
+            raise AfipError("El servidor de mail rechazó el usuario o la contraseña. Si usás Gmail necesitás una «contraseña de aplicación» (no la común).")
+        except (smtplib.SMTPException, OSError, ValueError) as e:
+            ultimo = e
+    raise AfipError(f"No se pudo enviar el mail ({ultimo}). Se probó con los puertos {' y '.join(str(p) for p, _ in intentos)}. "
+                    "Si el error es de conexión, puede que el servidor donde está el sistema bloquee el envío de mails (SMTP).")
 
 
 def url_publica(cid, token):

@@ -9,6 +9,3 @@
 <p style="font-size:17px;font-weight:700;font-style:italic;margin:0 0 6px">TOTAL: $ {{ p.total|monto_input }}.-{% if pd.forma_pago %} ({{ pd.forma_pago }}){% endif %}</p>
 {% if p.validez %}<p style="margin:0 0 6px">Válido hasta: {{ p.validez }}</p>{% endif %}{% if p.nota %}<p style="margin:0 0 6px">{{ p.nota }}</p>{% endif %}
 {% if pd.aviso %}<p style="margin-top:60px;text-transform:uppercase">{{ pd.aviso }}</p>{% endif %}
-<div style="margin-top:40px;border-top:3px double var(--tx);padding-top:6px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 28px;font-size:12px">
-  <div style="white-space:pre-line">{{ pd.pie_izq }}</div>
-  {% for gr in pd.pie_grupos %}<div style="white-space:pre-line">{{ gr|join('\n') }}</div>{% endfor %}</div>

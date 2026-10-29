@@ -818,10 +818,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     @modulo_requerido("facturacion")
     def api_presupuesto_formato():
         cid = g.cuenta["id"]
-        for clave, campo in (("pres_localidad", "localidad"), ("pres_aviso", "aviso"), ("pres_pie_izq", "pie_izq")):
-            if campo:
-                core.guardar_config(cid, clave, (request.form.get(campo) or "").strip()[:600] or None)
-        core.guardar_config(cid, "pres_pie_der", (request.form.get("pie_der") or "").strip()[:600] or None)
+        for clave, campo in (("pres_localidad", "localidad"), ("pres_aviso", "aviso")):
+            core.guardar_config(cid, clave, (request.form.get(campo) or "").strip()[:600] or None)
         from flask import flash
         flash("Formato del presupuesto guardado.", "ok")
         return redirect(url_for("configuracion") + "#presupuesto")
@@ -917,23 +915,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
     def datos_presupuesto(cid, p):
-        """Todo lo que el presupuesto muestra además de sus renglones: fecha larga, aviso, pie de página, logo."""
+        """Todo lo que el presupuesto muestra además de sus renglones: fecha larga, aviso y logo."""
         d = core.parse_fecha(p["fecha"])
         fecha = f"{d.day} de {MESES[d.month - 1]} de {d.year}" if d else core.fmt_fecha(p["fecha"])
         localidad = (core.leer_config(cid, "pres_localidad") or "").strip()
-        marca = core.marca(cid)
-        izq = (core.leer_config(cid, "pres_pie_izq") or "").strip()
-        der = (core.leer_config(cid, "pres_pie_der") or "").strip()
-        if not der:
-            with core.conectar(cid) as con:
-                der = "\n\n".join(f"{c['razon_social']}\n{c['cuit'][:2]}-{c['cuit'][2:10]}-{c['cuit'][10:]}"
-                                 for c in con.execute("SELECT razon_social, cuit FROM afip_cuentas ORDER BY id"))
-        grupos = [g_.strip().split("\n") for g_ in re.split(r"\n\s*\n", der.strip()) if g_.strip()]
-        if len(grupos) == 1 and len(grupos[0]) > 2 and len(grupos[0]) % 2 == 0:      # sin líneas en blanco: de a pares (nombre, CUIT)
-            grupos = [grupos[0][i:i + 2] for i in range(0, len(grupos[0]), 2)]
-        return {"pie_grupos": [[x.strip() for x in g_] for g_ in grupos], "fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
-                "pie_izq": izq or marca["nombre"], "pie_der": der, "marca": marca, "logo": logo_uri(cid),
-                "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"])}
+        return {"fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
+                "marca": core.marca(cid), "logo": logo_uri(cid), "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"])}
 
     @app.route("/api/facturacion/presupuesto/<int:pid>/eliminar", methods=["POST"])
     @login_requerido

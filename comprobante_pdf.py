@@ -189,27 +189,13 @@ def pdf_presupuesto(p, items, pd, logo_b64=""):
         story.append(_p(p["nota"]))
 
     def pie(canvas, doc):
-        canvas.saveState()
-        y = 14 * mm
-        est = ParagraphStyle("pi", parent=CHICO, textColor=colors.black)
-        bloques = [pd["pie_izq"].split("\n")] + [g_ for g_ in pd["pie_grupos"]]
-        celdas = [Paragraph("<br/>".join(escape(x) for x in b_), est) for b_ in bloques]
-        n = len(celdas)
-        anchos = [ANCHO * 0.34] + [ANCHO * 0.66 / max(n - 1, 1)] * (n - 1) if n > 1 else [ANCHO]
-        t = Table([celdas], colWidths=anchos, style=[("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 4)])
-        w, h = t.wrap(ANCHO, 40 * mm)
-        t.drawOn(canvas, 15 * mm, y)
-        canvas.setStrokeColor(colors.HexColor("#444444"))
-        canvas.setLineWidth(2.2)
-        canvas.line(15 * mm, y + h + 3.5 * mm, 15 * mm + ANCHO, y + h + 3.5 * mm)
-        canvas.setLineWidth(0.6)
-        canvas.line(15 * mm, y + h + 2.2 * mm, 15 * mm + ANCHO, y + h + 2.2 * mm)
         if pd["aviso"]:
+            canvas.saveState()
             av = Paragraph(escape(pd["aviso"].upper()), ParagraphStyle("av", parent=NORMAL, fontSize=9.5, leading=15))
-            aw, ah = av.wrap(ANCHO - 10 * mm, 40 * mm)
-            av.drawOn(canvas, 20 * mm, y + h + 10 * mm)
-        canvas.restoreState()
+            av.wrap(ANCHO - 10 * mm, 40 * mm)
+            av.drawOn(canvas, 20 * mm, 22 * mm)
+            canvas.restoreState()
     buf = io.BytesIO()
-    SimpleDocTemplate(buf, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm, topMargin=14 * mm, bottomMargin=48 * mm,
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm, topMargin=14 * mm, bottomMargin=40 * mm,
                       title=f"Presupuesto {p['id']:04d}", author="").build(story, onFirstPage=pie, onLaterPages=pie)
     return buf.getvalue()

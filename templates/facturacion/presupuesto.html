@@ -4,11 +4,15 @@
   <div class="row"><h1 style="margin:0">Presupuesto para {{ cliente|nombre_cliente }}</h1><a class="btn der" href="{{ url_for('clientes') }}">← Volver</a></div>
   <p class="mut">Documento <b>no válido como factura</b>. Sirve para enviarle al cliente el detalle y el valor de lo presupuestado.</p>
   <div id="err" class="msg error" style="display:none"></div>
-  <div class="tabla-wrap"><table><thead><tr><th>Descripción</th><th style="width:90px">Cant.</th><th style="width:130px">Precio unit.</th><th style="width:120px;text-align:right">Subtotal</th><th style="width:40px"></th></tr></thead><tbody id="f-items"></tbody></table></div>
+  <style>.modo-total th:nth-child(2),.modo-total td:nth-child(2),.modo-total th:nth-child(3),.modo-total td:nth-child(3),.modo-total th:nth-child(4),.modo-total td:nth-child(4){display:none}</style>
+  <div class="row" style="margin-bottom:8px"><label style="margin:0">Cómo se cotiza:</label>
+    <select id="p-modo"><option value="items">Precio unitario por renglón (se suma el total)</option><option value="total">Un solo valor total</option></select></div>
+  <div class="tabla-wrap"><table id="p-tabla"><thead><tr><th>Descripción</th><th style="width:90px">Cant.</th><th style="width:130px">Precio unit.</th><th style="width:120px;text-align:right">Subtotal</th><th style="width:40px"></th></tr></thead><tbody id="f-items"></tbody></table></div>
   <p><button class="btn" type="button" id="f-mas">＋ Agregar renglón</button></p>
-  <div style="font-size:22px;text-align:right">Total: <b id="f-total">$ 0</b></div>
+  <div id="tot-calc" style="font-size:22px;text-align:right">Total: <b id="f-total">$ 0</b></div>
+  <div id="tot-fijo" style="display:none;text-align:right"><label>Valor total</label><input id="p-total" class="moneda" inputmode="decimal" placeholder="Ej.: 1.080.000" style="max-width:220px;margin-left:auto;text-align:right"></div>
   <div class="grid"><div><label>Forma de pago</label><input id="p-forma" list="p-formas" value="Contado" placeholder="Contado, transferencia…"><datalist id="p-formas"><option>Contado</option><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option><option>Billetera virtual</option></datalist></div>
-    <label class="modulo" style="align-self:end"><input type="checkbox" id="p-precios"><span>Mostrar el precio de cada renglón (si no, solo el total)</span></label></div>
+    <label class="modulo" style="align-self:end" id="p-precios-l"><input type="checkbox" id="p-precios"><span>Mostrar el precio de cada renglón (si no, solo el total)</span></label></div>
   <div class="grid"><div><label>Válido hasta (opcional)</label><input id="p-validez" placeholder="Ej.: 15 días / 30/11/2026"></div><div><label>Nota (opcional)</label><input id="p-nota" class="mayus"></div></div>
   <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">Generar presupuesto</button></div>
 </div>

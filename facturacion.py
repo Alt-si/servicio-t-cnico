@@ -940,7 +940,22 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     def api_presupuesto_doc():
         d = request.get_json(force=True, silent=True) or {}
         items, total = [], 0.0
-        for it in d.get("items") or []:
+        unico = (str(d.get("total_unico") or "")).strip()
+        if unico:      # un solo valor total: los renglones son solo descripciones
+            try:
+                total = core.parse_monto(unico)
+            except ValueError:
+                total = None
+            if not total or total <= 0:
+                return error("Escribí el valor total del presupuesto.")
+            for it in d.get("items") or []:
+                desc = " ".join(U(it.get("descripcion")).split())
+                if desc:
+                    items.append({"descripcion": desc, "cantidad": 1, "precio": 0, "total": 0})
+            if not items:
+                return error("Agregá al menos un renglón con la descripción.")
+            d["mostrar_precios"] = False
+        for it in ([] if unico else d.get("items") or []):
             desc = " ".join(U(it.get("descripcion")).split())
             try:
                 cant, precio = core.parse_monto(it.get("cantidad")), core.parse_monto(it.get("precio"))
@@ -978,7 +993,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         lineas = [f"Hola, {nombre_pila}, en {marca['nombre']} le enviamos el presupuesto N° {p['id']:04d}"]
         for i in items:
             cant = f"{i['cantidad']:g}"
-            lineas.append(f"{cant} x {i['descripcion']}: {core.fmt_monto(i['total'])}")
+            lineas.append(f"{cant} x {i['descripcion']}: {core.fmt_monto(i['total'])}" if i["total"] else i["descripcion"])
         lineas.append(f"TOTAL: {core.fmt_monto(p['total'])}" + (f" ({p['forma_pago']})" if p["forma_pago"] else ""))
         if p["validez"]:
             lineas.append(f"Válido hasta: {p['validez']}")

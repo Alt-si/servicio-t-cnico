@@ -37,9 +37,15 @@ if ($f('#f-items')) {
     if (j.ok) { location = '/facturacion/comprobante/' + j.id + '?nuevo=1'; return; }
     b.disabled = false; b.textContent = 'Reintentar'; mostrarErr(j.error);
   });
+  $f('#p-modo')?.addEventListener('change', () => {
+    const t = $f('#p-modo').value === 'total';
+    $f('#p-tabla').classList.toggle('modo-total', t);
+    $f('#tot-calc').style.display = t ? 'none' : ''; $f('#tot-fijo').style.display = t ? '' : 'none'; $f('#p-precios-l').style.display = t ? 'none' : '';
+  });
   $f('#p-guardar')?.addEventListener('click', async () => {
     mostrarErr('');
-    const j = await api('/api/facturacion/presupuesto', {cliente_id: FACT.cliente_id, items: leerRenglones(), validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
+    const unico = $f('#p-modo').value === 'total';
+    const j = await api('/api/facturacion/presupuesto', {cliente_id: FACT.cliente_id, items: leerRenglones(), total_unico: unico ? $f('#p-total').value : '', validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
     if (j.ok) location = '/facturacion/presupuesto/' + j.id + '?nuevo=1'; else mostrarErr(j.error);
   });
 }

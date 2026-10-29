@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card hoja">
-  <div class="row no-print"><a class="btn" href="{{ url_for('facturacion') }}">← Comprobantes</a><button class="btn bad der" id="p-borrar" type="button">Eliminar presupuesto</button></div>
+  <div class="row no-print"><a class="btn" href="{{ url_for('facturacion') }}">← Comprobantes</a><a class="btn der" href="{{ url_for('presupuesto_editar', pid=p.id) }}">Editar</a><button class="btn bad" id="p-borrar" type="button">Eliminar presupuesto</button></div>
   {% include "facturacion/_enviar.html" %}
   {% include "facturacion/_presupuesto.html" %}
 </div>

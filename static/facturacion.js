@@ -27,7 +27,8 @@ function leerRenglones() {
 function mostrarErr(t) { const e = $f('#err'); e.textContent = t; e.style.display = t ? 'block' : 'none'; if (t) scrollTo(0, 0); }
 
 if ($f('#f-items')) {
-  renglon(); $f('#f-mas').onclick = () => renglon();
+  if (FACT.edit && FACT.edit.items.length) FACT.edit.items.forEach(i => renglon(i)); else renglon();
+  $f('#f-mas').onclick = () => renglon();
   $f('#f-concepto')?.addEventListener('change', () => { $f('#f-serv').style.display = $f('#f-concepto').value === '1' ? 'none' : ''; });
   $f('#f-emitir')?.addEventListener('click', async () => {
     mostrarErr('');
@@ -45,7 +46,14 @@ if ($f('#f-items')) {
   $f('#p-guardar')?.addEventListener('click', async () => {
     mostrarErr('');
     const unico = $f('#p-modo').value === 'total';
-    const j = await api('/api/facturacion/presupuesto', {cliente_id: FACT.cliente_id, items: leerRenglones(), total_unico: unico ? $f('#p-total').value : '', validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
-    if (j.ok) location = '/facturacion/presupuesto/' + j.id + '?nuevo=1'; else mostrarErr(j.error);
+    const j = await api('/api/facturacion/presupuesto', {id: FACT.edit?.id, cliente_id: FACT.cliente_id, items: leerRenglones(), total_unico: unico ? $f('#p-total').value : '', validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
+    if (j.ok) location = '/facturacion/presupuesto/' + j.id + (FACT.edit ? '' : '?nuevo=1'); else mostrarErr(j.error);
   });
+}
+
+// Edición de un presupuesto: carga los datos guardados
+if (FACT.edit) {
+  const e = FACT.edit;
+  $f('#p-forma').value = e.forma_pago; $f('#p-precios').checked = e.mostrar_precios; $f('#p-validez').value = e.validez; $f('#p-nota').value = e.nota;
+  if (e.modo === 'total') { $f('#p-modo').value = 'total'; $f('#p-total').value = String(e.total).replace('.', ','); $f('#p-modo').dispatchEvent(new Event('change')); }
 }

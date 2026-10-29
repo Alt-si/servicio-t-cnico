@@ -922,6 +922,20 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         return {"fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
                 "marca": core.marca(cid), "logo": logo_uri(cid), "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"])}
 
+    @app.route("/facturacion/presupuesto/<int:pid>/editar")
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def presupuesto_editar(pid):
+        with db() as con:
+            p = con.execute("SELECT * FROM presupuestos_doc WHERE id=?", (pid,)).fetchone()
+            if not p:
+                abort(404)
+            cliente = con.execute("SELECT * FROM clientes WHERE id=?", (p["cliente_id"],)).fetchone()
+        items = json.loads(p["items"])
+        edit = {"id": p["id"], "items": items, "modo": "total" if items and all(not i.get("total") for i in items) else "items", "total": p["total"],
+                "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"]), "validez": p["validez"] or "", "nota": p["nota"] or ""}
+        return render_template("facturacion/presupuesto.html", cliente=cliente or {"id": p["cliente_id"], "nombre": p["cliente_nombre"], "apellido": ""}, edit=edit, p=p)
+
     @app.route("/api/facturacion/presupuesto/<int:pid>/eliminar", methods=["POST"])
     @login_requerido
     @modulo_requerido("facturacion")
@@ -968,14 +982,22 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             items.append({"descripcion": desc, "cantidad": cant, "precio": precio, "total": sub})
         if not items:
             return error("Agregá al menos un renglón.")
+        forma = " ".join(U(d.get("forma_pago")).split()) or None
         with db() as con:
+            if d.get("id"):                       # edición de un presupuesto existente: conserva número, fecha y enlace
+                pid = d.get("id")
+                if not con.execute("SELECT 1 FROM presupuestos_doc WHERE id=?", (pid,)).fetchone():
+                    return error("No existe el presupuesto.", 404)
+                con.execute("UPDATE presupuestos_doc SET items=?, total=?, nota=?, validez=?, forma_pago=?, mostrar_precios=? WHERE id=?",
+                            (json.dumps(items), r2(total), U(d.get("nota")) or None, (d.get("validez") or "").strip() or None, forma,
+                             1 if d.get("mostrar_precios") else 0, pid))
+                return jsonify(ok=True, id=pid)
             cli = con.execute("SELECT * FROM clientes WHERE id=?", (d.get("cliente_id"),)).fetchone()
             if not cli:
                 return error("Falta el cliente.")
             pid = con.execute("INSERT INTO presupuestos_doc (fecha, cliente_id, cliente_nombre, items, total, nota, validez, token, forma_pago, mostrar_precios) VALUES (?,?,?,?,?,?,?,?,?,?)",
                               (core.ahora(), cli["id"], core.nombre_cliente(cli), json.dumps(items), r2(total), U(d.get("nota")) or None,
-                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16), " ".join(U(d.get("forma_pago")).split()) or None,
-                               1 if d.get("mostrar_precios") else 0)).lastrowid
+                               (d.get("validez") or "").strip() or None, secrets.token_urlsafe(16), forma, 1 if d.get("mostrar_precios") else 0)).lastrowid
         return jsonify(ok=True, id=pid)
 
     @app.route("/facturacion/presupuesto/<int:pid>")

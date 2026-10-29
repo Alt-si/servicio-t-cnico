@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">Presupuesto para {{ cliente|nombre_cliente }}</h1><a class="btn der" href="{{ url_for('clientes') }}">← Volver</a></div>
+  <div class="row"><h1 style="margin:0">{% if edit %}Editar presupuesto N° {{ '%04d' % p.id }} · {{ p.cliente_nombre }}{% else %}Presupuesto para {{ cliente|nombre_cliente }}{% endif %}</h1><a class="btn der" href="{{ url_for('presupuesto_ver', pid=p.id) if edit else url_for('clientes') }}">← Volver</a></div>
   <p class="mut">Documento <b>no válido como factura</b>. Sirve para enviarle al cliente el detalle y el valor de lo presupuestado.</p>
   <div id="err" class="msg error" style="display:none"></div>
   <style>.modo-total th:nth-child(2),.modo-total td:nth-child(2),.modo-total th:nth-child(3),.modo-total td:nth-child(3),.modo-total th:nth-child(4),.modo-total td:nth-child(4){display:none}</style>
@@ -14,8 +14,8 @@
   <div class="grid"><div><label>Forma de pago</label><input id="p-forma" list="p-formas" value="Contado" placeholder="Contado, transferencia…"><datalist id="p-formas"><option>Contado</option><option>Efectivo</option><option>Transferencia</option><option>Débito</option><option>Crédito</option><option>Billetera virtual</option></datalist></div>
     <label class="modulo" style="align-self:end" id="p-precios-l"><input type="checkbox" id="p-precios"><span>Mostrar el precio de cada renglón (si no, solo el total)</span></label></div>
   <div class="grid"><div><label>Válido hasta (opcional)</label><input id="p-validez" placeholder="Ej.: 15 días / 30/11/2026"></div><div><label>Nota (opcional)</label><input id="p-nota" class="mayus"></div></div>
-  <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">Generar presupuesto</button></div>
+  <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">{{ "Guardar cambios" if edit else "Generar presupuesto" }}</button></div>
 </div>
 {% endblock %}
-{% block js %}<script>const FACT = {{ {'cliente_id': cliente.id, 'ri': False, 'presupuesto': True} | tojson }};</script>
+{% block js %}<script>const FACT = {{ {'cliente_id': cliente.id, 'ri': False, 'presupuesto': True, 'edit': edit|default(none)} | tojson }};</script>
 <script src="{{ url_for('static', filename='facturacion.js') }}"></script>{% endblock %}

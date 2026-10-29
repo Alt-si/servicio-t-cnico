@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card"><div class="row"><h1 style="margin:0">Facturar a {{ cliente|nombre_cliente }}</h1><a class="btn der" href="{{ url_for('clientes') }}">← Volver</a></div>
+{% if not cuentas %}
+  <div class="msg error" style="margin-top:10px">No hay ninguna cuenta de AFIP configurada. Cargá una en <a href="{{ url_for('configuracion') }}#afip">Configuración → Facturación</a> para poder facturar.</div>
+  <p>Mientras tanto podés enviar un presupuesto que <b>no vale como factura</b>:</p>
+  <a class="btn pri" href="{{ url_for('presupuesto_nuevo', cliente=cliente.id) }}">Presupuesto no válido como factura</a>
+{% else %}
+  <h2>¿Con qué cuenta de AFIP querés facturar?</h2>
+  <div class="grid">{% for c in cuentas %}<a class="btn" style="padding:16px;text-align:left;display:block" href="{{ url_for('factura_nueva', cliente=cliente.id, cuenta=c.id) }}">
+    <b>{{ c.nombre }}</b><br><span class="mut">{{ c.razon_social }} · CUIT {{ c.cuit }}<br>{{ c.condicion_iva }} · Punto de venta {{ c.punto_venta }}{% if c.ambiente=='homologacion' %} · <b>PRUEBAS</b>{% endif %}</span></a>{% endfor %}</div>
+{% endif %}</div>
+{% endblock %}

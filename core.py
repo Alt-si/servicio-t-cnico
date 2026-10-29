@@ -229,6 +229,7 @@ MODULOS = {
     "ordenes": ("Órdenes de reparación", "Ingreso de equipos, presupuestos, estados, avisos por WhatsApp e historial. Requiere Clientes."),
     "stock": ("Control de stock", "Inventario de productos: rubros, marcas y unidades editables, ingresos, egresos y alertas de stock bajo."),
     "ventas": ("Ventas", "Caja simple: código de barras o buscador, descuenta stock y registra la forma de pago. Requiere Control de stock."),
+    "facturacion": ("Facturación (AFIP)", "Facturas electrónicas con una o varias cuentas de AFIP y presupuestos no válidos como factura. Botón «Facturar» en la agenda de clientes. Requiere Clientes."),
     "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
     "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
 }
@@ -238,7 +239,7 @@ MODULOS_INICIALES = ["clientes", "ordenes", "recordatorios", "respaldo"]
 MODULOS_FUTUROS = {
     "contabilidad": ("Contabilidad", "Ingresos, egresos y resultados."),
 }
-DEPENDENCIAS = {"ordenes": ["clientes"], "ventas": ["stock"]}      # una sección que necesita a otra
+DEPENDENCIAS = {"ordenes": ["clientes"], "ventas": ["stock"], "facturacion": ["clientes"]}      # una sección que necesita a otra
 
 
 def modulos_de(cuenta):
@@ -507,7 +508,7 @@ def importar_base(cuenta_id, ruta):
                 filas = src.execute(f"SELECT {','.join(cols)} FROM {tabla}").fetchall()
                 dst.executemany(f"INSERT INTO {tabla} ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})", filas)
                 resumen[tabla] = len(filas)
-            for tabla in ("tecnicos", "stock_categorias", "stock_marcas", "stock_unidades", "stock_formas_pago", "stock_productos", "stock_movimientos", "ventas", "venta_items"):
+            for tabla in ("tecnicos", "stock_categorias", "stock_marcas", "stock_unidades", "stock_formas_pago", "stock_productos", "stock_movimientos", "ventas", "venta_items", "afip_cuentas", "facturas", "presupuestos_doc"):
                 if tabla in tablas:                      # respaldo con stock: se reemplaza el stock actual
                     dst.execute(f"DELETE FROM {tabla}")
                     cols_d = [r[1] for r in dst.execute(f"PRAGMA table_info({tabla})")]

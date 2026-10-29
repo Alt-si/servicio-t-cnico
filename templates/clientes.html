@@ -14,6 +14,7 @@
       <td>{{ c.condicion_iva or 'Consumidor Final' }}</td><td class="ocu">{{ c.cuit or '' }}</td>
       <td style="white-space:nowrap">
         <a class="btn pri" href="{{ url_for('cliente_ver', cid=c.id) }}">Ver</a>
+        {% if 'facturacion' in modulos %}<a class="btn" href="{{ url_for('factura_nueva', cliente=c.id) }}">Facturar</a>{% endif %}
         {% if 'ordenes' in modulos %}<a class="btn" href="{{ url_for('orden_nueva', cliente=c.id) }}">Nueva orden</a>
         <button class="btn" onclick='historial({{ c.id }})'>Historial</button>{% endif %}
         <button class="btn" onclick='clienteForm({{ c|tojson_cliente }})'>Editar</button></td></tr>

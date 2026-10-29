@@ -80,6 +80,21 @@ async function tecBorrar(id, nombre, usos) {
 </div>
 {% endif %}
 
+{% if 'facturacion' in modulos %}
+<div class="card" id="afip"><div class="row"><h1 style="margin:0">Facturación: cuentas de AFIP</h1><button class="btn pri der" onclick="afipCuenta()">+ Agregar cuenta</button></div>
+  <p class="mut">Cargá una o varias cuentas (CUIT) de AFIP/ARCA. Con una sola cuenta, «Facturar» factura directo; con varias, te deja elegir con cuál. Empezá en modo <b>Pruebas</b> y pasá a Producción cuando verifiques que todo sale bien.</p>
+  <div class="tabla-wrap"><table><tbody class="clientes">
+  {% for c in afip_cuentas() %}<tr><td><b>{{ c.nombre }}</b><div class="mut" style="font-size:12px">{{ c.razon_social }} · CUIT {{ c.cuit }} · {{ c.condicion_iva }} · PV {{ c.punto_venta }}</div></td>
+    <td>{% if c.ambiente=='homologacion' %}<span class="pill" style="background:#6b7280;color:#fff">PRUEBAS</span>{% else %}<span class="pill" style="background:#15803d;color:#fff">PRODUCCIÓN</span>{% endif %}
+      {% if c.tiene_cert %}<span class="pill" style="background:#bbf7d0;color:#166534">Certificado ✔{% if c.cert_vence %} (vence {{ c.cert_vence[8:10] }}/{{ c.cert_vence[5:7] }}/{{ c.cert_vence[:4] }}){% endif %}</span>{% else %}<span class="pill" style="background:#fecaca;color:#7f1d1d">Falta certificado</span>{% endif %}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='afipCert({{ c|tojson }})'>Certificado</button>
+      <button class="btn" onclick="afipProbar({{ c.id }})">Probar conexión</button>
+      <button class="btn" onclick='afipCuenta({{ c|tojson }})'>Editar</button>
+      <button class="btn" onclick='afipBorrar({{ c.id }}, {{ c.nombre|tojson }})'>Borrar</button></td></tr>
+  {% else %}<tr><td class="mut">Todavía no hay cuentas de AFIP.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endif %}
+
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>
   <p class="mut">Descargá una copia de toda tu información (clientes, equipos, órdenes e historial). Guardala en un lugar seguro.</p>
   <p><a class="btn pri" href="{{ url_for('respaldo') }}">Respaldar base de datos</a></p>
@@ -109,7 +124,7 @@ async function tecBorrar(id, nombre, usos) {
   <p><button class="btn pri" id="k-ok">Cambiar clave</button></p>
 </div>
 {% endblock %}
-{% block js %}<script>
+{% block js %}{% if 'facturacion' in modulos %}<script src="{{ url_for('static', filename='afip.js') }}"></script>{% endif %}<script>
 const msg=(id,t,ok)=>{const e=document.getElementById(id);e.textContent=t;e.className='msg '+(ok?'ok':'error');e.style.display='block'};
 document.getElementById('c-ok').onclick=async()=>{
   const j=await api('/api/codigo/cambiar',{actual:$('#c-act').value,nuevo:$('#c-nue').value,repetir:$('#c-rep').value,mail:$('#c-mail')?.value});

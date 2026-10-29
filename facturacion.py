@@ -13,8 +13,9 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from xml.sax.saxutils import escape
 
-from flask import abort, current_app, g, jsonify, redirect, render_template, request, url_for
+from flask import Response, abort, current_app, g, jsonify, redirect, render_template, request, url_for
 
+import comprobante_pdf
 import core
 
 # ------------------------------------------------------------------ constantes AFIP
@@ -327,7 +328,7 @@ def configurado(cid):
     return bool(c["mail_host"] and c["mail_port"] and c["mail_remitente"])
 
 
-def enviar_mail(cid, destino, asunto, texto, html=None):
+def enviar_mail(cid, destino, asunto, texto, html=None, adjuntos=()):
     c = mail_config(cid)
     if not (c["mail_host"] and c["mail_port"] and c["mail_remitente"]):
         raise AfipError("Todavía no configuraste el envío de mails. Hacelo en Configuración → Envío de mails.")
@@ -338,6 +339,8 @@ def enviar_mail(cid, destino, asunto, texto, html=None):
     msg.set_content(texto)
     if html:
         msg.add_alternative(html, subtype="html")
+    for nombre_adj, datos_adj in adjuntos:
+        msg.add_attachment(datos_adj, maintype="application", subtype="pdf", filename=nombre_adj)
     clave = core.leer_config(cid, "mail_clave")
     try:
         puerto = int(c["mail_port"])
@@ -387,6 +390,7 @@ def crear_tablas(con):
             con.execute(f"ALTER TABLE {tabla} ADD COLUMN {col} {tipo}")
     for col, tipo in (("token", "TEXT"), ("anulada_por", "INTEGER"), ("asociado_id", "INTEGER"), ("serv_desde", "TEXT"), ("serv_hasta", "TEXT"), ("vto_pago", "TEXT")):
         agregar("facturas", col, tipo)
+    agregar("afip_cuentas", "nombre_fantasia", "TEXT")
     agregar("presupuestos_doc", "token", "TEXT")
 
 
@@ -399,7 +403,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         return {"id": c["id"], "nombre": c["nombre"], "cuit": c["cuit"], "razon_social": c["razon_social"], "condicion_iva": c["condicion_iva"],
                 "punto_venta": c["punto_venta"], "ambiente": c["ambiente"], "domicilio": c["domicilio"] or "", "ingresos_brutos": c["ingresos_brutos"] or "",
                 "inicio_actividades": c["inicio_actividades"] or "", "tiene_clave": bool(c["clave_cifrada"]), "tiene_cert": bool(c["certificado"]),
-                "csr": c["csr"] or "", "cert_vence": c["cert_vence"] or ""}
+                "nombre_fantasia": c["nombre_fantasia"] or "", "csr": c["csr"] or "", "cert_vence": c["cert_vence"] or ""}
 
     app.jinja_env.globals["afip_cuentas"] = lambda: [publico(c) for c in cuentas(db())]
     app.jinja_env.globals["mail_cfg"] = lambda: mail_config(g.cuenta["id"])
@@ -440,18 +444,18 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if not 1 <= pv <= 99999:
             return error("El punto de venta tiene que ser un número entre 1 y 99999.")
         campos = (nombre, cuit, razon, cond, pv, amb, (d.get("domicilio") or "").strip(), (d.get("ingresos_brutos") or "").strip(),
-                  (d.get("inicio_actividades") or "").strip())
+                  (d.get("inicio_actividades") or "").strip(), " ".join(U(d.get("nombre_fantasia")).split()))
         with db() as con:
             cid = d.get("id")
             if cid:
                 if not con.execute("SELECT 1 FROM afip_cuentas WHERE id=?", (cid,)).fetchone():
                     return error("No existe la cuenta.", 404)
                 con.execute("UPDATE afip_cuentas SET nombre=?, cuit=?, razon_social=?, condicion_iva=?, punto_venta=?, ambiente=?, domicilio=?, "
-                            "ingresos_brutos=?, inicio_actividades=? WHERE id=?", campos + (cid,))
+                            "ingresos_brutos=?, inicio_actividades=?, nombre_fantasia=? WHERE id=?", campos + (cid,))
                 con.execute("DELETE FROM afip_tokens WHERE cuenta_id=?", (cid,))
             else:
                 cid = con.execute("INSERT INTO afip_cuentas (nombre, cuit, razon_social, condicion_iva, punto_venta, ambiente, domicilio, ingresos_brutos, "
-                                  "inicio_actividades) VALUES (?,?,?,?,?,?,?,?,?)", campos).lastrowid
+                                  "inicio_actividades, nombre_fantasia) VALUES (?,?,?,?,?,?,?,?,?,?)", campos).lastrowid
         return jsonify(ok=True, id=cid)
 
     @app.route("/api/afip/cuenta/<int:cid>/eliminar", methods=["POST"])
@@ -603,7 +607,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             except (KeyError, ValueError):
                 return error("Revisá los datos del comprobante.")
             emisor = {"razon_social": c["razon_social"], "cuit": c["cuit"], "condicion_iva": c["condicion_iva"], "domicilio": c["domicilio"],
-                      "ingresos_brutos": c["ingresos_brutos"], "inicio_actividades": c["inicio_actividades"]}
+                      "ingresos_brutos": c["ingresos_brutos"], "inicio_actividades": c["inicio_actividades"], "nombre_fantasia": c["nombre_fantasia"] or ""}
             fid = con.execute(
                 "INSERT INTO facturas (fecha, cuenta_id, cuenta_nombre, emisor_json, cliente_id, receptor_nombre, receptor_doc_tipo, receptor_doc, receptor_condicion, "
                 "receptor_domicilio, tipo_cbte, pto_vta, numero, concepto, items, neto, iva, total, cae, cae_vto, observaciones, ambiente, forma_pago, "
@@ -620,6 +624,18 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         tok = secrets.token_urlsafe(16)
         con.execute(f"UPDATE {tabla} SET token=? WHERE id=?", (tok, fila["id"]))
         return tok
+
+    def pdf_de(con, tabla, fila):
+        """(nombre de archivo, bytes) del PDF de una factura/nota de crédito o de un presupuesto."""
+        cid = g.cuenta["id"]
+        logo = core.leer_config(cid, "fact_logo") or core.leer_config(cid, "marca_logo") or ""
+        if tabla == "facturas":
+            ctx = contexto_factura(con, fila)
+            datos = comprobante_pdf.pdf_factura(fila, ctx["emisor"], ctx["items"], TIPOS_CBTE, LETRA, asoc=ctx["asoc"], anuladora=ctx["anuladora"],
+                                                qr_url=ctx["qr_url"], logo_b64=logo)
+            return f"{TIPOS_CBTE[fila['tipo_cbte']]} {fila['pto_vta']:04d}-{fila['numero']:08d}.pdf".replace(" ", "_"), datos
+        datos = comprobante_pdf.pdf_presupuesto(fila, json.loads(fila["items"]), core.marca(cid)["nombre"], logo_b64=logo)
+        return f"Presupuesto_{fila['id']:04d}.pdf", datos
 
     def contexto_factura(con, f):
         emisor = json.loads(f["emisor_json"] or "{}")
@@ -648,7 +664,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         marca = core.marca(cid)
         numero = f"{f['pto_vta']:04d}-{f['numero']:08d}"
         texto = (f"Hola, {nombre}, en {marca['nombre']} le enviamos su {TIPOS_CBTE[f['tipo_cbte']]} N° {numero}\n"
-                 f"Total: {core.fmt_monto(f['total'])}\nPuede verla e imprimirla acá: {url}")
+                 f"Total: {core.fmt_monto(f['total'])}\nDescargue el PDF acá: {url}.pdf")
         return render_template("facturacion/comprobante.html", **ctx, url=url, texto=texto, wa=core.telefono_whatsapp(cli["telefono"]) if cli else "",
                                mail_cliente=(cli["mail"] if cli else "") or "", mail_ok=configurado(cid), asunto=f"{TIPOS_CBTE[f['tipo_cbte']]} N° {numero} - {marca['nombre']}",
                                puede_anular=bool(f["tipo_cbte"] in NC_DE and not f["anulada_por"] and f["cae"]), tipo_doc="factura")
@@ -660,8 +676,18 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if not cuenta or not cuenta["activa"] or "facturacion" not in core.modulos_de(cuenta):
             abort(404)
         g.cuenta = cuenta
+        quiere_pdf = token.endswith(".pdf")
+        token = token[:-4] if quiere_pdf else token
         with core.conectar(cid) as con:
             f = con.execute("SELECT * FROM facturas WHERE token=?", (token,)).fetchone() if token else None
+            if quiere_pdf:
+                fila, tabla = (f, "facturas") if f else (con.execute("SELECT * FROM presupuestos_doc WHERE token=?", (token,)).fetchone() if token else None, "presupuestos_doc")
+                if not fila:
+                    abort(404)
+                nombre, datos = pdf_de(con, tabla, fila)
+                r = Response(datos, mimetype="application/pdf")
+                r.headers["Content-Disposition"] = f'inline; filename="{nombre}"'
+                return r
             if f:
                 ctx = contexto_factura(con, f)
                 ctx["logo"] = logo_uri(cid)
@@ -786,14 +812,16 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if not fila:
                 return error("No existe el comprobante.", 404)
             tok = asegurar_token(con, tabla, fila)
+            fila = con.execute(f"SELECT * FROM {tabla} WHERE id=?", (fila["id"],)).fetchone()
+            nombre_pdf, datos_pdf = pdf_de(con, tabla, fila)
         url = url_publica(cid, tok)
         mensaje = (d.get("mensaje") or "").strip()
-        texto = (mensaje + "\n\n" if mensaje else "") + f"Podés ver e imprimir el comprobante acá:\n{url}"
+        texto = (mensaje + "\n\n" if mensaje else "") + f"Adjuntamos el comprobante en PDF.\nTambién podés descargarlo acá:\n{url}.pdf"
         html = ("<div style='font-family:Arial,sans-serif;font-size:15px'>" + (f"<p>{escape(mensaje).replace(chr(10), '<br>')}</p>" if mensaje else "") +
-                f"<p><a href='{escape(url)}' style='background:#2f5bea;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none'>Ver comprobante</a></p>"
-                f"<p style='color:#6b7280;font-size:12px'>Si el botón no funciona, copiá este enlace: {escape(url)}</p></div>")
+                "<p>Adjuntamos el comprobante en PDF.</p>"
+                f"<p style='color:#6b7280;font-size:12px'>También podés descargarlo desde este enlace: <a href='{escape(url)}.pdf'>{escape(url)}.pdf</a></p></div>")
         try:
-            enviar_mail(cid, destino, (d.get("asunto") or "Comprobante").strip()[:150], texto, html)
+            enviar_mail(cid, destino, (d.get("asunto") or "Comprobante").strip()[:150], texto, html, adjuntos=[(nombre_pdf, datos_pdf)])
         except AfipError as e:
             return error(str(e))
         return jsonify(ok=True)
@@ -862,7 +890,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         with db() as con:
             tok = asegurar_token(con, "presupuestos_doc", p)
         url = url_publica(g.cuenta["id"], tok)
-        lineas.append(f"Puede verlo e imprimirlo acá: {url}")
+        lineas.append(f"Descargue el PDF acá: {url}.pdf")
         return render_template("facturacion/presupuesto_ver.html", p=p, items=items, cli=cli, marca=marca, fmt_fecha=core.fmt_fecha,
                                wa=core.telefono_whatsapp(cli["telefono"]) if cli else "", texto="\n".join(lineas), url=url, logo=logo_uri(g.cuenta["id"]),
                                mail_cliente=(cli["mail"] if cli else "") or "", mail_ok=configurado(g.cuenta["id"]), tipo_doc="presupuesto",

@@ -40,6 +40,6 @@ if ($f('#f-items')) {
   $f('#p-guardar')?.addEventListener('click', async () => {
     mostrarErr('');
     const j = await api('/api/facturacion/presupuesto', {cliente_id: FACT.cliente_id, items: leerRenglones(), validez: $f('#p-validez').value, nota: $f('#p-nota').value});
-    if (j.ok) location = '/facturacion/presupuesto/' + j.id; else mostrarErr(j.error);
+    if (j.ok) location = '/facturacion/presupuesto/' + j.id + '?nuevo=1'; else mostrarErr(j.error);
   });
 }

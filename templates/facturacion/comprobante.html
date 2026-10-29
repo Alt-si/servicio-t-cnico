@@ -14,5 +14,4 @@ document.getElementById('anular')?.addEventListener('click', async () => {
   const j = await api('/api/facturacion/{{ f.id }}/anular', {});
   if (j.ok) location = '/facturacion/comprobante/' + j.id; else { b.disabled = false; b.textContent = 'Anular con nota de crédito'; aviso(j.error); }
 });
-{% if request.args.get('nuevo') %}setTimeout(() => document.getElementById('env-mail').scrollIntoView(), 100);{% endif %}
 </script>{% endblock %}

@@ -2,7 +2,7 @@
 {% if anuladora %}<div class="msg error" style="text-align:center"><b>ANULADA</b> con {{ TIPOS[anuladora.tipo_cbte] }} N° {{ '%04d' % anuladora.pto_vta }}-{{ '%08d' % anuladora.numero }}</div>{% endif %}
 <div style="display:grid;grid-template-columns:1fr 70px 1fr;gap:8px;align-items:start;border:1.5px solid var(--tx);padding:10px">
   <div>{% if logo %}<img src="{{ logo }}" alt="" style="max-height:80px;max-width:100%;margin-bottom:6px;display:block">{% endif %}
-    <div style="font-size:20px;font-weight:800">{{ emisor.razon_social }}</div>
+    {% if emisor.nombre_fantasia %}<div style="font-size:20px;font-weight:800">{{ emisor.nombre_fantasia }}</div><div>{{ emisor.razon_social }}</div>{% else %}<div style="font-size:20px;font-weight:800">{{ emisor.razon_social }}</div>{% endif %}
     <div>{{ emisor.condicion_iva }}</div>{% if emisor.domicilio %}<div>{{ emisor.domicilio }}</div>{% endif %}</div>
   <div style="text-align:center;border:1.5px solid var(--tx);padding:2px"><div style="font-size:34px;font-weight:800;line-height:1">{{ LETRA[f.tipo_cbte] }}</div><div style="font-size:10px">COD. {{ '%02d' % f.tipo_cbte }}</div></div>
   <div><div style="font-size:18px;font-weight:700">{{ TIPOS[f.tipo_cbte]|upper }}</div>

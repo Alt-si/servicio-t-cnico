@@ -5,6 +5,7 @@ function afipCuenta(c) {
     <div class="grid">
       <div><label>Nombre de la cuenta *</label><input id="a-nombre" value="${esc(c.nombre || '')}" placeholder="Ej.: Mi monotributo"></div>
       <div><label>Razón social / nombre *</label><input id="a-razon" value="${esc(c.razon_social || '')}"></div>
+      <div><label>Nombre de fantasía (sale en la factura)</label><input id="a-fant" value="${esc(c.nombre_fantasia || '')}" placeholder="Ej.: Alt Soluciones Informáticas"></div>
       <div><label>CUIT *</label><input id="a-cuit" inputmode="numeric" value="${esc(c.cuit || '')}" placeholder="20123456789"></div>
       <div><label>Condición frente al IVA *</label><select id="a-iva">${['Monotributo', 'Responsable Inscripto', 'Exento'].map(x => `<option ${x === (c.condicion_iva || 'Monotributo') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
       <div><label>Punto de venta *</label><input id="a-pv" inputmode="numeric" value="${c.punto_venta || 1}"></div>
@@ -17,7 +18,7 @@ function afipCuenta(c) {
   const q = s => modal_.querySelector(s);
   q('#a-no').onclick = cerrar;
   q('#a-ok').onclick = async () => {
-    const j = await api('/api/afip/cuenta', {id: c.id, nombre: q('#a-nombre').value, razon_social: q('#a-razon').value, cuit: q('#a-cuit').value, condicion_iva: q('#a-iva').value,
+    const j = await api('/api/afip/cuenta', {id: c.id, nombre: q('#a-nombre').value, razon_social: q('#a-razon').value, nombre_fantasia: q('#a-fant').value, cuit: q('#a-cuit').value, condicion_iva: q('#a-iva').value,
       punto_venta: q('#a-pv').value, ambiente: q('#a-amb').value, domicilio: q('#a-dom').value, ingresos_brutos: q('#a-iibb').value, inicio_actividades: q('#a-inicio').value});
     if (j.ok) { if (c.id) return location.reload(); const n = q('#a-nombre').value; cerrar(); afipCert({id: j.id, nombre: n, tiene_clave: false, csr: ''}); }
     else { const e = q('#a-err'); e.textContent = j.error; e.style.display = 'block'; }

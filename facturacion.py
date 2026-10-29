@@ -926,9 +926,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         der = (core.leer_config(cid, "pres_pie_der") or "").strip()
         if not der:
             with core.conectar(cid) as con:
-                der = "\n".join(f"{c['razon_social']}\n{c['cuit'][:2]}-{c['cuit'][2:10]}-{c['cuit'][10:]}"
+                der = "\n\n".join(f"{c['razon_social']}\n{c['cuit'][:2]}-{c['cuit'][2:10]}-{c['cuit'][10:]}"
                                  for c in con.execute("SELECT razon_social, cuit FROM afip_cuentas ORDER BY id"))
-        return {"fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
+        grupos = [g_.strip().split("\n") for g_ in re.split(r"\n\s*\n", der.strip()) if g_.strip()]
+        if len(grupos) == 1 and len(grupos[0]) > 2 and len(grupos[0]) % 2 == 0:      # sin líneas en blanco: de a pares (nombre, CUIT)
+            grupos = [grupos[0][i:i + 2] for i in range(0, len(grupos[0]), 2)]
+        return {"pie_grupos": [[x.strip() for x in g_] for g_ in grupos], "fecha_larga": f"{localidad}, {fecha}" if localidad else fecha, "aviso": (core.leer_config(cid, "pres_aviso") or "").strip(),
                 "pie_izq": izq or marca["nombre"], "pie_der": der, "marca": marca, "logo": logo_uri(cid),
                 "forma_pago": p["forma_pago"] or "", "mostrar_precios": bool(p["mostrar_precios"])}
 

@@ -1,8 +1,7 @@
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
   <div>{% if pd.logo %}<img src="{{ pd.logo }}" alt="" style="max-height:90px;max-width:200px;display:block">{% endif %}</div>
-  <div style="text-align:right;padding-top:6px">{{ pd.fecha_larga }}</div></div>
+  <div style="text-align:right;padding-top:6px">{{ pd.fecha_larga }}<div style="font-weight:700">N° {{ '%04d' % p.id }}</div></div></div>
 <div style="text-align:center;margin:26px 0 20px"><div style="font-size:22px;font-weight:800;letter-spacing:.5px">PRESUPUESTO</div>
-  <div>N° {{ '%04d' % p.id }}</div>
   <div style="font-size:12px;font-weight:700;margin-top:2px">DOCUMENTO NO VÁLIDO COMO FACTURA</div></div>
 <p style="margin:0 0 14px">Cliente: <b>{{ p.cliente_nombre }}</b></p>
 <div style="margin:0 0 18px;line-height:1.7">
@@ -10,5 +9,6 @@
 <p style="font-size:17px;font-weight:700;font-style:italic;margin:0 0 6px">TOTAL: $ {{ p.total|monto_input }}.-{% if pd.forma_pago %} ({{ pd.forma_pago }}){% endif %}</p>
 {% if p.validez %}<p style="margin:0 0 6px">Válido hasta: {{ p.validez }}</p>{% endif %}{% if p.nota %}<p style="margin:0 0 6px">{{ p.nota }}</p>{% endif %}
 {% if pd.aviso %}<p style="margin-top:60px;text-transform:uppercase">{{ pd.aviso }}</p>{% endif %}
-<div style="margin-top:40px;border-top:3px double var(--tx);padding-top:6px;display:flex;justify-content:space-between;gap:12px;font-size:12px">
-  <div style="white-space:pre-line">{{ pd.pie_izq }}</div><div style="white-space:pre-line;text-align:right">{{ pd.pie_der }}</div></div>
+<div style="margin-top:40px;border-top:3px double var(--tx);padding-top:6px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 28px;font-size:12px">
+  <div style="white-space:pre-line">{{ pd.pie_izq }}</div>
+  {% for gr in pd.pie_grupos %}<div style="white-space:pre-line">{{ gr|join('\n') }}</div>{% endfor %}</div>

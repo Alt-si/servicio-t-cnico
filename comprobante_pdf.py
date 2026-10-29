@@ -164,11 +164,10 @@ def pdf_presupuesto(p, items, pd, logo_b64=""):
     p = dict(p)
     story = []
     logo = _logo(logo_b64, alto=24 * mm)
-    cab = [[logo or "", _p(pd["fecha_larga"], DER)]]
+    cab = [[logo or "", [_p(pd["fecha_larga"], DER), _p(f"N° {p['id']:04d}", ParagraphStyle("nr", parent=DER, fontName="Helvetica-Bold"))]]]
     story.append(Table(cab, colWidths=[ANCHO * 0.5, ANCHO * 0.5], style=[("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(Spacer(1, 14))
     story.append(_p("PRESUPUESTO", ParagraphStyle("pg", parent=GRANDE, fontSize=17, alignment=1, leading=20)))
-    story.append(_p(f"N° {p['id']:04d}", CENTRO))
     story.append(_p("DOCUMENTO NO VÁLIDO COMO FACTURA", ParagraphStyle("nv", parent=NEGRITA, fontSize=8.5, alignment=1)))
     story.append(Spacer(1, 16))
     story.append(_pb(f"Cliente: <b>{escape(p['cliente_nombre'] or '')}</b>"))
@@ -192,9 +191,12 @@ def pdf_presupuesto(p, items, pd, logo_b64=""):
     def pie(canvas, doc):
         canvas.saveState()
         y = 14 * mm
-        izq = Paragraph("<br/>".join(escape(x) for x in pd["pie_izq"].split("\n")), ParagraphStyle("pi", parent=CHICO, textColor=colors.black))
-        der = Paragraph("<br/>".join(escape(x) for x in pd["pie_der"].split("\n")), ParagraphStyle("pd", parent=CHICO, textColor=colors.black, alignment=2))
-        t = Table([[izq, der]], colWidths=[ANCHO / 2, ANCHO / 2], style=[("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)])
+        est = ParagraphStyle("pi", parent=CHICO, textColor=colors.black)
+        bloques = [pd["pie_izq"].split("\n")] + [g_ for g_ in pd["pie_grupos"]]
+        celdas = [Paragraph("<br/>".join(escape(x) for x in b_), est) for b_ in bloques]
+        n = len(celdas)
+        anchos = [ANCHO * 0.34] + [ANCHO * 0.66 / max(n - 1, 1)] * (n - 1) if n > 1 else [ANCHO]
+        t = Table([celdas], colWidths=anchos, style=[("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 4)])
         w, h = t.wrap(ANCHO, 40 * mm)
         t.drawOn(canvas, 15 * mm, y)
         canvas.setStrokeColor(colors.HexColor("#444444"))

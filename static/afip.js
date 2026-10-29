@@ -63,24 +63,40 @@ function afipCert(c) {
 }
 
 // Envío de mails (SMTP)
+const PROV_MAIL = {'gmail.com': 'gmail', 'googlemail.com': 'gmail', 'hotmail.com': 'ms', 'hotmail.com.ar': 'ms', 'outlook.com': 'ms', 'outlook.com.ar': 'ms', 'live.com': 'ms', 'live.com.ar': 'ms', 'msn.com': 'ms', 'yahoo.com': 'yahoo', 'yahoo.com.ar': 'yahoo', 'icloud.com': 'icloud', 'me.com': 'icloud'};
+const AYUDA_MAIL = {
+  gmail: 'Gmail: usá una <b>contraseña de aplicación</b>, no la común. Se crea en tu cuenta de Google → Seguridad → Verificación en dos pasos → Contraseñas de aplicaciones.',
+  ms: 'Hotmail/Outlook: si tenés verificación en dos pasos, usá una <b>contraseña de aplicación</b> (cuenta Microsoft → Seguridad).',
+  yahoo: 'Yahoo: usá una <b>contraseña de aplicación</b> (cuenta Yahoo → Seguridad de la cuenta).',
+  icloud: 'iCloud: usá una <b>contraseña específica de app</b> (appleid.apple.com).'};
 function mailConfig() {
   const c0 = JSON.parse(document.getElementById('mail-datos').textContent);
   const m = modal(`<h2>Envío de mails</h2><div id="ml-err" class="msg error" style="display:none"></div>
     <div class="grid">
-      <div><label>Servidor (SMTP) *</label><input id="ml-host" value="${esc(c0.mail_host)}" placeholder="smtp.gmail.com"></div>
-      <div><label>Puerto *</label><input id="ml-port" inputmode="numeric" value="${esc(c0.mail_port || '465')}"></div>
-      <div><label>Seguridad</label><select id="ml-seg"><option value="ssl" ${c0.mail_seg === 'ssl' ? 'selected' : ''}>SSL (puerto 465)</option><option value="starttls" ${c0.mail_seg === 'starttls' ? 'selected' : ''}>STARTTLS (puerto 587)</option><option value="ninguna" ${c0.mail_seg === 'ninguna' ? 'selected' : ''}>Ninguna</option></select></div>
-      <div><label>Usuario</label><input id="ml-user" value="${esc(c0.mail_user)}" autocomplete="off" placeholder="tu@correo.com"></div>
+      <div><label>Mail desde el que se envía *</label><input id="ml-rem" type="email" value="${esc(c0.mail_remitente)}" placeholder="tu@gmail.com"></div>
       <div><label>Contraseña ${c0.tiene_clave ? '(dejá vacío para no cambiarla)' : ''}</label><input id="ml-clave" type="password" autocomplete="new-password"></div>
-      <div><label>Mail desde el que se envía *</label><input id="ml-rem" value="${esc(c0.mail_remitente)}" placeholder="tu@correo.com"></div>
       <div><label>Nombre que ve el cliente</label><input id="ml-nombre" value="${esc(c0.mail_nombre)}" placeholder="Mi Comercio"></div>
     </div>
-    <p class="mut" style="font-size:13px">Gmail: servidor smtp.gmail.com, puerto 465 (SSL) y una <b>contraseña de aplicación</b> (no la común). Outlook: smtp-mail.outlook.com, puerto 587 (STARTTLS).</p>
+    <p class="mut" style="font-size:13px" id="ml-ayuda"></p>
+    <div id="ml-srv" style="display:none"><div class="grid">
+      <div><label>Servidor (SMTP) *</label><input id="ml-host" value="${esc(c0.mail_host)}" placeholder="smtp.tudominio.com"></div>
+      <div><label>Puerto *</label><input id="ml-port" inputmode="numeric" value="${esc(c0.mail_port || '465')}"></div>
+      <div><label>Seguridad</label><select id="ml-seg"><option value="ssl" ${c0.mail_seg === 'ssl' ? 'selected' : ''}>SSL (puerto 465)</option><option value="starttls" ${c0.mail_seg === 'starttls' ? 'selected' : ''}>STARTTLS (puerto 587)</option><option value="ninguna" ${c0.mail_seg === 'ninguna' ? 'selected' : ''}>Ninguna</option></select></div>
+      <div><label>Usuario</label><input id="ml-user" value="${esc(c0.mail_user)}" autocomplete="off" placeholder="si es distinto del mail"></div>
+    </div></div>
     <div class="row" style="margin-top:12px"><button class="btn pri" id="ml-ok">Guardar</button><button class="btn" id="ml-no">Cancelar</button></div>`);
   const q = s => m.querySelector(s);
+  const prov = () => PROV_MAIL[(q('#ml-rem').value.split('@')[1] || '').trim().toLowerCase()];
+  const actualizar = () => {
+    const p = prov(), tiene = q('#ml-rem').value.includes('@');
+    q('#ml-srv').style.display = (p || !tiene) ? 'none' : 'block';
+    q('#ml-ayuda').innerHTML = p ? AYUDA_MAIL[p] + ' El servidor se configura solo.' : (tiene ? 'Es un correo propio: completá los datos del servidor que te dio tu proveedor.' : '');
+  };
+  q('#ml-rem').oninput = actualizar; actualizar();
   q('#ml-no').onclick = cerrar;
   q('#ml-ok').onclick = async () => {
-    const j = await api('/api/mail/config', {host: q('#ml-host').value, puerto: q('#ml-port').value, seguridad: q('#ml-seg').value, usuario: q('#ml-user').value,
+    const auto = !!prov();
+    const j = await api('/api/mail/config', {host: auto ? '' : q('#ml-host').value, puerto: q('#ml-port').value, seguridad: q('#ml-seg').value, usuario: auto ? '' : q('#ml-user').value,
       clave: q('#ml-clave').value, remitente: q('#ml-rem').value, nombre: q('#ml-nombre').value});
     if (j.ok) location.reload(); else { const e = q('#ml-err'); e.textContent = j.error; e.style.display = 'block'; }
   };

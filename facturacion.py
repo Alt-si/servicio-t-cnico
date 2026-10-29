@@ -313,6 +313,17 @@ def logo_uri(cid):
     return f"data:image/png;base64,{datos}" if datos else ""
 
 
+PROVEEDORES_MAIL = {  # dominio -> (servidor SMTP, puerto, seguridad)
+    "gmail.com": ("smtp.gmail.com", 465, "ssl"), "googlemail.com": ("smtp.gmail.com", 465, "ssl"),
+    "hotmail.com": ("smtp-mail.outlook.com", 587, "starttls"), "hotmail.com.ar": ("smtp-mail.outlook.com", 587, "starttls"),
+    "outlook.com": ("smtp-mail.outlook.com", 587, "starttls"), "outlook.com.ar": ("smtp-mail.outlook.com", 587, "starttls"),
+    "live.com": ("smtp-mail.outlook.com", 587, "starttls"), "live.com.ar": ("smtp-mail.outlook.com", 587, "starttls"),
+    "msn.com": ("smtp-mail.outlook.com", 587, "starttls"),
+    "yahoo.com": ("smtp.mail.yahoo.com", 465, "ssl"), "yahoo.com.ar": ("smtp.mail.yahoo.com", 465, "ssl"),
+    "icloud.com": ("smtp.mail.me.com", 587, "starttls"), "me.com": ("smtp.mail.me.com", 587, "starttls"),
+}
+
+
 MAIL_CLAVES = ("mail_host", "mail_port", "mail_seg", "mail_user", "mail_remitente", "mail_nombre")
 
 
@@ -768,14 +779,23 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         d = request.get_json(force=True, silent=True) or {}
         cid = g.cuenta["id"]
         host, remitente = (d.get("host") or "").strip(), (d.get("remitente") or "").strip()
-        if not host or not remitente or "@" not in remitente:
-            return error("Completá el servidor y el mail desde el que se envía.")
-        try:
-            puerto = int(d.get("puerto"))
-        except (TypeError, ValueError):
-            return error("El puerto tiene que ser un número (465 o 587).")
-        if d.get("seguridad") not in ("ssl", "starttls", "ninguna"):
+        if "@" not in remitente:
+            return error("Escribí el mail desde el que se envía.")
+        conocido = PROVEEDORES_MAIL.get(remitente.rsplit("@", 1)[1].lower())
+        if conocido and not host:      # Gmail, Hotmail, etc.: el servidor se completa solo
+            host, puerto, seguridad = conocido
+            d["usuario"] = (d.get("usuario") or "").strip() or remitente
+        else:
+            if not host:
+                return error("Completá el servidor de correo (SMTP).")
+            try:
+                puerto = int(d.get("puerto"))
+            except (TypeError, ValueError):
+                return error("El puerto tiene que ser un número (465 o 587).")
+            seguridad = d.get("seguridad")
+        if seguridad not in ("ssl", "starttls", "ninguna"):
             return error("Elegí el tipo de seguridad.")
+        d["seguridad"] = seguridad
         for clave, valor in (("mail_host", host), ("mail_port", str(puerto)), ("mail_seg", d["seguridad"]), ("mail_user", (d.get("usuario") or "").strip()),
                              ("mail_remitente", remitente), ("mail_nombre", (d.get("nombre") or "").strip())):
             core.guardar_config(cid, clave, valor)

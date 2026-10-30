@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">{{ TIPOS[tipo] }} para {{ cliente|nombre_cliente }}</h1><a class="btn der" href="{{ url_for('clientes') }}">← Volver</a></div>
+  <div class="row"><h1 style="margin:0">{{ TIPOS[tipo] }} para {{ cliente|nombre_cliente }}</h1><div class="der row"><a class="btn" href="{{ url_for('presupuesto_nuevo', cliente=cliente.id) }}">Presupuesto</a><a class="btn" href="{{ url_for('clientes') }}">← Volver</a></div></div>
   <p class="mut">Emite con <b>{{ cuenta.nombre }}</b> ({{ cuenta.razon_social }} · CUIT {{ cuenta.cuit }} · {{ cuenta.condicion_iva }} · PV {{ cuenta.punto_venta }}){% if cuentas_total > 1 %} · <a href="{{ url_for('factura_nueva', cliente=cliente.id, cuenta=0) }}">cambiar cuenta</a>{% endif %}.
     Cliente: {{ cliente.condicion_iva }}{% if cliente.cuit %} · CUIT {{ cliente.cuit }}{% elif cliente.dni %} · DNI {{ cliente.dni }}{% else %} · sin documento{% endif %}.</p>
   {% if cuenta.ambiente=='homologacion' %}<div class="msg" style="background:#fef3c7;color:#92400e">Esta cuenta está en modo <b>PRUEBAS</b>: los comprobantes no tienen validez fiscal.</div>{% endif %}

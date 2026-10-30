@@ -2,7 +2,7 @@
 {% block cuerpo %}
 <div class="card">
   <div class="row"><div><h1 style="margin:0">{{ c|nombre_cliente }}</h1>{% if c.razon_social %}<div class="mut">Contacto: {{ c.apellido }}, {{ c.nombre }}</div>{% endif %}</div>
-    <div class="der row">{% if 'facturacion' in modulos %}<a class="btn" href="{{ url_for('factura_nueva', cliente=c.id) }}">Facturar</a>{% endif %}{% if 'ordenes' in modulos %}<a class="btn pri" href="{{ url_for('orden_nueva', cliente=c.id) }}">+ Nueva orden</a>{% endif %}
+    <div class="der row">{% if 'facturacion' in modulos %}<a class="btn" href="{{ url_for('factura_nueva', cliente=c.id) }}">Facturar</a><a class="btn" href="{{ url_for('presupuesto_nuevo', cliente=c.id) }}">Presupuesto</a>{% endif %}{% if 'ordenes' in modulos %}<a class="btn pri" href="{{ url_for('orden_nueva', cliente=c.id) }}">+ Nueva orden</a>{% endif %}
       <button class="btn" onclick='clienteForm({{ c|tojson_cliente }})'>Editar</button>
       <a class="btn" href="{{ url_for('clientes') }}">← Volver</a></div></div>
 </div>

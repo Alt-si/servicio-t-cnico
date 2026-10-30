@@ -500,6 +500,7 @@ def usa_tecnicos():
 
 app.jinja_env.globals["lista_tecnicos"] = lista_tecnicos
 app.jinja_env.globals["usa_tecnicos"] = usa_tecnicos
+app.jinja_env.globals["rec_repetir"] = lambda: core.repetir_recordatorios(g.cuenta["id"])
 
 
 def tecnicos_filas():
@@ -1133,17 +1134,38 @@ def api_recordatorio_accion(rid, accion):
 @modulo_requerido("recordatorios")
 def api_recordatorios_avisos():
     """Recordatorios cuya hora llegó y no se avisaron; se marcan como avisados. Además, cuántos hay vencidos/de hoy."""
-    ahora_txt = core.ahora_dt().strftime("%Y-%m-%d %H:%M")
+    from datetime import timedelta
+    ahora = core.ahora_dt()
+    ahora_txt = ahora.strftime("%Y-%m-%d %H:%M")
+    rep = core.repetir_recordatorios(g.cuenta["id"])
     with db() as con:
-        vencidos = con.execute("SELECT id, fecha_hora, descripcion FROM recordatorios WHERE hecho=0 AND avisado=0 AND fecha_hora<=? "
-                               "ORDER BY fecha_hora LIMIT 3", (ahora_txt,)).fetchall()
+        sql = "SELECT id, fecha_hora, descripcion FROM recordatorios WHERE hecho=0 AND fecha_hora<=? AND (avisado=0"
+        args = [ahora_txt]
+        if rep:       # además, los ya avisados cuyo último aviso fue hace más que el intervalo
+            sql += " OR ultimo_aviso IS NULL OR ultimo_aviso<=?"
+            args.append((ahora - timedelta(minutes=rep)).strftime("%Y-%m-%d %H:%M"))
+        vencidos = con.execute(sql + ") ORDER BY fecha_hora LIMIT 3", args).fetchall()
         for f in vencidos:
-            con.execute("UPDATE recordatorios SET avisado=1 WHERE id=?", (f["id"],))
+            con.execute("UPDATE recordatorios SET avisado=1, ultimo_aviso=? WHERE id=?", (ahora_txt, f["id"]))
         pendientes = con.execute("SELECT COUNT(*) FROM recordatorios WHERE hecho=0 AND fecha_hora<=?",
                                  (ahora_txt[:10] + " 23:59",)).fetchone()[0]
-    return jsonify(ok=True, pendientes=pendientes, avisos=[
+    return jsonify(ok=True, pendientes=pendientes, repetir=rep, avisos=[
         dict(id=f["id"], cuando=core.clasificar_recordatorio(f["fecha_hora"])[1].replace("VENCIDO · ", ""), descripcion=f["descripcion"])
         for f in vencidos])
+
+
+@app.route("/configuracion/recordatorios", methods=["POST"])
+@login_requerido
+@modulo_requerido("recordatorios")
+def configuracion_recordatorios():
+    try:
+        m = int(request.form.get("minutos", "60"))
+    except ValueError:
+        m = 60
+    m = m if m in (0, 15, 30, 60, 120, 180, 240) else 60
+    core.guardar_config(g.cuenta["id"], "rec_repetir_min", m)
+    flash("Configuración de recordatorios guardada.", "ok")
+    return redirect(url_for("configuracion") + "#recordatorios")
 
 
 @app.route("/configuracion/listas", methods=["POST"])

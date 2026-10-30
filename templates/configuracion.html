@@ -44,6 +44,17 @@
 </form></div>
 {% endif %}
 
+{% if 'recordatorios' in modulos %}
+<div class="card" id="recordatorios"><h1>Recordatorios</h1>
+<form method="post" action="{{ url_for('configuracion_recordatorios') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+  <p class="mut">Cuando llega la hora de un recordatorio aparece el aviso en pantalla con sonido. Si no lo marcás como <b>Hecho</b>, el aviso se repite cada cierto tiempo hasta que lo hagas.</p>
+  {% set rm = rec_repetir() %}
+  <label>Repetir el aviso</label>
+  <select name="minutos">{% for v, n in ((60, 'Cada 1 hora (recomendado)'), (30, 'Cada 30 minutos'), (15, 'Cada 15 minutos'), (120, 'Cada 2 horas'), (180, 'Cada 3 horas'), (240, 'Cada 4 horas'), (0, 'No repetir (avisar una sola vez)')) %}<option value="{{ v }}" {{ 'selected' if rm == v }}>{{ n }}</option>{% endfor %}</select>
+  <div class="row" style="margin-top:10px"><button class="btn pri">Guardar</button></div>
+</form></div>
+{% endif %}
+
 <div class="card"><h1>Seguridad: cierre de sesión</h1>
 <form method="post" action="{{ url_for('configuracion_sesion') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
   <p class="mut">El sistema pide usuario y contraseña al abrirlo y vuelve a pedirlos si pasa este tiempo sin usarlo.</p>

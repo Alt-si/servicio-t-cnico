@@ -410,6 +410,16 @@ def crear_base(cuenta_id):
                 con.execute(f"ALTER TABLE ordenes ADD COLUMN {col} TEXT")
         if "imposible_reparar" not in cols:
             con.execute("ALTER TABLE ordenes ADD COLUMN imposible_reparar INTEGER NOT NULL DEFAULT 0")
+        if "ultimo_aviso" not in [r[1] for r in con.execute("PRAGMA table_info(recordatorios)")]:
+            con.execute("ALTER TABLE recordatorios ADD COLUMN ultimo_aviso TEXT")
+
+
+def repetir_recordatorios(cuenta_id):
+    """Cada cuántos minutos se vuelve a avisar un recordatorio vencido hasta que se marque como hecho (0 = no repetir)."""
+    try:
+        return max(0, int(leer_config(cuenta_id, "rec_repetir_min", "60")))
+    except ValueError:
+        return 60
 
 
 def leer_config(cuenta_id, clave, defecto=None):

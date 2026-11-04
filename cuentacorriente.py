@@ -351,6 +351,41 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
         return jsonify(ok=True, saldo=saldo, a_favor=a_favor, sin_facturar=sin_fact, formas=formas)
 
+    @app.route("/api/cc/aviso")
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_aviso():
+        """Texto de WhatsApp para avisarle a un cliente su deuda pendiente."""
+        nombre = " ".join(U(request.args.get("nombre")).split())
+        with db() as con:
+            docs = [d for d in enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo='cliente' AND lower(d.persona)=lower(?) ORDER BY d.emision, d.id", (nombre,)).fetchall(), core.ahora()[:10])
+                    if d["saldo"] > 0]
+            cli = None
+            for r in con.execute("SELECT * FROM clientes"):
+                if nombre.lower() in (core.nombre_natural(r).lower(), " ".join(((r["nombre"] or ""), (r["apellido"] or ""))).strip().lower(), (r["razon_social"] or "").strip().lower()):
+                    cli = r
+                    break
+        total = round(sum(d["saldo"] for d in docs), 2)
+        if total <= 0:
+            return error("Esta persona no tiene deuda pendiente.")
+        if cli:
+            rs = (cli["razon_social"] or "").strip()
+            saludo = rs.title() if rs else (cli["nombre"] or "").strip().title()
+        else:
+            saludo = nombre.title()
+        txt = f"Hola {saludo}, a la fecha se registra una deuda de {core.fmt_monto(total)}. Esperamos su respuesta."
+        con_fact = [d for d in docs if d["numero"]]
+        if con_fact:
+            lineas = []
+            for d in con_fact:
+                venc = f", vence el {core.fmt_fecha(d['vence'])}" if d["vence"] else ""
+                lineas.append(f"• Factura {d['numero']} del {core.fmt_fecha(d['emision'])}{venc}: {core.fmt_monto(d['saldo'])}")
+            otros = round(sum(d["saldo"] for d in docs if not d["numero"]), 2)
+            if otros > 0:
+                lineas.append(f"• Otros retiros sin factura: {core.fmt_monto(otros)}")
+            txt += "\n\nDetalle:\n" + "\n".join(lineas)
+        return jsonify(ok=True, texto=txt, wa=core.telefono_whatsapp(cli["telefono"]) if cli else None, total=total)
+
     @app.route("/api/cc/entrega", methods=["POST"])
     @login_requerido
     @modulo_requerido("cuentacorriente")

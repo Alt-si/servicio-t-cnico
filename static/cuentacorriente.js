@@ -140,8 +140,9 @@ async function ccVer(id, tipo) {
     ${j.items.length ? `<p class="mut" style="margin:0">Productos: ${j.items.map(i => esc(i.nombre) + ' x' + ccNum(i.cantidad)).join(', ')}</p>` : ''}
     <table class="tabla" style="width:100%"><tr><th>Fecha</th><th>Nota</th><th style="text-align:right">Importe</th><th></th></tr>
     ${j.pagos.map(p => `<tr><td>${fe(p.fecha)}</td><td>${esc(p.nota || '')}</td><td style="text-align:right">$ ${ccNum(p.monto)}</td><td><button class="btn" style="padding:1px 8px" data-pp="${p.id}">×</button></td></tr>`).join('') || '<tr><td colspan="4" class="mut">Sin pagos registrados.</td></tr>'}</table>
-    <div class="row" style="margin-top:12px"><button class="btn" id="cv-ed">Editar</button><button class="btn bad" id="cv-del">Eliminar</button><button class="btn" id="cv-no">Cerrar</button></div>`);
+    <div class="row" style="margin-top:12px"><button class="btn" id="cv-ed">Editar</button>${tipo === 'cliente' && d.saldo > 0 ? '<button class="btn wa" id="cv-wa">Avisar deuda</button>' : ''}<button class="btn bad" id="cv-del">Eliminar</button><button class="btn" id="cv-no">Cerrar</button></div>`);
   m.querySelector('#cv-no').onclick = cerrar;
+  if (m.querySelector('#cv-wa')) m.querySelector('#cv-wa').onclick = () => { cerrar(); ccAvisar(d.persona); };
   m.querySelector('#cv-ed').onclick = () => { cerrar(); ccFormulario(tipo, {...d, items: j.items}); };
   m.querySelector('#cv-del').onclick = async () => {
     cerrar();
@@ -210,4 +211,11 @@ async function ccEntregaEliminar(id) {
   if (r.cancelado) return;
   if (!r.ok) return aviso(r.error);
   location.reload();
+}
+
+// Aviso por WhatsApp de la deuda pendiente de un cliente
+async function ccAvisar(nombre) {
+  const j = await api('/api/cc/aviso?nombre=' + encodeURIComponent(nombre));
+  if (!j.ok) return aviso(j.error || 'No se pudo preparar el mensaje.');
+  await ofrecerWhatsApp('Avisar deuda pendiente por WhatsApp', j.wa, j.texto);
 }

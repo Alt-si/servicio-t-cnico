@@ -29,6 +29,7 @@ app.config.update(
 core.crear_cuentas()
 
 _bases_listas = set()
+_cheques_listos = set()
 
 
 # --------------------------------------------------------------------------- seguridad
@@ -94,6 +95,9 @@ def antes():
                     _c.execute("UPDATE equipos SET tipo=UPPER(tipo), marca=UPPER(marca) WHERE tipo<>UPPER(tipo) OR marca<>UPPER(marca)")
             _bases_listas.add(g.cuenta["id"])
     g.modulos = core.modulos_de(g.cuenta) if g.cuenta else set()
+    if "ventas" in g.modulos and g.cuenta["id"] not in _cheques_listos:
+        ventas.sembrar_cheques(g.cuenta["id"])
+        _cheques_listos.add(g.cuenta["id"])
 
 
 @app.after_request
@@ -433,7 +437,7 @@ def orden_ver(oid):
     formas, saldo = [], 0
     if "ventas" in g.modulos:       # con Ventas activo, al retirar se registra el cobro y su forma de pago
         with db() as con:
-            formas = [dict(id=r["id"], nombre=r["nombre"]) for r in con.execute("SELECT id, nombre FROM stock_formas_pago ORDER BY id")]
+            formas = [dict(id=r["id"], nombre=r["nombre"], cheque=bool(r["pide_cheque"])) for r in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
         saldo = saldo_a_abonar(o["presupuesto_monto"], o["sena_monto"], o["reembolso_monto"], o["presupuesto_respuesta"] == "rechazado") or 0
     return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False, formas=formas, saldo=saldo,
                            nombre_completo=core.nombre_natural(cliente),
@@ -508,7 +512,7 @@ app.jinja_env.globals["lista_tecnicos"] = lista_tecnicos
 app.jinja_env.globals["usa_tecnicos"] = usa_tecnicos
 def formas_pago_lista():
     with db() as con:
-        return [dict(r) for r in con.execute("SELECT id, nombre, aplica_descuento FROM stock_formas_pago ORDER BY id")]
+        return [dict(r) for r in con.execute("SELECT id, nombre, aplica_descuento, pide_cheque FROM stock_formas_pago ORDER BY id")]
 app.jinja_env.globals["formas_pago_lista"] = formas_pago_lista
 app.jinja_env.globals["rec_repetir"] = lambda: core.repetir_recordatorios(g.cuenta["id"])
 
@@ -872,7 +876,7 @@ def api_orden_accion(oid):
             quien = " ".join(U(d.get("retira")).split()) if otra else ""
             if otra and not quien:
                 return error("Escribí el nombre de quien retira el equipo.")
-            cobro, forma = 0.0, None
+            cobro, forma, cheque = 0.0, None, None
             if "ventas" in g.modulos and d.get("monto") not in (None, ""):
                 try:
                     cobro = parse_monto(d.get("monto")) or 0.0
@@ -884,12 +888,19 @@ def api_orden_accion(oid):
                     forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
                     if not forma:
                         return error("Elegí la forma de pago.")
+                    if forma["pide_cheque"]:
+                        cheque, msg = ventas.validar_cheque(d.get("cheque"))
+                        if msg:
+                            return error(msg)
             nombre_ret = quien or (core.nombre_natural(cli) if cli else "")
             cambiar(E_RETIRADO, ", espera_repuesto=0, fecha_retiro=?, retiro_nombre=?, retiro_otra=?", (ahora, nombre_ret or None, 1 if otra else 0))
             core.registrar_evento(con, oid, E_RETIRADO, core.texto_evento_estado(estado, E_RETIRADO, None, bool(dev), quien or None))
             if cobro > 0:
                 con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma) VALUES (?,?,?,?,?)", (ahora, oid, cobro, forma["id"], forma["nombre"]))
                 core.registrar_evento(con, oid, E_RETIRADO, f"Cobro al retirar: {core.fmt_monto(cobro)} ({forma['nombre']})")
+                if cheque:
+                    ventas.guardar_cheque(con, cheque, forma["nombre"], cobro, "orden", orden_id=oid)
+                    core.registrar_evento(con, oid, E_RETIRADO, f"Cheque N° {cheque['numero']} · {cheque['banco']} · lo entrega {cheque['entrega']} · cobro {core.fmt_fecha(cheque['cobro'])}")
         elif accion == "scrap":
             if core.requiere_codigo(estado, E_SCRAP):
                 r = pide_codigo(d, "Pasar la orden a Scrap desde ese estado requiere el código de validación.")

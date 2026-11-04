@@ -49,6 +49,7 @@ def crear_tablas(con):
     agregar("stock_productos", "iva", "REAL")                   # vacío = usa el IVA general de la cuenta
     agregar("stock_productos", "precio_auto", "INTEGER NOT NULL DEFAULT 0")
     con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
+    agregar("stock_formas_pago", "pide_cheque", "INTEGER NOT NULL DEFAULT 0")      # cheque / e-cheq: al cobrar se piden sus datos
     if con.execute("SELECT COUNT(*) FROM stock_formas_pago").fetchone()[0] == 0:
         con.executemany("INSERT INTO stock_formas_pago (nombre, aplica_descuento) VALUES (?,?)",
                         [("Efectivo", 1), ("Transferencia", 1), ("Tarjeta de débito", 0), ("Tarjeta de crédito", 0)])
@@ -391,8 +392,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 aplica = 1 if d.get("aplica_descuento") else 0
                 if rid:
                     con.execute("UPDATE stock_formas_pago SET nombre=?, aplica_descuento=? WHERE id=?", (nombre, aplica, rid))
+                    if "pide_cheque" in d:
+                        con.execute("UPDATE stock_formas_pago SET pide_cheque=? WHERE id=?", (1 if d.get("pide_cheque") else 0, rid))
                 else:
-                    rid = con.execute("INSERT INTO stock_formas_pago (nombre, aplica_descuento) VALUES (?,?)", (nombre, aplica)).lastrowid
+                    rid = con.execute("INSERT INTO stock_formas_pago (nombre, aplica_descuento, pide_cheque) VALUES (?,?,?)",
+                                      (nombre, aplica, 1 if d.get("pide_cheque") else 0)).lastrowid
             else:
                 try:
                     reglas = [pct(d.get(k)) if k in d else None for k in ("margen_lista", "margen_contado", "descuento")]

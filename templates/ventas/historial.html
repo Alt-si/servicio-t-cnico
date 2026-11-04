@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">Ventas</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_estadisticas') }}">Estadísticas</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
+  <div class="row"><h1 style="margin:0">Ventas</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_cheques') }}">Cheques</a><a class="btn" href="{{ url_for('ventas_estadisticas') }}">Estadísticas</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
   <form method="get" class="row" style="margin:12px 0"><label style="margin:0">Desde</label><input type="date" name="desde" value="{{ desde }}" style="width:auto">
     <label style="margin:0">Hasta</label><input type="date" name="hasta" value="{{ hasta }}" style="width:auto"><button class="btn">Ver</button></form>
   <div class="resumen-stock">

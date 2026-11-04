@@ -37,6 +37,30 @@ function pedirCodigo(motivo) {
     setTimeout(() => $('#cod', c).focus(), 50);
   });
 }
+// Datos de un cheque / e-cheq (al cobrar con esa forma de pago); devuelve el objeto o null si cancela
+function pedirCheque(monto, quien) {
+  return new Promise(res => {
+    const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const c = modal(`<h2>Datos del cheque</h2>${monto ? `<p class="mut">Importe: <b>${esc(monto)}</b></p>` : ''}<div id="ch-err" class="msg error" style="display:none"></div>
+      <div class="grid"><div><label>Fecha de emisión *</label><input id="ch-em" type="date" value="${hoy}"></div>
+      <div><label>Fecha de cobro *</label><input id="ch-co" type="date"></div>
+      <div><label>N° de cheque *</label><input id="ch-num" autocomplete="off"></div>
+      <div><label>Banco *</label><input id="ch-banco" class="mayus" autocomplete="off"></div></div>
+      <label>Quién lo entrega *</label><input id="ch-ent" class="mayus" autocomplete="off" value="${esc(quien || '')}">
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="ch-ok">Guardar</button><button class="btn" id="ch-no">Cancelar</button></div>`);
+    ['ch-em', 'ch-co'].forEach(i => c.querySelector('#' + i).addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} }));
+    c.querySelector('#ch-no').onclick = () => { cerrar(); res(null); };
+    c.querySelector('#ch-ok').onclick = () => {
+      const d = {emision: c.querySelector('#ch-em').value, cobro: c.querySelector('#ch-co').value, numero: c.querySelector('#ch-num').value.trim(),
+                 banco: c.querySelector('#ch-banco').value.trim(), entrega: c.querySelector('#ch-ent').value.trim()};
+      const err = (!d.emision || !d.cobro) ? 'Completá la fecha de emisión y la fecha de cobro.' : d.cobro < d.emision ? 'La fecha de cobro no puede ser anterior a la de emisión.'
+        : (!d.numero || !d.banco || !d.entrega) ? 'Completá el número, el banco y quién entrega el cheque.' : '';
+      if (err) { const e = c.querySelector('#ch-err'); e.textContent = err; e.style.display = 'block'; return; }
+      cerrar(); res(d);
+    };
+    setTimeout(() => c.querySelector('#ch-co').focus(), 50);
+  });
+}
 // api que maneja necesita_codigo
 async function apiCodigo(url, datos) {
   let j = await api(url, datos);

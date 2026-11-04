@@ -17,6 +17,9 @@ def crear_tablas(con):
             descuento_pct REAL, subtotal REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS cobros (
             id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, orden_id INTEGER, monto REAL NOT NULL, forma_id INTEGER, forma TEXT, nota TEXT);
+        CREATE TABLE IF NOT EXISTS cheques (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, origen TEXT, orden_id INTEGER, venta_id INTEGER, forma TEXT, monto REAL NOT NULL,
+            emision TEXT, cobro TEXT, numero TEXT, banco TEXT, entrega TEXT, cobrado INTEGER NOT NULL DEFAULT 0, cobrado_fecha TEXT);
         CREATE INDEX IF NOT EXISTS ix_cobros_fecha ON cobros(fecha);
         CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
         CREATE INDEX IF NOT EXISTS ix_venta_items_venta ON venta_items(venta_id);
@@ -24,6 +27,38 @@ def crear_tablas(con):
     if not existia:        # la primera vez, se suma «Billetera virtual» a las formas de pago
         if not con.execute("SELECT 1 FROM stock_formas_pago WHERE lower(nombre) LIKE 'billetera%'").fetchone():
             con.execute("INSERT INTO stock_formas_pago (nombre, aplica_descuento) VALUES ('Billetera virtual', 0)")
+
+
+def sembrar_cheques(cid):
+    """Una sola vez por comercio con Ventas: suma las formas de pago «Cheque» y «E-cheq» (piden los datos del cheque)."""
+    if core.leer_config(cid, "cheques_sembrados"):
+        return
+    with core.conectar(cid) as con:
+        if not con.execute("SELECT 1 FROM stock_formas_pago WHERE lower(nombre) LIKE '%cheq%'").fetchone():
+            for n in ("Cheque", "E-Cheq"):
+                con.execute("INSERT INTO stock_formas_pago (nombre, aplica_descuento, pide_cheque) VALUES (?,0,1)", (n,))
+    core.guardar_config(cid, "cheques_sembrados", "1")
+
+
+def validar_cheque(d):
+    """(datos limpios, mensaje de error). Los cinco datos son obligatorios."""
+    import re
+    d = d or {}
+    limpio = {"emision": (d.get("emision") or "").strip()[:10], "cobro": (d.get("cobro") or "").strip()[:10], "numero": " ".join(str(d.get("numero") or "").split())[:40],
+              "banco": " ".join(str(d.get("banco") or "").split()).upper()[:60], "entrega": " ".join(str(d.get("entrega") or "").split()).upper()[:80]}
+    for k in ("emision", "cobro"):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", limpio[k]):
+            return None, "Completá la fecha de emisión y la fecha de cobro del cheque."
+    if limpio["cobro"] < limpio["emision"]:
+        return None, "La fecha de cobro no puede ser anterior a la de emisión."
+    if not limpio["numero"] or not limpio["banco"] or not limpio["entrega"]:
+        return None, "Completá el número, el banco y quién entrega el cheque."
+    return limpio, None
+
+
+def guardar_cheque(con, datos, forma, monto, origen, orden_id=None, venta_id=None):
+    con.execute("INSERT INTO cheques (fecha, origen, orden_id, venta_id, forma, monto, emision, cobro, numero, banco, entrega) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (core.ahora(), origen, orden_id, venta_id, forma, monto, datos["emision"], datos["cobro"], datos["numero"], datos["banco"], datos["entrega"]))
 
 
 def _iva(cid):
@@ -128,6 +163,11 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 if recibido is not None and recibido < total - 0.001:
                     return error("El monto recibido es menor al total.")
                 vuelto = round(recibido - total, 2) if recibido is not None else None
+            cheque = None
+            if forma["pide_cheque"]:
+                cheque, msg = validar_cheque(d.get("cheque"))
+                if msg:
+                    return error(msg)
             ahora = core.ahora()
             vid = con.execute("INSERT INTO ventas (fecha, total, forma_id, forma, recibido, vuelto, nota) VALUES (?,?,?,?,?,?,?)",
                               (ahora, total, forma["id"], forma["nombre"], recibido, vuelto, (d.get("nota") or "").strip() or None)).lastrowid
@@ -138,6 +178,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, p["id"]))
                 con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
                             (p["id"], ahora, "egreso", -cant, nuevo, f"Venta N° {vid}"))
+            if cheque:
+                guardar_cheque(con, cheque, forma["nombre"], total, "venta", venta_id=vid)
         return jsonify(ok=True, id=vid, total=total, vuelto=vuelto)
 
     @app.route("/ventas/historial")
@@ -157,6 +199,33 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 total += v["total"]
         return render_template("ventas/historial.html", filas=filas, desde=desde, hasta=hasta, por_forma=sorted(por_forma.items()),
                                total=total, cantidad=sum(1 for v in filas if not v["anulada"]), fmt_fecha=core.fmt_fecha)
+
+    @app.route("/ventas/cheques")
+    @login_requerido
+    @modulo_requerido("ventas")
+    def ventas_cheques():
+        """Cheques y e-cheqs recibidos, por fecha de cobro."""
+        estado = request.args.get("e") if request.args.get("e") in ("cartera", "cobrados", "todos") else "cartera"
+        where = {"cartera": "WHERE c.cobrado=0", "cobrados": "WHERE c.cobrado=1", "todos": ""}[estado]
+        with db() as con:
+            filas = con.execute(f"SELECT c.*, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id WHERE o.id=c.orden_id) AS cliente "
+                                f"FROM cheques c {where} ORDER BY c.cobro, c.id LIMIT 500").fetchall()
+            en_cartera = con.execute("SELECT COUNT(*), COALESCE(SUM(monto),0) FROM cheques WHERE cobrado=0").fetchone()
+        return render_template("ventas/cheques.html", filas=filas, estado=estado, n_cartera=en_cartera[0], total_cartera=en_cartera[1], hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
+
+    @app.route("/api/cheques/<int:cid_>/cobrado", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("ventas")
+    def api_cheque_cobrado(cid_):
+        d = request.get_json(force=True, silent=True) or {}
+        with db() as con:
+            if not con.execute("SELECT 1 FROM cheques WHERE id=?", (cid_,)).fetchone():
+                return error("No existe el cheque.", 404)
+            if d.get("cobrado"):
+                con.execute("UPDATE cheques SET cobrado=1, cobrado_fecha=? WHERE id=?", (core.ahora(), cid_))
+            else:
+                con.execute("UPDATE cheques SET cobrado=0, cobrado_fecha=NULL WHERE id=?", (cid_,))
+        return jsonify(ok=True)
 
     @app.route("/ventas/estadisticas")
     @login_requerido

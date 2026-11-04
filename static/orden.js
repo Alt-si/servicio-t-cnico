@@ -292,7 +292,10 @@ function preguntarCobro() {
       const m = $('#c-monto', c).value.trim();
       if (!m || !num(m)) { const e = $('#c-err', c); e.textContent = 'Escribí el importe, o tocá «No abona nada».'; e.style.display = 'block'; return; }
       if (!formas.length) { const e = $('#c-err', c); e.textContent = 'Primero cargá una forma de pago en Configuración → Formas de pago.'; e.style.display = 'block'; return; }
-      const f = $('#c-forma', c).value; cerrar(); res({monto: m, forma_id: parseInt(f)});
+      const fid = parseInt($('#c-forma', c).value), f = formas.find(x => x.id === fid) || {};
+      cerrar();
+      if (f.cheque) pedirCheque(fmt(num(m)), ORDEN.cliente_nombre).then(ch => res(ch ? {monto: m, forma_id: fid, cheque: ch} : null));
+      else res({monto: m, forma_id: fid});
     };
   });
 }

@@ -67,7 +67,7 @@ if ($v('#v-scan')) {
   });
   $v('#v-items').addEventListener('click', e => { const q = e.target.closest('[data-quitar]'); if (q) { carrito.splice(+q.dataset.quitar, 1); dibujar(); } });
   document.querySelectorAll('.v-forma').forEach(b => b.onclick = () => {
-    forma = {id: +b.dataset.id, nombre: b.dataset.nombre, desc: b.dataset.desc === '1'};
+    forma = {id: +b.dataset.id, nombre: b.dataset.nombre, desc: b.dataset.desc === '1', cheque: b.dataset.cheque === '1'};
     document.querySelectorAll('.v-forma').forEach(x => x.classList.toggle('pri', x === b));
     $v('#v-efectivo').style.display = forma.nombre.toLowerCase().startsWith('efectivo') ? 'block' : 'none';
     dibujar();
@@ -76,7 +76,9 @@ if ($v('#v-scan')) {
   $v('#v-limpiar').onclick = () => { carrito = []; dibujar(); $v('#v-scan').focus(); };
   $v('#v-ok').onclick = async () => {
     const err = $v('#v-err'); err.style.display = 'none';
-    const j = await api('/api/ventas/confirmar', {forma_id: forma.id, recibido: $v('#v-efectivo').style.display === 'block' ? $v('#v-recibido').value : '',
+    let cheque = null;
+    if (forma.cheque) { cheque = await pedirCheque(document.querySelector('#v-total')?.textContent || '', ''); if (!cheque) return; }
+    const j = await api('/api/ventas/confirmar', {forma_id: forma.id, cheque, recibido: $v('#v-efectivo').style.display === 'block' ? $v('#v-recibido').value : '',
       items: carrito.map(it => ({id: it.id, cantidad: String(it.cant).replace('.', ','), manual: it.manual, precio: it.manual ? String(it.precioManual).replace('.', ',') : ''}))});
     if (!j.ok) { err.textContent = j.error; err.style.display = 'block'; return; }
     carrito = []; $v('#v-recibido').value = ''; dibujar();

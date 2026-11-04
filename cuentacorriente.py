@@ -27,13 +27,19 @@ def crear_tablas(con):
         CREATE INDEX IF NOT EXISTS ix_cc_docs_tipo ON cc_docs(tipo);
         CREATE INDEX IF NOT EXISTS ix_cc_pagos_doc ON cc_pagos(doc_id);
     """)
+    _migrar(con)
+
+
+def _migrar(con):
+    if "sin_factura" not in [r[1] for r in con.execute("PRAGMA table_info(cc_docs)")]:
+        con.execute("ALTER TABLE cc_docs ADD COLUMN sin_factura INTEGER NOT NULL DEFAULT 0")      # se cobra sin factura (puede pedirla después)
 
 
 SQL_DOCS = ("SELECT d.*, IFNULL((SELECT SUM(monto) FROM cc_pagos WHERE doc_id=d.id), 0) AS pagado FROM cc_docs d")
 
 
 def _estado(d, hoy):
-    if not (d["total"] or 0) > 0 or not d["numero"]:
+    if not (d["total"] or 0) > 0 or not (d["numero"] or d["sin_factura"]):
         return "sinfacturar", 0         # todavía sin número de factura ni importe
     saldo = round(d["total"] - d["pagado"], 2)
     if saldo <= 0.004:
@@ -131,7 +137,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         w = csv.writer(sal, delimiter=";")
         w.writerow(["Estado", "Emisión", "Vencimiento", TIPOS[tipo][4], "N° de factura", "Total", "Pagado", "Saldo", "Atraso (días)", "Observaciones"])
         for f in filas:
-            w.writerow([{"pagado": TIPOS[tipo][2], "vencido": "Vencido", "pendiente": TIPOS[tipo][1], "sinfacturar": "Sin facturar"}[f["estado"]], f["emision"], f["vence"], f["persona"], f["numero"] or "",
+            w.writerow([{"pagado": TIPOS[tipo][2], "vencido": "Vencido", "pendiente": TIPOS[tipo][1], "sinfacturar": "Sin facturar"}[f["estado"]], f["emision"], f["vence"], f["persona"], f["numero"] or ("SIN FACTURA" if f["sin_factura"] else ""),
                         str(f["total"]).replace(".", ","), str(f["pagado"]).replace(".", ","), str(f["saldo"]).replace(".", ","), f["atraso"], f["obs"] or ""])
         return Response("﻿" + sal.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename=cuenta_corriente_{tipo}.csv"})
 
@@ -220,7 +226,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         tipo = d.get("tipo")
         persona = " ".join(U(d.get("persona")).split())
         emision = _fecha_ok(d.get("emision"))
-        numero = " ".join(str(d.get("numero") or "").split())[:40] or None
+        sin_factura = 1 if d.get("sin_factura") else 0
+        numero = None if sin_factura else (" ".join(str(d.get("numero") or "").split())[:40] or None)
         obs = U(d.get("obs"))[:500] or None
         if tipo not in TIPOS:
             return error("Tipo inválido.")
@@ -229,13 +236,13 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if not emision:
             return error("Completá la fecha.")
         total, vence = 0.0, ""
-        if numero:      # con número de factura, el importe y el vencimiento son obligatorios
+        if numero or sin_factura:      # con número de factura (o tildado «sin factura»), el importe y el vencimiento son obligatorios
             try:
                 total = core.parse_monto(d.get("total"))
             except ValueError:
                 total = None
             if not total or total <= 0:
-                return error("Con número de factura, el importe total es obligatorio.")
+                return error("Con número de factura (o «sin factura»), el importe total es obligatorio.")
             vence = _fecha_ok(d.get("vence"))
             if not vence:
                 return error("Completá el vencimiento.")
@@ -249,12 +256,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 r = con.execute(SQL_DOCS + " WHERE d.id=?", (d.get("id"),)).fetchone()
                 if not r:
                     return error("No existe el registro.", 404)
-                if numero and total + 0.004 < r["pagado"]:
+                if (numero or sin_factura) and total + 0.004 < r["pagado"]:
                     return error("El total no puede ser menor a lo ya pagado.")
-                if not numero and r["pagado"] > 0:
+                if not numero and not sin_factura and r["pagado"] > 0:
                     return error("Ya tiene pagos registrados: no se puede quitar el número de factura.")
                 did = r["id"]
-                con.execute("UPDATE cc_docs SET persona=?, emision=?, vence=?, numero=?, total=?, obs=? WHERE id=?", (persona, emision, vence, numero, total, obs, did))
+                con.execute("UPDATE cc_docs SET persona=?, emision=?, vence=?, numero=?, total=?, obs=?, sin_factura=? WHERE id=?", (persona, emision, vence, numero, total, obs, sin_factura, did))
                 if items is not None:
                     e = aplicar_items(con, did, items, items_de(con, did))
                     if e:
@@ -262,15 +269,15 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                         return error(e)
                 return jsonify(ok=True, id=did)
             m = 0
-            if numero and d.get("pagado_inicial") not in (None, ""):
+            if (numero or sin_factura) and d.get("pagado_inicial") not in (None, ""):
                 try:
                     m = core.parse_monto(d.get("pagado_inicial")) or 0
                 except ValueError:
                     return error("El importe ya cobrado/pagado no es válido.")
                 if m > total + 0.004:
                     return error("Lo ya cobrado/pagado no puede superar el total.")
-            did = con.execute("INSERT INTO cc_docs (tipo, persona, emision, vence, numero, total, obs, creado) VALUES (?,?,?,?,?,?,?,?)",
-                              (tipo, persona, emision, vence, numero, total, obs, core.ahora())).lastrowid
+            did = con.execute("INSERT INTO cc_docs (tipo, persona, emision, vence, numero, total, obs, creado, sin_factura) VALUES (?,?,?,?,?,?,?,?,?)",
+                              (tipo, persona, emision, vence, numero, total, obs, core.ahora(), sin_factura)).lastrowid
             if items:
                 e = aplicar_items(con, did, items, [])
                 if e:
@@ -296,8 +303,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             r = con.execute(SQL_DOCS + " WHERE d.id=?", (did,)).fetchone()
             if not r:
                 return error("No existe el registro.", 404)
-            if not r["numero"] or not (r["total"] or 0) > 0:
-                return error("Primero cargá el número de factura y el importe.")
+            if not (r["numero"] or r["sin_factura"]) or not (r["total"] or 0) > 0:
+                return error("Primero cargá el número de factura (o tildá «sin factura») y el importe.")
             saldo = round(r["total"] - r["pagado"], 2)
             if m > saldo + 0.004:
                 return error(f"El importe supera el saldo pendiente ({core.fmt_monto(saldo)}).")

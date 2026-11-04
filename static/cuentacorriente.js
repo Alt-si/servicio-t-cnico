@@ -6,7 +6,7 @@ const ccEtiq = t => t === 'cliente' ? {persona: 'Cliente', pagado: 'cobrado', ac
 // Estado del formulario: se conserva al ir al buscador de productos y volver
 function ccFormulario(tipo, d, est) {
   const L = ccEtiq(tipo), nuevo = !d;
-  est = est || {persona: d ? d.persona : '', emision: d ? d.emision : CC_HOY, obs: d ? d.obs || '' : '', numero: d ? d.numero || '' : '',
+  est = est || {persona: d ? d.persona : '', emision: d ? d.emision : CC_HOY, obs: d ? d.obs || '' : '', numero: d ? d.numero || '' : '', sinf: d ? !!d.sin_factura : false,
     total: d && d.total > 0 ? ccNum(d.total) : '', vence: d && d.vence ? d.vence : '', ini: '', items: (d && d.items) ? d.items.map(i => ({...i})) : []};
   const sumItems = () => est.items.reduce((s, i) => s + i.cantidad * i.precio, 0);
   const m = modal(`<h2>${nuevo ? 'Nueva cuenta corriente' : 'Editar'} · ${L.persona}</h2><div id="cc-err" class="msg error" style="display:none"></div>
@@ -16,7 +16,8 @@ function ccFormulario(tipo, d, est) {
     ${CC_STOCK ? `<div style="margin:6px 0"><b>Productos del stock</b> <button type="button" class="btn" id="cc-addp" style="padding:2px 10px">+ Agregar producto</button>
       ${est.items.length ? `<table class="tabla" style="width:100%;margin-top:6px">${est.items.map((i, n) => `<tr><td>${esc(i.nombre)}</td><td>${ccNum(i.cantidad)} ${esc(i.abrev || '')}</td><td style="text-align:right">$ ${ccNum(i.cantidad * i.precio)}</td><td><button type="button" class="btn" style="padding:1px 8px" data-q="${n}">×</button></td></tr>`).join('')}
       <tr><td colspan="2" style="text-align:right">Total productos</td><td style="text-align:right"><b>$ ${ccNum(sumItems())}</b></td><td></td></tr></table>` : '<div class="mut" style="font-size:13px">Descuentan del stock al guardar.</div>'}</div>` : ''}
-    <hr><label>N° de factura <span class="mut">(al cargarlo se piden el importe y el vencimiento)</span></label><input id="cc-num" autocomplete="off" value="${esc(est.numero)}">
+    <hr><label>N° de factura <span class="mut">(o tildá «Sin factura»: se carga igual el importe y el vencimiento, y después se puede poner la factura si el cliente la pide)</span></label><div class="row"><input id="cc-num" autocomplete="off" value="${esc(est.numero)}" style="flex:1" ${est.sinf ? 'disabled' : ''}>
+      <label style="display:flex;align-items:center;gap:6px;margin:0;white-space:nowrap"><input type="checkbox" id="cc-sf" ${est.sinf ? 'checked' : ''}> Sin factura</label></div>
     <div id="cc-fact" style="display:none">
       <div class="grid"><div><label>Importe total ($) *</label><input id="cc-tot" class="moneda" inputmode="decimal" value="${esc(est.total)}"></div>
       <div><label>Vencimiento *</label><input id="cc-ve" type="date" value="${est.vence}"></div></div>
@@ -25,17 +26,19 @@ function ccFormulario(tipo, d, est) {
     </div>
     <div class="row" style="margin-top:12px"><button class="btn pri" id="cc-ok">Guardar</button><button class="btn" id="cc-no">Cancelar</button></div>`);
   const q = s => m.querySelector(s);
-  const leer = () => { est.persona = q('#cc-per').value; est.emision = q('#cc-em').value; est.obs = q('#cc-obs').value; est.numero = q('#cc-num').value;
+  const leer = () => { est.persona = q('#cc-per').value; est.emision = q('#cc-em').value; est.obs = q('#cc-obs').value; est.numero = q('#cc-sf').checked ? '' : q('#cc-num').value; est.sinf = q('#cc-sf').checked;
     est.total = q('#cc-tot').value; est.vence = q('#cc-ve').value; if (q('#cc-ini')) est.ini = q('#cc-ini').value; };
   const mostrar = () => {
-    const con = q('#cc-num').value.trim() !== '';
+    const con = q('#cc-sf').checked || q('#cc-num').value.trim() !== '';
     q('#cc-fact').style.display = con ? 'block' : 'none';
     if (con) {
       if (!q('#cc-tot').value && sumItems() > 0) { q('#cc-tot').value = ccNum(sumItems()); }
       if (!q('#cc-ve').value) q('#cc-ve').value = ccSumar(q('#cc-em').value || CC_HOY, 7);
     }
   };
-  q('#cc-num').addEventListener('input', mostrar); mostrar();
+  q('#cc-num').addEventListener('input', mostrar);
+  q('#cc-sf').addEventListener('change', () => { const n = q('#cc-num'); n.disabled = q('#cc-sf').checked; if (n.disabled) n.value = ''; mostrar(); });
+  mostrar();
   ['cc-em', 'cc-ve'].forEach(i => q('#' + i).addEventListener('click', ev => { try { ev.target.showPicker(); } catch (x) {} }));
   m.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { q('#cc-ve').value = ccSumar(q('#cc-em').value || CC_HOY, +b.dataset.p); });
   m.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { leer(); est.items.splice(+b.dataset.q, 1); cerrar(); ccFormulario(tipo, d, est); });
@@ -43,8 +46,8 @@ function ccFormulario(tipo, d, est) {
   q('#cc-no').onclick = cerrar;
   q('#cc-ok').onclick = async () => {
     leer();
-    const conFactura = est.numero.trim() !== '';
-    const j = await api('/api/cc/doc', {id: d ? d.id : null, tipo, persona: est.persona, emision: est.emision, vence: conFactura ? est.vence : '', numero: est.numero,
+    const conFactura = est.sinf || est.numero.trim() !== '';
+    const j = await api('/api/cc/doc', {id: d ? d.id : null, tipo, persona: est.persona, emision: est.emision, vence: conFactura ? est.vence : '', numero: est.numero, sin_factura: est.sinf,
       total: conFactura ? est.total : '', obs: est.obs, pagado_inicial: nuevo && conFactura ? est.ini : null, items: CC_STOCK ? est.items : undefined});
     if (!j.ok) { const e = q('#cc-err'); e.textContent = j.error || 'No se pudo guardar.'; e.style.display = 'block'; return; }
     location.reload();
@@ -129,7 +132,7 @@ async function ccVer(id, tipo) {
   const L = ccEtiq(tipo), d = j.doc;
   const fe = s => s.split('-').reverse().join('/');
   const m = modal(`<h2>${esc(d.persona)}</h2>
-    <p class="mut" style="line-height:1.6">Fecha ${fe(d.emision)}${d.vence ? ' · Vence ' + fe(d.vence) : ''}${d.numero ? ' · Factura ' + esc(d.numero) : ' · Sin facturar'}<br>Total $ ${ccNum(d.total)} · ${L.pagado} $ ${ccNum(d.pagado)} · <b>Saldo $ ${ccNum(d.saldo)}</b>${d.obs ? '<br>' + esc(d.obs) : ''}</p>
+    <p class="mut" style="line-height:1.6">Fecha ${fe(d.emision)}${d.vence ? ' · Vence ' + fe(d.vence) : ''}${d.numero ? ' · Factura ' + esc(d.numero) : d.sin_factura ? ' · SIN FACTURA' : ' · Sin facturar'}<br>Total $ ${ccNum(d.total)} · ${L.pagado} $ ${ccNum(d.pagado)} · <b>Saldo $ ${ccNum(d.saldo)}</b>${d.obs ? '<br>' + esc(d.obs) : ''}</p>
     ${j.items.length ? `<p class="mut" style="margin:0">Productos: ${j.items.map(i => esc(i.nombre) + ' x' + ccNum(i.cantidad)).join(', ')}</p>` : ''}
     <table class="tabla" style="width:100%"><tr><th>Fecha</th><th>Nota</th><th style="text-align:right">Importe</th><th></th></tr>
     ${j.pagos.map(p => `<tr><td>${fe(p.fecha)}</td><td>${esc(p.nota || '')}</td><td style="text-align:right">$ ${ccNum(p.monto)}</td><td><button class="btn" style="padding:1px 8px" data-pp="${p.id}">×</button></td></tr>`).join('') || '<tr><td colspan="4" class="mut">Sin pagos registrados.</td></tr>'}</table>

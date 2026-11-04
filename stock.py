@@ -48,6 +48,7 @@ def crear_tablas(con):
     agregar("stock_productos", "codigo_barras", "TEXT")
     agregar("stock_productos", "iva", "REAL")                   # vacío = usa el IVA general de la cuenta
     agregar("stock_productos", "precio_auto", "INTEGER NOT NULL DEFAULT 0")
+    agregar("stock_productos", "descuento", "REAL")             # % de descuento propio del producto (vacío = el del rubro / marca)
     con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
     agregar("stock_formas_pago", "pide_cheque", "INTEGER NOT NULL DEFAULT 0")      # cheque / e-cheq: al cobrar se piden sus datos
     if con.execute("SELECT COUNT(*) FROM stock_formas_pago").fetchone()[0] == 0:
@@ -152,7 +153,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     def solo(nombre):
         return " ".join((nombre or "").split())
 
-    SQL_PROD = ("SELECT p.*, c.nombre AS categoria, IFNULL(m.descuento, c.descuento) AS desc_pct, m.nombre AS marca, u.nombre AS unidad, u.abrev, u.decimales "
+    SQL_PROD = ("SELECT p.*, c.nombre AS categoria, IFNULL(p.descuento, IFNULL(m.descuento, c.descuento)) AS desc_pct, m.nombre AS marca, u.nombre AS unidad, u.abrev, u.decimales "
                 "FROM stock_productos p LEFT JOIN stock_categorias c ON c.id=p.categoria_id "
                 "LEFT JOIN stock_marcas m ON m.id=p.marca_id JOIN stock_unidades u ON u.id=p.unidad_id")
 
@@ -251,6 +252,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 costo, precio = core.parse_monto(d.get("costo")), core.parse_monto(d.get("precio"))
                 contado = core.parse_monto(d.get("precio_contado"))
                 iva = pct(d.get("iva"))
+                descuento = pct(d.get("descuento"))
                 minimo = cant_o_error(d.get("stock_minimo") or "0", uni["decimales"])
                 inicial = cant_o_error(d.get("stock_inicial") or "0", uni["decimales"]) if not pid else 0
             except ValueError:
@@ -271,17 +273,17 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 m_row = con.execute("SELECT * FROM stock_marcas WHERE id=?", (mar,)).fetchone() if mar else None
                 precio, contado = calcular(costo, c_row, m_row)
             valores = [codigo or None, nombre, U(d.get("descripcion")) or None, cat, mar, uni["id"], costo, precio, minimo,
-                       U(d.get("ubicacion")) or None, contado, iva, auto]
+                       U(d.get("ubicacion")) or None, contado, iva, auto, descuento]
             if pid:
                 p = con.execute("SELECT * FROM stock_productos WHERE id=?", (pid,)).fetchone()
                 if not p:
                     return error("No existe el producto.", 404)
                 con.execute("UPDATE stock_productos SET codigo=?, nombre=?, descripcion=?, categoria_id=?, marca_id=?, unidad_id=?, costo=?, "
-                            "precio=?, stock_minimo=?, ubicacion=?, precio_contado=?, iva=?, precio_auto=?, activo=?, actualizado=? WHERE id=?",
+                            "precio=?, stock_minimo=?, ubicacion=?, precio_contado=?, iva=?, precio_auto=?, descuento=?, activo=?, actualizado=? WHERE id=?",
                             valores + [0 if d.get("activo") is False else 1, ahora, pid])
             else:
                 pid = con.execute("INSERT INTO stock_productos (codigo, nombre, descripcion, categoria_id, marca_id, unidad_id, costo, precio, "
-                                  "stock_minimo, ubicacion, precio_contado, iva, precio_auto, stock_actual, activo, creado, actualizado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",
+                                  "stock_minimo, ubicacion, precio_contado, iva, precio_auto, descuento, stock_actual, activo, creado, actualizado) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)",
                                   valores + [inicial, ahora, ahora]).lastrowid
                 if inicial:
                     con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",

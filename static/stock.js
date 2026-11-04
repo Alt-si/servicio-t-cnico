@@ -20,6 +20,8 @@ async function productoForm(id) {
       <div style="align-self:end"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="p-auto" style="width:auto" ${p.precio_auto ? 'checked' : ''}> Calcular precios con las reglas del ${esc(L.categoria.toLowerCase())} / ${esc(L.marca.toLowerCase())}</label></div>
       <div><label>Precio de lista ($)</label><input id="p-precio" class="moneda" inputmode="decimal" value="${num(p.precio)}"></div>
       <div><label>Precio contado ($)</label><input id="p-contado" class="moneda" inputmode="decimal" value="${num(p.precio_contado)}"></div>
+      <div><label>Descuento (%) <span class="mut" style="font-weight:400">por efectivo / transferencia</span></label><input id="p-desc-pct" inputmode="decimal" value="${nz(p.descuento)}" ></div>
+      <div><label>Precio con descuento ($)</label><input id="p-pdesc" readonly tabindex="-1" style="background:var(--bg,#f3f4f6)"></div>
       ${f.iva.activo ? `<div><label>IVA % (vacío = general ${nz(f.iva.defecto)}%)</label><input id="p-iva" inputmode="decimal" value="${nz(p.iva)}"></div>` : ''}
       <div><label>Stock mínimo (aviso)</label><input id="p-min" inputmode="decimal" value="${num(p.stock_minimo || '')}"></div>
       ${id ? '' : '<div><label>Stock inicial</label><input id="p-ini" inputmode="decimal"></div>'}
@@ -39,9 +41,18 @@ async function productoForm(id) {
     const calc = k => (costo === null || regla(k) === null || regla(k) === undefined) ? '' : fm(Math.round(costo * (1 + regla(k) / 100) * 100) / 100);
     $('#p-precio', c).value = calc('margen_lista'); $('#p-contado', c).value = calc('margen_contado');
   };
-  ['#p-auto', '#p-cat', '#p-mar'].forEach(s => $(s, c).addEventListener('change', recalc));
-  $('#p-costo', c).addEventListener('input', recalc);
-  recalc();
+  // precio con descuento: el % propio del producto; si está vacío, el del rubro / marca
+  const conDesc = () => {
+    const cat = f.categorias.find(x => String(x.id) === $('#p-cat', c).value), mar = f.marcas.find(x => String(x.id) === $('#p-mar', c).value);
+    const regla = (mar && mar.descuento !== null && mar.descuento !== undefined) ? mar.descuento : (cat && cat.descuento !== undefined ? cat.descuento : null);
+    $('#p-desc-pct', c).placeholder = regla !== null && regla !== undefined ? `${fm(regla)}% (${(mar && mar.descuento != null) ? 'de la marca' : 'del rubro'})` : 'sin descuento';
+    const propio = pn($('#p-desc-pct', c).value), d = propio !== null ? propio : (regla === undefined ? null : regla), lista = pn($('#p-precio', c).value);
+    $('#p-pdesc', c).value = (lista === null || !d) ? '' : fm(Math.round(lista * (1 - d / 100) * 100) / 100);
+  };
+  const todo = () => { recalc(); conDesc(); };
+  ['#p-auto', '#p-cat', '#p-mar'].forEach(s => $(s, c).addEventListener('change', todo));
+  ['#p-costo', '#p-precio', '#p-desc-pct'].forEach(s => $(s, c).addEventListener('input', todo));
+  todo();
   // Alta rápida de rubro / marca en la misma ventana, sin cerrar el formulario del producto
   const nuevo = (tabla, selId, link) => {
     const sel = $(selId, c), prev = c.querySelector('.alta-rapida');
@@ -67,7 +78,7 @@ async function productoForm(id) {
   $('#p-no', c).onclick = cerrar;
   $('#p-ok', c).onclick = async () => {
     const d = {id, nombre: $('#p-nombre', c).value, codigo: $('#p-codigo', c).value, codigo_barras: $('#p-barras', c).value, categoria_id: $('#p-cat', c).value, marca_id: $('#p-mar', c).value,
-      unidad_id: $('#p-uni', c).value, ubicacion: $('#p-ubi', c).value, costo: $('#p-costo', c).value, precio: $('#p-precio', c).value, precio_contado: $('#p-contado', c).value, precio_auto: $('#p-auto', c).checked,
+      unidad_id: $('#p-uni', c).value, ubicacion: $('#p-ubi', c).value, costo: $('#p-costo', c).value, precio: $('#p-precio', c).value, precio_contado: $('#p-contado', c).value, descuento: $('#p-desc-pct', c).value, precio_auto: $('#p-auto', c).checked,
       iva: $('#p-iva', c)?.value || '',
       stock_minimo: $('#p-min', c).value, descripcion: $('#p-desc', c).value, stock_inicial: $('#p-ini', c)?.value || ''};
     const j = await api('/api/stock/producto', d);

@@ -78,7 +78,7 @@ def _lista_final(p, iva_activo, iva_def):
 
 
 def registrar(app, login_requerido, modulo_requerido, db, error):
-    SQL = ("SELECT p.*, u.abrev, u.decimales, IFNULL(m.descuento, c.descuento) AS desc_pct FROM stock_productos p "
+    SQL = ("SELECT p.*, u.abrev, u.decimales, IFNULL(p.descuento, IFNULL(m.descuento, c.descuento)) AS desc_pct FROM stock_productos p "
            "JOIN stock_unidades u ON u.id=p.unidad_id LEFT JOIN stock_categorias c ON c.id=p.categoria_id "
            "LEFT JOIN stock_marcas m ON m.id=p.marca_id")
 

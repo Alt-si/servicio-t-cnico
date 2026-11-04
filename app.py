@@ -434,13 +434,19 @@ def orden_ver(oid):
         equipo = con.execute("SELECT * FROM equipos WHERE id=?", (o["equipo_id"],)).fetchone() if o["equipo_id"] else None
         extras = [dict(monto=m, detalle=t) for m, t in opciones_de(con, oid)]
     equipo_txt = texto_equipo(equipo["tipo"], equipo["marca"], equipo["modelo"]) if equipo else "equipo"
-    formas, saldo, cobros = [], 0, []
+    formas, saldo, cobros, repuestos = [], 0, [], []
+    if "stock" in g.modulos:
+        with db() as con:
+            repuestos = [dict(r) for r in con.execute("SELECT * FROM orden_repuestos WHERE orden_id=? ORDER BY id", (oid,))]
+    rep_total = round(sum(r["cantidad"] * r["precio"] for r in repuestos), 2)
     if "ventas" in g.modulos:       # con Ventas activo, al retirar se registra el cobro y su forma de pago
         with db() as con:
             formas = [dict(id=r["id"], nombre=r["nombre"], cheque=bool(r["pide_cheque"])) for r in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
             cobros = [dict(r) for r in con.execute("SELECT id, fecha, monto, forma FROM cobros WHERE orden_id=? ORDER BY id", (oid,))]
         saldo = saldo_a_abonar(o["presupuesto_monto"], o["sena_monto"], o["reembolso_monto"], o["presupuesto_respuesta"] == "rechazado") or 0
-    return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False, formas=formas, saldo=saldo, cobros=cobros,
+        if rep_total and not o["reembolso_monto"]:
+            saldo += rep_total
+    return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False, formas=formas, saldo=saldo, cobros=cobros, repuestos=repuestos, rep_total=rep_total,
                            nombre_completo=core.nombre_natural(cliente),
                            wa_numero=telefono_whatsapp(cliente["telefono"]), equipo_txt=equipo_txt,
                            nombre_pila=(cliente["nombre"] or "").strip().title(), extras=extras)
@@ -480,6 +486,14 @@ def leer_opciones(d):
             return None, "Cada opción de presupuesto necesita un monto."
         extra.append((m, det))
     return extra, None
+
+
+def _con_repuestos(con, oid, saldo, dev):
+    """Suma al saldo el valor de los repuestos usados en la orden (si Stock está activo)."""
+    if dev or "stock" not in g.modulos:
+        return saldo
+    t = con.execute("SELECT SUM(cantidad*precio) FROM orden_repuestos WHERE orden_id=?", (oid,)).fetchone()[0]
+    return round((saldo or 0) + t, 2) if t else saldo
 
 
 def opciones_de(con, oid):
@@ -868,7 +882,7 @@ def api_orden_accion(oid):
                 con.execute("UPDATE ordenes SET tecnico_reparacion=? WHERE id=?", (tec, oid))
                 core.registrar_evento(con, oid, E_LISTO, f"Técnico que reparó: {tec}")
             cambiar(E_LISTO, ", espera_repuesto=0, fecha_finalizado=COALESCE(fecha_finalizado, ?), fecha_retiro=NULL", (ahora,))
-            core.registrar_evento(con, oid, E_LISTO, core.texto_evento_estado(estado, E_LISTO, saldo_a_abonar(monto, sena, dev, resp == "rechazado"), bool(dev)))
+            core.registrar_evento(con, oid, E_LISTO, core.texto_evento_estado(estado, E_LISTO, _con_repuestos(con, oid, saldo_a_abonar(monto, sena, dev, resp == "rechazado"), dev), bool(dev)))
         elif accion == "retirar":
             if estado != E_LISTO:
                 return error("Solo se puede retirar una orden que está lista para retirar.")

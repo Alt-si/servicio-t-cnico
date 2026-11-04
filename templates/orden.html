@@ -62,6 +62,12 @@
 
 {% if o %}
 <div class="card"><h2>Acciones</h2><div class="row" id="acciones"></div></div>
+{% if 'stock' in modulos %}<div class="card"><div class="row"><h2 style="margin:0">Repuestos y accesorios</h2><div class="der">{% if o.estado not in ('Equipo retirado', 'Scrap', 'Equipo comprado') %}<button class="btn pri" onclick="repAgregar()">Agregar repuesto o accesorio</button>{% endif %}</div></div>
+  {% if repuestos %}<table class="tabla" style="margin-top:8px"><tr><th>Producto</th><th>Cant.</th><th style="text-align:right">Precio</th><th style="text-align:right">Subtotal</th><th></th></tr>
+  {% for r in repuestos %}<tr><td>{{ r.nombre }}</td><td>{{ r.cantidad|round(3)|string|replace('.0', '') }} {{ r.abrev or '' }}</td><td style="text-align:right">$ {{ r.precio|monto_input }}</td><td style="text-align:right"><b>$ {{ (r.cantidad * r.precio)|round(2)|monto_input }}</b></td>
+  <td style="text-align:right">{% if o.estado not in ('Equipo retirado', 'Scrap', 'Equipo comprado') %}<button class="btn" style="padding:2px 8px" onclick="repQuitar({{ r.id }})">Quitar</button>{% endif %}</td></tr>{% endfor %}
+  <tr><td colspan="3" style="text-align:right">Total repuestos (se suma al saldo a cobrar)</td><td style="text-align:right"><b>$ {{ rep_total|monto_input }}</b></td><td></td></tr></table>
+  {% else %}<p class="mut" style="margin:8px 0 0">Todavía no se cargó ningún repuesto. Lo que agregues descuenta stock y se suma al total a pagar.</p>{% endif %}</div>{% endif %}
 {% if cobros %}<div class="card"><h2>Historial de cobros</h2><table class="tabla"><tr><th>Fecha</th><th>Forma de pago</th><th style="text-align:right">Importe</th><th></th></tr>
   {% for c in cobros %}<tr><td>{{ c.fecha[8:10] }}/{{ c.fecha[5:7] }}/{{ c.fecha[:4] }} {{ c.fecha[11:16] }}</td><td>{{ c.forma }}</td><td style="text-align:right"><b>$ {{ c.monto|monto_input }}</b></td>
   <td style="text-align:right"><button class="btn" style="padding:2px 8px" onclick="cobroEditar({{ c.id }})">Editar</button> <button class="btn" style="padding:2px 8px" onclick="cobroEliminar({{ c.id }})">Eliminar</button></td></tr>{% endfor %}</table></div>{% endif %}
@@ -71,13 +77,14 @@
 {% endblock %}
 {% block js %}
 <script src="{{ url_for('static', filename='cobros.js') }}"></script>
+<script src="{{ url_for('static', filename='repuestos.js') }}"></script>
 <script>
 const ORDEN = {{ ({
   'id': o.id if o else None, 'estado': o.estado if o else None, 'resp': o.presupuesto_respuesta if o else None,
   'dev': o.reembolso_monto if o else None, 'cliente_id': cliente.id if cliente else None,
   'equipo_id': (o.equipo_id if o else None), 'wa': wa_numero if o else '', 'nombre': nombre_pila if o else '',
   'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre, 'cliente_nombre': nombre_completo if o else '',
-  'ventas': 'ventas' in modulos, 'formas': formas|default([]), 'saldo': saldo|default(0), 'sena': (o.sena_monto if o else None),
+  'ventas': 'ventas' in modulos, 'formas': formas|default([]), 'saldo': saldo|default(0), 'rep_total': rep_total|default(0), 'sena': (o.sena_monto if o else None),
   'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else '',
   'imposible': (o.imposible_reparar if o else 0), 'imposible_motivo': ((o.imposible_motivo or '') if o else ''), 'extra': extras if extras is defined else []
 }) | tojson }};

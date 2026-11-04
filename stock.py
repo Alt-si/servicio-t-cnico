@@ -49,6 +49,9 @@ def crear_tablas(con):
     agregar("stock_productos", "iva", "REAL")                   # vacío = usa el IVA general de la cuenta
     agregar("stock_productos", "precio_auto", "INTEGER NOT NULL DEFAULT 0")
     agregar("stock_productos", "descuento", "REAL")             # % de descuento propio del producto (vacío = el del rubro / marca)
+    con.execute("""CREATE TABLE IF NOT EXISTS orden_repuestos (id INTEGER PRIMARY KEY AUTOINCREMENT, orden_id INTEGER NOT NULL, producto_id INTEGER,
+                   nombre TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, abrev TEXT, fecha TEXT)""")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_orep_orden ON orden_repuestos(orden_id)")
     con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
     agregar("stock_formas_pago", "pide_cheque", "INTEGER NOT NULL DEFAULT 0")      # cheque / e-cheq: al cobrar se piden sus datos
     if con.execute("SELECT COUNT(*) FROM stock_formas_pago").fetchone()[0] == 0:
@@ -158,6 +161,90 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 "LEFT JOIN stock_marcas m ON m.id=p.marca_id JOIN stock_unidades u ON u.id=p.unidad_id")
 
     # ---------------- listado
+    # ---------------- repuestos y accesorios usados en una orden (descuentan stock y suman al total a cobrar)
+    def _orden_abierta(con, oid):
+        o = con.execute("SELECT id, estado FROM ordenes WHERE id=?", (oid,)).fetchone()
+        if not o:
+            return None, error("No existe la orden.", 404)
+        if o["estado"] in ("Equipo retirado", "Scrap", "Equipo comprado"):
+            return None, error("La orden ya está cerrada: no se pueden cambiar sus repuestos.")
+        return o, None
+
+    @app.route("/api/orden/<int:oid>/repuestos/buscar")
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_orden_rep_buscar(oid):
+        q = (request.args.get("q") or "").strip()
+        sql = SQL_PROD + " WHERE p.activo=1"
+        par = []
+        for w in q.split()[:4]:
+            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR IFNULL(p.codigo_barras,'') LIKE ?)"
+            par += [f"%{w}%"] * 3
+        sql += " ORDER BY p.nombre COLLATE NOCASE LIMIT 30"
+        with db() as con:
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], precio=r["precio"], stock=r["stock_actual"], abrev=r["abrev"], decimales=r["decimales"])
+                     for r in con.execute(sql, par)]
+        return jsonify(ok=True, items=items)
+
+    @app.route("/api/orden/<int:oid>/repuestos", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_orden_rep_agregar(oid):
+        d = request.get_json(force=True, silent=True) or {}
+        with db() as con:
+            o, err = _orden_abierta(con, oid)
+            if err:
+                return err
+            p = con.execute(SQL_PROD + " WHERE p.id=? AND p.activo=1", (d.get("producto_id"),)).fetchone()
+            if not p:
+                return error("Elegí un repuesto o accesorio cargado en Stock.")
+            try:
+                cant = cant_o_error(d.get("cantidad"), p["decimales"])
+            except ValueError:
+                return error("Escribí una cantidad válida.")
+            if cant <= 0:
+                return error("La cantidad tiene que ser mayor a cero.")
+            try:
+                precio = core.parse_monto(d.get("precio")) if d.get("precio") not in (None, "") else p["precio"]
+            except ValueError:
+                return error("El precio no es válido.")
+            if precio is None or precio < 0:
+                return error("Este producto no tiene precio: escribí el precio unitario.")
+            actual = round(p["stock_actual"], 6)
+            if cant > actual + 1e-9:
+                return error(f"Stock insuficiente: hay {fmt_cant(actual, p['decimales'])} {p['abrev']}.")
+            nuevo = round(actual - cant, 6)
+            ahora = core.ahora()
+            con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, p["id"]))
+            con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo, nota) VALUES (?,?,?,?,?,?,?)",
+                        (p["id"], ahora, "egreso", -cant, nuevo, "Usado en orden N° %04d" % oid, None))
+            con.execute("INSERT INTO orden_repuestos (orden_id, producto_id, nombre, cantidad, precio, abrev, fecha) VALUES (?,?,?,?,?,?,?)",
+                        (oid, p["id"], p["nombre"], cant, precio, p["abrev"], ahora))
+            core.registrar_evento(con, oid, o["estado"], f"Repuesto agregado: {fmt_cant(cant, p['decimales'])} {p['abrev']} {p['nombre']} · {core.fmt_monto(round(cant * precio, 2))}")
+        return jsonify(ok=True)
+
+    @app.route("/api/orden/<int:oid>/repuestos/<int:rid>/quitar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_orden_rep_quitar(oid, rid):
+        with db() as con:
+            o, err = _orden_abierta(con, oid)
+            if err:
+                return err
+            r = con.execute("SELECT * FROM orden_repuestos WHERE id=? AND orden_id=?", (rid, oid)).fetchone()
+            if not r:
+                return error("No existe ese repuesto en la orden.", 404)
+            p = con.execute("SELECT id, stock_actual FROM stock_productos WHERE id=?", (r["producto_id"],)).fetchone()
+            ahora = core.ahora()
+            if p:       # el producto vuelve al stock
+                nuevo = round(p["stock_actual"] + r["cantidad"], 6)
+                con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, p["id"]))
+                con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo, nota) VALUES (?,?,?,?,?,?,?)",
+                            (p["id"], ahora, "ingreso", r["cantidad"], nuevo, "Quitado de la orden N° %04d" % oid, None))
+            con.execute("DELETE FROM orden_repuestos WHERE id=?", (rid,))
+            core.registrar_evento(con, oid, o["estado"], f"Repuesto quitado: {r['nombre']}")
+        return jsonify(ok=True)
+
     @app.route("/stock")
     @login_requerido
     @modulo_requerido("stock")

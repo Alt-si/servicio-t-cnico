@@ -24,6 +24,8 @@ def crear_tablas(con):
         CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
         CREATE INDEX IF NOT EXISTS ix_venta_items_venta ON venta_items(venta_id);
     """)
+    if "cobro_id" not in [r[1] for r in con.execute("PRAGMA table_info(cheques)")]:
+        con.execute("ALTER TABLE cheques ADD COLUMN cobro_id INTEGER")
     if not existia:        # la primera vez, se suma «Billetera virtual» a las formas de pago
         if not con.execute("SELECT 1 FROM stock_formas_pago WHERE lower(nombre) LIKE 'billetera%'").fetchone():
             con.execute("INSERT INTO stock_formas_pago (nombre, aplica_descuento) VALUES ('Billetera virtual', 0)")
@@ -56,9 +58,9 @@ def validar_cheque(d):
     return limpio, None
 
 
-def guardar_cheque(con, datos, forma, monto, origen, orden_id=None, venta_id=None):
-    con.execute("INSERT INTO cheques (fecha, origen, orden_id, venta_id, forma, monto, emision, cobro, numero, banco, entrega) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (core.ahora(), origen, orden_id, venta_id, forma, monto, datos["emision"], datos["cobro"], datos["numero"], datos["banco"], datos["entrega"]))
+def guardar_cheque(con, datos, forma, monto, origen, orden_id=None, venta_id=None, cobro_id=None):
+    con.execute("INSERT INTO cheques (fecha, origen, orden_id, venta_id, forma, monto, emision, cobro, numero, banco, entrega, cobro_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (core.ahora(), origen, orden_id, venta_id, forma, monto, datos["emision"], datos["cobro"], datos["numero"], datos["banco"], datos["entrega"], cobro_id))
 
 
 def _iva(cid):
@@ -200,6 +202,80 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
         return render_template("ventas/historial.html", filas=filas, desde=desde, hasta=hasta, por_forma=sorted(por_forma.items()),
                                total=total, cantidad=sum(1 for v in filas if not v["anulada"]), fmt_fecha=core.fmt_fecha)
 
+    # ---------------- corregir cobros de órdenes (solo con el código de validación)
+    def _sin_codigo(d, motivo):
+        if core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
+            return None
+        return jsonify(ok=False, necesita_codigo=True, error="Código de validación incorrecto." if d.get("codigo") else motivo), 403
+
+    @app.route("/api/cobros/<int:cid_>")
+    @login_requerido
+    @modulo_requerido("ventas")
+    def api_cobro(cid_):
+        with db() as con:
+            c = con.execute("SELECT * FROM cobros WHERE id=?", (cid_,)).fetchone()
+            if not c:
+                return error("No existe el cobro.", 404)
+            ch = con.execute("SELECT * FROM cheques WHERE cobro_id=?", (cid_,)).fetchone()
+            formas = [dict(id=r["id"], nombre=r["nombre"], cheque=bool(r["pide_cheque"])) for r in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
+        return jsonify(ok=True, cobro=dict(c), cheque=dict(ch) if ch else None, formas=formas)
+
+    @app.route("/api/cobros/<int:cid_>/editar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("ventas")
+    def api_cobro_editar(cid_):
+        d = request.get_json(force=True, silent=True) or {}
+        r = _sin_codigo(d, "Modificar un cobro requiere el código de validación.")
+        if r:
+            return r
+        try:
+            monto = core.parse_monto(d.get("monto"))
+        except ValueError:
+            monto = None
+        if not monto or monto <= 0:
+            return error("Escribí el importe cobrado.")
+        with db() as con:
+            c = con.execute("SELECT * FROM cobros WHERE id=?", (cid_,)).fetchone()
+            if not c:
+                return error("No existe el cobro.", 404)
+            forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
+            if not forma:
+                return error("Elegí la forma de pago.")
+            cheque = None
+            if forma["pide_cheque"]:
+                cheque, msg = validar_cheque(d.get("cheque"))
+                if msg:
+                    return error(msg)
+            con.execute("UPDATE cobros SET monto=?, forma_id=?, forma=? WHERE id=?", (monto, forma["id"], forma["nombre"], cid_))
+            con.execute("DELETE FROM cheques WHERE cobro_id=?", (cid_,))
+            if cheque:
+                guardar_cheque(con, cheque, forma["nombre"], monto, "orden", orden_id=c["orden_id"], cobro_id=cid_)
+            if c["orden_id"]:
+                o = con.execute("SELECT estado FROM ordenes WHERE id=?", (c["orden_id"],)).fetchone()
+                if o:
+                    core.registrar_evento(con, c["orden_id"], o["estado"], f"Cobro corregido: {core.fmt_monto(c['monto'])} ({c['forma']}) → {core.fmt_monto(monto)} ({forma['nombre']})")
+        return jsonify(ok=True)
+
+    @app.route("/api/cobros/<int:cid_>/eliminar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("ventas")
+    def api_cobro_eliminar(cid_):
+        d = request.get_json(force=True, silent=True) or {}
+        r = _sin_codigo(d, "Eliminar un cobro requiere el código de validación.")
+        if r:
+            return r
+        with db() as con:
+            c = con.execute("SELECT * FROM cobros WHERE id=?", (cid_,)).fetchone()
+            if not c:
+                return error("No existe el cobro.", 404)
+            con.execute("DELETE FROM cheques WHERE cobro_id=?", (cid_,))
+            con.execute("DELETE FROM cobros WHERE id=?", (cid_,))
+            if c["orden_id"]:
+                o = con.execute("SELECT estado FROM ordenes WHERE id=?", (c["orden_id"],)).fetchone()
+                if o:
+                    core.registrar_evento(con, c["orden_id"], o["estado"], f"Cobro eliminado: {core.fmt_monto(c['monto'])} ({c['forma']})")
+        return jsonify(ok=True)
+
     @app.route("/ventas/cheques")
     @login_requerido
     @modulo_requerido("ventas")
@@ -260,8 +336,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             if modo == "dia":
                 movs = [dict(hora=r["fecha"][11:16], origen="Venta N° %d" % r["id"], forma=r["forma"] or "—", monto=r["total"]) for r in
                         con.execute("SELECT id, fecha, forma, total FROM ventas WHERE anulada=0 AND substr(fecha,1,10)=? ORDER BY id", (a,))]
-                movs += [dict(hora=r["fecha"][11:16], origen="Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"]) for r in
-                         con.execute("SELECT c.fecha, c.orden_id, c.forma, c.monto, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
+                movs += [dict(hora=r["fecha"][11:16], origen="Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"], cobro=r["id"]) for r in
+                         con.execute("SELECT c.id, c.fecha, c.orden_id, c.forma, c.monto, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
                                      "WHERE o.id=c.orden_id) AS cliente FROM cobros c WHERE substr(c.fecha,1,10)=? ORDER BY c.id", (a,))]
                 movs.sort(key=lambda m: m["hora"])
         formas, dias = {}, {}

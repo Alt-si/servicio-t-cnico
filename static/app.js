@@ -38,14 +38,15 @@ function pedirCodigo(motivo) {
   });
 }
 // Datos de un cheque / e-cheq (al cobrar con esa forma de pago); devuelve el objeto o null si cancela
-function pedirCheque(monto, quien) {
+function pedirCheque(monto, quien, previo) {
+  previo = previo || {};
   return new Promise(res => {
     const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     const c = modal(`<h2>Datos del cheque</h2>${monto ? `<p class="mut">Importe: <b>${esc(monto)}</b></p>` : ''}<div id="ch-err" class="msg error" style="display:none"></div>
-      <div class="grid"><div><label>Fecha de emisión *</label><input id="ch-em" type="date" value="${hoy}"></div>
-      <div><label>Fecha de cobro *</label><input id="ch-co" type="date"></div>
-      <div><label>N° de cheque *</label><input id="ch-num" autocomplete="off"></div>
-      <div><label>Banco *</label><input id="ch-banco" class="mayus" autocomplete="off"></div></div>
+      <div class="grid"><div><label>Fecha de emisión *</label><input id="ch-em" type="date" value="${esc(previo.emision || hoy)}"></div>
+      <div><label>Fecha de cobro *</label><input id="ch-co" type="date" value="${esc(previo.cobro || '')}"></div>
+      <div><label>N° de cheque *</label><input id="ch-num" autocomplete="off" value="${esc(previo.numero || '')}"></div>
+      <div><label>Banco *</label><input id="ch-banco" class="mayus" autocomplete="off" value="${esc(previo.banco || '')}"></div></div>
       <label>Quién lo entrega *</label><input id="ch-ent" class="mayus" autocomplete="off" value="${esc(quien || '')}">
       <div class="row" style="margin-top:12px"><button class="btn pri" id="ch-ok">Guardar</button><button class="btn" id="ch-no">Cancelar</button></div>`);
     ['ch-em', 'ch-co'].forEach(i => c.querySelector('#' + i).addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} }));

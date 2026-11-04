@@ -23,7 +23,8 @@
   {% for d in dias %}<tr class="{{ 'st-inactivo' if not d.t }}"><td><a href="?p=dia&f={{ d.fecha }}">{{ d.dia }} {{ d.txt }}</a></td><td style="text-align:right">$ {{ d.v|monto_input or '0' }}</td><td style="text-align:right">$ {{ d.c|monto_input or '0' }}</td><td style="text-align:right"><b>$ {{ d.t|monto_input or '0' }}</b></td></tr>{% endfor %}</tbody></table></div>
   {% else %}<h2>Movimientos del día</h2>
   <div class="tabla-wrap"><table><thead><tr><th>Hora</th><th>Origen</th><th>Forma de pago</th><th style="text-align:right">Importe</th></tr></thead><tbody class="clientes">
-  {% for m in movs %}<tr><td>{{ m.hora }}</td><td>{% if m.orden %}<a href="{{ url_for('orden_ver', oid=m.orden) }}">{{ m.origen }}</a>{% else %}{{ m.origen }}{% endif %}</td><td>{{ m.forma }}</td><td style="text-align:right"><b>$ {{ m.monto|monto_input }}</b></td></tr>
+  {% for m in movs %}<tr><td>{{ m.hora }}</td><td>{% if m.orden %}<a href="{{ url_for('orden_ver', oid=m.orden) }}">{{ m.origen }}</a>{% else %}{{ m.origen }}{% endif %}</td><td>{{ m.forma }}</td><td style="text-align:right"><b>$ {{ m.monto|monto_input }}</b>{% if m.cobro %} <button class="btn" style="padding:2px 8px" onclick="cobroEditar({{ m.cobro }})">Editar</button> <button class="btn" style="padding:2px 8px" onclick="cobroEliminar({{ m.cobro }})">Eliminar</button>{% endif %}</td></tr>
   {% else %}<tr><td colspan="4" class="mut">No hay movimientos este día.</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 </div>
 {% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='cobros.js') }}"></script>{% endblock %}

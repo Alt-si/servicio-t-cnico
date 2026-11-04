@@ -896,10 +896,10 @@ def api_orden_accion(oid):
             cambiar(E_RETIRADO, ", espera_repuesto=0, fecha_retiro=?, retiro_nombre=?, retiro_otra=?", (ahora, nombre_ret or None, 1 if otra else 0))
             core.registrar_evento(con, oid, E_RETIRADO, core.texto_evento_estado(estado, E_RETIRADO, None, bool(dev), quien or None))
             if cobro > 0:
-                con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma) VALUES (?,?,?,?,?)", (ahora, oid, cobro, forma["id"], forma["nombre"]))
+                cobro_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma) VALUES (?,?,?,?,?)", (ahora, oid, cobro, forma["id"], forma["nombre"])).lastrowid
                 core.registrar_evento(con, oid, E_RETIRADO, f"Cobro al retirar: {core.fmt_monto(cobro)} ({forma['nombre']})")
                 if cheque:
-                    ventas.guardar_cheque(con, cheque, forma["nombre"], cobro, "orden", orden_id=oid)
+                    ventas.guardar_cheque(con, cheque, forma["nombre"], cobro, "orden", orden_id=oid, cobro_id=cobro_id)
                     core.registrar_evento(con, oid, E_RETIRADO, f"Cheque N° {cheque['numero']} · {cheque['banco']} · lo entrega {cheque['entrega']} · cobro {core.fmt_fecha(cheque['cobro'])}")
         elif accion == "scrap":
             if core.requiere_codigo(estado, E_SCRAP):

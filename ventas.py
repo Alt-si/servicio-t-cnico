@@ -24,6 +24,8 @@ def crear_tablas(con):
         CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
         CREATE INDEX IF NOT EXISTS ix_venta_items_venta ON venta_items(venta_id);
     """)
+    if "cc_pago_id" not in [r[1] for r in con.execute("PRAGMA table_info(cobros)")]:
+        con.execute("ALTER TABLE cobros ADD COLUMN cc_pago_id INTEGER")      # cobro que viene de un pago de Cuenta corriente
     if "cobro_id" not in [r[1] for r in con.execute("PRAGMA table_info(cheques)")]:
         con.execute("ALTER TABLE cheques ADD COLUMN cobro_id INTEGER")
     if not existia:        # la primera vez, se suma «Billetera virtual» a las formas de pago
@@ -246,6 +248,12 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 cheque, msg = validar_cheque(d.get("cheque"))
                 if msg:
                     return error(msg)
+            if c["cc_pago_id"]:      # el pago de Cuenta corriente acompaña al cobro
+                doc = con.execute("SELECT d.total, IFNULL((SELECT SUM(monto) FROM cc_pagos WHERE doc_id=d.id AND id<>?),0) AS otros FROM cc_pagos p JOIN cc_docs d ON d.id=p.doc_id WHERE p.id=?",
+                                  (c["cc_pago_id"], c["cc_pago_id"])).fetchone()
+                if doc and monto + doc["otros"] > doc["total"] + 0.004:
+                    return error("El importe supera el total del comprobante en Cuenta corriente.")
+                con.execute("UPDATE cc_pagos SET monto=? WHERE id=?", (monto, c["cc_pago_id"]))
             con.execute("UPDATE cobros SET monto=?, forma_id=?, forma=? WHERE id=?", (monto, forma["id"], forma["nombre"], cid_))
             con.execute("DELETE FROM cheques WHERE cobro_id=?", (cid_,))
             if cheque:
@@ -270,6 +278,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 return error("No existe el cobro.", 404)
             con.execute("DELETE FROM cheques WHERE cobro_id=?", (cid_,))
             con.execute("DELETE FROM cobros WHERE id=?", (cid_,))
+            if c["cc_pago_id"]:
+                con.execute("DELETE FROM cc_pagos WHERE id=?", (c["cc_pago_id"],))
             if c["orden_id"]:
                 o = con.execute("SELECT estado FROM ordenes WHERE id=?", (c["orden_id"],)).fetchone()
                 if o:
@@ -336,8 +346,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             if modo == "dia":
                 movs = [dict(hora=r["fecha"][11:16], origen="Venta N° %d" % r["id"], forma=r["forma"] or "—", monto=r["total"]) for r in
                         con.execute("SELECT id, fecha, forma, total FROM ventas WHERE anulada=0 AND substr(fecha,1,10)=? ORDER BY id", (a,))]
-                movs += [dict(hora=r["fecha"][11:16], origen="Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"], cobro=r["id"]) for r in
-                         con.execute("SELECT c.id, c.fecha, c.orden_id, c.forma, c.monto, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
+                movs += [dict(hora=r["fecha"][11:16], origen=("Cuenta corriente · %s" % (r["nota"] or "")) if r["cc_pago_id"] else "Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"], cobro=r["id"]) for r in
+                         con.execute("SELECT c.id, c.fecha, c.orden_id, c.forma, c.monto, c.nota, c.cc_pago_id, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
                                      "WHERE o.id=c.orden_id) AS cliente FROM cobros c WHERE substr(c.fecha,1,10)=? ORDER BY c.id", (a,))]
                 movs.sort(key=lambda m: m["hora"])
         formas, dias = {}, {}

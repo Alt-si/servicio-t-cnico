@@ -7,6 +7,7 @@ import re
 from flask import Response, g, jsonify, render_template, request
 
 import core
+import ventas
 
 TIPOS = {"cliente": ("Clientes", "A cobrar", "Cobrado", "Cobrado", "Cliente"), "proveedor": ("Proveedores", "A pagar", "Pagado", "Pagado", "Proveedor")}
 
@@ -44,6 +45,16 @@ def _fecha_ok(txt):
     except ValueError:
         return None
     return txt
+
+
+def _quitar_cobros(con, donde, par):
+    """Si el pago ya había entrado al Historial de cobros, sale también (y su cheque)."""
+    if not con.execute("SELECT 1 FROM sqlite_master WHERE name='cobros'").fetchone():
+        return
+    ids = [r[0] for r in con.execute(f"SELECT id FROM cobros WHERE {donde}", par)]
+    for i in ids:
+        con.execute("DELETE FROM cheques WHERE cobro_id=?", (i,))
+        con.execute("DELETE FROM cobros WHERE id=?", (i,))
 
 
 def registrar(app, login_requerido, modulo_requerido, db, U, error):
@@ -127,7 +138,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 return error("No existe el registro.", 404)
             pagos = [dict(p) for p in con.execute("SELECT * FROM cc_pagos WHERE doc_id=? ORDER BY fecha, id", (did,))]
         d = enriquecer([r], core.ahora()[:10])[0]
-        return jsonify(ok=True, doc=d, pagos=pagos)
+        formas = []
+        if "ventas" in g.modulos and r["tipo"] == "cliente":      # los cobros de clientes también van al Historial de cobros
+            with db() as con:
+                formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
+        return jsonify(ok=True, doc=d, pagos=pagos, formas=formas)
 
     @app.route("/api/cc/doc", methods=["POST"])
     @login_requerido
@@ -194,7 +209,21 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             saldo = round(r["total"] - r["pagado"], 2)
             if m > saldo + 0.004:
                 return error(f"El importe supera el saldo pendiente ({core.fmt_monto(saldo)}).")
-            con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota) VALUES (?,?,?,?)", (did, fecha, m, U(d.get("nota"))[:200] or None))
+            forma = cheque = None
+            if "ventas" in g.modulos and r["tipo"] == "cliente":
+                forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
+                if not forma:
+                    return error("Elegí la forma de pago.")
+                if forma["pide_cheque"]:
+                    cheque, msg = ventas.validar_cheque(d.get("cheque"))
+                    if msg:
+                        return error(msg)
+            pid = con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota) VALUES (?,?,?,?)", (did, fecha, m, U(d.get("nota"))[:200] or None)).lastrowid
+            if forma:      # recién ahora, que el cobro se realizó, entra al Historial de cobros
+                cobro_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_pago_id) VALUES (?,?,?,?,?,?,?)",
+                                       (fecha + core.ahora()[10:], None, m, forma["id"], forma["nombre"], r["persona"], pid)).lastrowid
+                if cheque:
+                    ventas.guardar_cheque(con, cheque, forma["nombre"], m, "cuenta corriente", cobro_id=cobro_id)
         return jsonify(ok=True)
 
     @app.route("/api/cc/pago/<int:pid>/eliminar", methods=["POST"])
@@ -206,6 +235,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if r:
             return r
         with db() as con:
+            _quitar_cobros(con, "cc_pago_id=?", (pid,))
             con.execute("DELETE FROM cc_pagos WHERE id=?", (pid,))
         return jsonify(ok=True)
 
@@ -218,6 +248,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if r:
             return r
         with db() as con:
+            _quitar_cobros(con, "cc_pago_id IN (SELECT id FROM cc_pagos WHERE doc_id=?)", (did,))
             con.execute("DELETE FROM cc_pagos WHERE doc_id=?", (did,))
             con.execute("DELETE FROM cc_docs WHERE id=?", (did,))
         return jsonify(ok=True)

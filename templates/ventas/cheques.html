@@ -10,7 +10,7 @@
   <div class="tabla-wrap"><table><thead><tr><th>Fecha de cobro</th><th>N°</th><th>Banco</th><th>Lo entrega</th><th>Emisión</th><th>Tipo</th><th style="text-align:right">Importe</th><th>Origen</th><th></th></tr></thead><tbody class="clientes">
   {% for c in filas %}<tr class="{{ 'st-inactivo' if c.cobrado }}"><td>{{ fmt_fecha(c.cobro) }}{% if not c.cobrado and c.cobro <= hoy %} <span class="pill" style="background:#b45309;color:#fff">{{ 'HOY' if c.cobro == hoy else 'VENCIDO' }}</span>{% endif %}</td>
     <td>{{ c.numero }}</td><td>{{ c.banco }}</td><td>{{ c.entrega }}</td><td>{{ fmt_fecha(c.emision) }}</td><td>{{ c.forma }}</td><td style="text-align:right"><b>$ {{ c.monto|monto_input }}</b></td>
-    <td>{% if c.orden_id %}<a href="{{ url_for('orden_ver', oid=c.orden_id) }}">Orden N° {{ '%04d' % c.orden_id }}</a>{% if c.cliente %}<br><span class="mut">{{ c.cliente }}</span>{% endif %}{% else %}Venta N° {{ c.venta_id }}{% endif %}</td>
+    <td>{% if c.orden_id %}<a href="{{ url_for('orden_ver', oid=c.orden_id) }}">Orden N° {{ '%04d' % c.orden_id }}</a>{% if c.cliente %}<br><span class="mut">{{ c.cliente }}</span>{% endif %}{% elif c.venta_id %}Venta N° {{ c.venta_id }}{% else %}Cuenta corriente{% endif %}</td>
     <td style="text-align:right"><button class="btn {{ '' if c.cobrado else 'ok' }}" onclick="chequeCobrado({{ c.id }}, {{ 0 if c.cobrado else 1 }})">{{ 'Volver a cartera' if c.cobrado else 'Marcar cobrado' }}</button></td></tr>
   {% else %}<tr><td colspan="9" class="mut">No hay cheques para mostrar.</td></tr>{% endfor %}</tbody></table></div>
 </div>

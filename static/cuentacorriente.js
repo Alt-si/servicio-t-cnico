@@ -37,12 +37,25 @@ async function ccPago(id, tipo) {
     <p class="mut">Total $ ${ccNum(d.total)} · ${L.pagado} $ ${ccNum(d.pagado)} · <b>Saldo $ ${ccNum(d.saldo)}</b></p>
     <div class="grid"><div><label>Importe ($) *</label><input id="cp-m" class="moneda" inputmode="decimal" value="${ccNum(d.saldo)}"></div>
     <div><label>Fecha</label><input id="cp-f" type="date" value="${CC_HOY}"></div></div>
-    <label>Nota (opcional)</label><input id="cp-n" placeholder="Ej: transferencia, efectivo…">
+    ${(j.formas || []).length ? `<label>Forma de pago *</label><select id="cp-forma">${j.formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>` : ''}
+    <label>Nota (opcional)</label><input id="cp-n" placeholder="Ej: número de operación…">
     <div class="row" style="margin-top:12px"><button class="btn pri" id="cp-ok">Registrar</button><button class="btn" id="cp-no">Cancelar</button></div>`);
   m.querySelector('#cp-f').addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} });
   m.querySelector('#cp-no').onclick = cerrar;
   m.querySelector('#cp-ok').onclick = async () => {
-    const r = await api('/api/cc/doc/' + id + '/pago', {monto: m.querySelector('#cp-m').value, fecha: m.querySelector('#cp-f').value, nota: m.querySelector('#cp-n').value});
+    const monto = m.querySelector('#cp-m').value, fsel = m.querySelector('#cp-forma');
+    const datos = {monto, fecha: m.querySelector('#cp-f').value, nota: m.querySelector('#cp-n').value};
+    if (fsel) {
+      datos.forma_id = fsel.value;
+      const f = j.formas.find(x => x.id == fsel.value);
+      if (f && f.cheque) {
+        cerrar();
+        datos.cheque = await pedirCheque(monto, d.persona);
+        if (!datos.cheque) return;
+      }
+    }
+    const r = await api('/api/cc/doc/' + id + '/pago', datos);
+    if (!r.ok && !m.isConnected) return aviso(r.error || 'No se pudo registrar.');
     if (!r.ok) { const e = m.querySelector('#cp-err'); e.textContent = r.error || 'No se pudo registrar.'; e.style.display = 'block'; return; }
     location.reload();
   };

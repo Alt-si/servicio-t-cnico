@@ -387,8 +387,10 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if not p:
                 return error("No existe el producto.", 404)
             if accion == "eliminar":
-                if con.execute("SELECT COUNT(*) FROM stock_movimientos WHERE producto_id=?", (pid,)).fetchone()[0]:
-                    return error("Este producto tiene movimientos de stock, por eso no se puede eliminar. Podés desactivarlo.")
+                d = request.get_json(force=True, silent=True) or {}
+                if not core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
+                    return jsonify(ok=False, necesita_codigo=True, error="Código de validación incorrecto." if d.get("codigo") else "Eliminar un producto requiere el código de validación."), 403
+                con.execute("DELETE FROM stock_movimientos WHERE producto_id=?", (pid,))
                 con.execute("DELETE FROM stock_productos WHERE id=?", (pid,))
             elif accion in ("desactivar", "activar"):
                 con.execute("UPDATE stock_productos SET activo=? WHERE id=?", (1 if accion == "activar" else 0, pid))

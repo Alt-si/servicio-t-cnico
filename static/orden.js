@@ -280,7 +280,7 @@ function preguntarCobro() {
     const formas = ORDEN.formas || [], saldo = ORDEN.saldo > 0 ? ORDEN.saldo : 0;
     const c = modal(`<h2>Cobro al retirar</h2><div id="c-err" class="msg error" style="display:none"></div>
       <label>¿Cuánto abona el cliente? ($)</label><input id="c-monto" class="moneda" inputmode="decimal" value="${saldo ? num_ar(saldo) : ''}">
-      ${saldo ? `<p class="mut" style="margin:2px 0">Saldo de la orden: ${esc(fmt(saldo))}</p>` : ''}
+      ${ORDEN.monto ? `<div class="mut" style="margin:4px 0 8px;line-height:1.6">Total del trabajo: <b>${esc(fmt(ORDEN.monto))}</b>${ORDEN.sena ? `<br>Seña entregada: <b>− ${esc(fmt(ORDEN.sena))}</b>` : ''}<br>Saldo a cobrar: <b>${esc(fmt(saldo))}</b></div>` : ''}
       <label>Forma de pago</label>
       <select id="c-forma">${formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>
       <p class="mut" style="font-size:13px;margin:4px 0">Las formas de pago y cuentas se editan en <a href="/stock/listas" target="_blank">Stock → Listas</a>.</p>

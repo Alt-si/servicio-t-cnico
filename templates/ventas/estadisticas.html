@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row"><h1 style="margin:0">Estadísticas: a dónde fue el dinero</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_historial') }}">Ventas del día</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
+  <div class="row" style="margin:12px 0">
+    {% for k, n in (('dia', 'Día'), ('semana', 'Semana'), ('mes', 'Mes')) %}<a class="btn {{ 'pri' if modo == k }}" href="?p={{ k }}&f={{ hoy if modo != k else ref }}">{{ n }}</a>{% endfor %}
+    <span style="flex:1"></span>
+    <a class="btn" href="?p={{ modo }}&f={{ ant }}">←</a><b style="min-width:190px;text-align:center">{{ titulo }}</b><a class="btn" href="?p={{ modo }}&f={{ sig }}">→</a>
+    <form method="get" class="row" style="margin:0"><input type="hidden" name="p" value="{{ modo }}"><input type="date" name="f" value="{{ ref }}" style="width:auto"><button class="btn">Ir</button></form>
+  </div>
+  <div class="resumen-stock">
+    <div><span class="mut">Total ingresado</span><b>$ {{ total|monto_input or '0' }}</b></div>
+    <div><span class="mut">Ventas de mostrador</span><b>$ {{ tot_v|monto_input or '0' }}</b></div>
+    <div><span class="mut">Cobros de órdenes</span><b>$ {{ tot_c|monto_input or '0' }}</b></div>
+  </div>
+  <h2>Por forma de pago</h2>
+  <div class="tabla-wrap"><table><thead><tr><th>Forma de pago / cuenta</th><th style="text-align:right">Mostrador</th><th style="text-align:right">Órdenes</th><th style="text-align:right">Total</th><th style="width:34%"></th></tr></thead><tbody class="clientes">
+  {% for f, v, c, t, pct in filas %}<tr><td><b>{{ f }}</b></td><td style="text-align:right">$ {{ v|monto_input or '0' }}</td><td style="text-align:right">$ {{ c|monto_input or '0' }}</td><td style="text-align:right"><b>$ {{ t|monto_input or '0' }}</b></td>
+    <td><div style="background:var(--bd);border-radius:4px;height:14px"><div style="width:{{ '%.1f' % pct }}%;background:#2f5bea;height:14px;border-radius:4px"></div></div><span class="mut" style="font-size:12px">{{ '%.0f' % pct }}%</span></td></tr>
+  {% else %}<tr><td colspan="5" class="mut">No hay ingresos en este período.</td></tr>{% endfor %}</tbody></table></div>
+  {% if modo != 'dia' %}<h2>Día por día</h2>
+  <div class="tabla-wrap"><table><thead><tr><th>Día</th><th style="text-align:right">Mostrador</th><th style="text-align:right">Órdenes</th><th style="text-align:right">Total</th></tr></thead><tbody class="clientes">
+  {% for d in dias %}<tr class="{{ 'st-inactivo' if not d.t }}"><td><a href="?p=dia&f={{ d.fecha }}">{{ d.dia }} {{ d.txt }}</a></td><td style="text-align:right">$ {{ d.v|monto_input or '0' }}</td><td style="text-align:right">$ {{ d.c|monto_input or '0' }}</td><td style="text-align:right"><b>$ {{ d.t|monto_input or '0' }}</b></td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<h2>Movimientos del día</h2>
+  <div class="tabla-wrap"><table><thead><tr><th>Hora</th><th>Origen</th><th>Forma de pago</th><th style="text-align:right">Importe</th></tr></thead><tbody class="clientes">
+  {% for m in movs %}<tr><td>{{ m.hora }}</td><td>{% if m.orden %}<a href="{{ url_for('orden_ver', oid=m.orden) }}">{{ m.origen }}</a>{% else %}{{ m.origen }}{% endif %}</td><td>{{ m.forma }}</td><td style="text-align:right"><b>$ {{ m.monto|monto_input }}</b></td></tr>
+  {% else %}<tr><td colspan="4" class="mut">No hay movimientos este día.</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</div>
+{% endblock %}

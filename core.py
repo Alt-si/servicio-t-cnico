@@ -88,6 +88,12 @@ def nombre_cliente(c):
     return rs or f"{c['apellido']}, {c['nombre']}"
 
 
+def nombre_natural(c):
+    """«Nombre Apellido» (o la razón social) para frases y mensajes."""
+    rs = (c["razon_social"] or "").strip()
+    return rs.title() if rs else " ".join(p for p in ((c["nombre"] or "").strip(), (c["apellido"] or "").strip()) if p).title()
+
+
 def parse_monto(texto):
     """Acepta 1500, 1500.50, 1.500,50 o $ 1.500. Vacío devuelve None."""
     t = str(texto or "").replace("$", "").replace(" ", "").strip()
@@ -153,7 +159,7 @@ TEXTO_RESPUESTA = {"aceptado": "Presupuesto aceptado por el cliente",
                    "rechazado": "Presupuesto NO aceptado por el cliente"}
 
 
-def texto_evento_estado(viejo, nuevo, a_abonar=None, devuelto=False):
+def texto_evento_estado(viejo, nuevo, a_abonar=None, devuelto=False, retira=None):
     if nuevo == E_LISTO:
         if devuelto:
             return "Trabajo no realizado, listo para retirar el equipo. Sin saldo a abonar (dinero devuelto)"
@@ -162,7 +168,7 @@ def texto_evento_estado(viejo, nuevo, a_abonar=None, devuelto=False):
             txt += f". Total a abonar: {fmt_monto(a_abonar)}"
         return txt
     if nuevo == E_RETIRADO:
-        txt = "Equipo retirado por el cliente"
+        txt = f"Equipo retirado por {retira}" if retira else "Equipo retirado por el cliente"
         if devuelto:
             txt += ". Trabajo no realizado, dinero devuelto"
         elif a_abonar:
@@ -410,6 +416,9 @@ def crear_base(cuenta_id):
                 con.execute(f"ALTER TABLE ordenes ADD COLUMN {col} TEXT")
         if "imposible_reparar" not in cols:
             con.execute("ALTER TABLE ordenes ADD COLUMN imposible_reparar INTEGER NOT NULL DEFAULT 0")
+        for col, tipo in (("retiro_nombre", "TEXT"), ("retiro_otra", "INTEGER NOT NULL DEFAULT 0")):      # quién retiró el equipo
+            if col not in cols:
+                con.execute(f"ALTER TABLE ordenes ADD COLUMN {col} {tipo}")
         if "ultimo_aviso" not in [r[1] for r in con.execute("PRAGMA table_info(recordatorios)")]:
             con.execute("ALTER TABLE recordatorios ADD COLUMN ultimo_aviso TEXT")
 

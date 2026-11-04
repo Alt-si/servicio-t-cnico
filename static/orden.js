@@ -254,6 +254,48 @@ function formulario(titulo, campos, boton) {
     $('#m-ok', c).onclick = () => { const o = {}; campos.forEach(f => o[f.k] = $('#m-' + f.k, c).value); cerrar(); res(o); };
   });
 }
+// ¿Quién retira el equipo? Por defecto el cliente; null si cancela
+function preguntarQuienRetira() {
+  return new Promise(res => {
+    const c = modal(`<h2>Retira equipo</h2><div id="q-err" class="msg error" style="display:none"></div>
+      <label class="modulo"><input type="radio" name="quien" value="cliente" checked><span><b>${esc(ORDEN.cliente_nombre || 'El cliente')}</b> <span class="mut">(el cliente de la orden)</span></span></label>
+      <label class="modulo"><input type="radio" name="quien" value="otra"><span><b>Otra persona</b></span></label>
+      <div id="q-otra" style="display:none"><label>Nombre de quien retira *</label><input id="q-nombre" class="mayus" autocomplete="off"></div>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="q-ok">Continuar</button><button class="btn" id="q-no">Cancelar</button></div>`);
+    c.querySelectorAll('input[name=quien]').forEach(r => r.onchange = () => {
+      const otra = c.querySelector('input[name=quien]:checked').value === 'otra';
+      $('#q-otra', c).style.display = otra ? '' : 'none'; if (otra) setTimeout(() => $('#q-nombre', c).focus(), 30);
+    });
+    $('#q-no', c).onclick = () => { cerrar(); res(null); };
+    $('#q-ok', c).onclick = () => {
+      const otra = c.querySelector('input[name=quien]:checked').value === 'otra', n = $('#q-nombre', c).value.trim();
+      if (otra && !n) { const e = $('#q-err', c); e.textContent = 'Escribí el nombre de quien retira el equipo.'; e.style.display = 'block'; return; }
+      cerrar(); res({otra, nombre: otra ? n : ORDEN.cliente_nombre});
+    };
+  });
+}
+// Cobro al retirar (solo con la sección Ventas activa): importe y forma de pago; {} si no abona nada, null si cancela
+function preguntarCobro() {
+  return new Promise(res => {
+    const formas = ORDEN.formas || [], saldo = ORDEN.saldo > 0 ? ORDEN.saldo : 0;
+    const c = modal(`<h2>Cobro al retirar</h2><div id="c-err" class="msg error" style="display:none"></div>
+      <label>¿Cuánto abona el cliente? ($)</label><input id="c-monto" class="moneda" inputmode="decimal" value="${saldo ? num_ar(saldo) : ''}">
+      ${saldo ? `<p class="mut" style="margin:2px 0">Saldo de la orden: ${esc(fmt(saldo))}</p>` : ''}
+      <label>Forma de pago</label>
+      <select id="c-forma">${formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>
+      <p class="mut" style="font-size:13px;margin:4px 0">Las formas de pago y cuentas se editan en <a href="/stock/listas" target="_blank">Stock → Listas</a>.</p>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="c-ok">Registrar cobro</button><button class="btn" id="c-sin">No abona nada</button><button class="btn" id="c-no">Cancelar</button></div>`);
+    if ($('#c-monto', c).value) aplicarMoneda($('#c-monto', c));
+    $('#c-no', c).onclick = () => { cerrar(); res(null); };
+    $('#c-sin', c).onclick = () => { cerrar(); res({}); };
+    $('#c-ok', c).onclick = () => {
+      const m = $('#c-monto', c).value.trim();
+      if (!m || !num(m)) { const e = $('#c-err', c); e.textContent = 'Escribí el importe, o tocá «No abona nada».'; e.style.display = 'block'; return; }
+      if (!formas.length) { const e = $('#c-err', c); e.textContent = 'Primero cargá una forma de pago en Stock → Listas.'; e.style.display = 'block'; return; }
+      const f = $('#c-forma', c).value; cerrar(); res({monto: m, forma_id: parseInt(f)});
+    };
+  });
+}
 function botones() {
   const cont = $('#acciones'); if (!cont) return;
   const est = ORDEN.estado, final = ['Scrap', 'Equipo comprado'].includes(est), ret = est === 'Equipo retirado';
@@ -307,10 +349,17 @@ function botones() {
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
     location = '/ordenes';
   });
-  if (est === 'Listo para retirar') add('Retirar', 'ok', async () => {
-    const texto = `Hola, ${ORDEN.nombre}. ${ORDEN.empresa} le informa que su equipo (${ORDEN.equipo_txt}) está listo para ser retirado. Gracias.`;
-    await ofrecerWhatsApp('¿Avisar al cliente por WhatsApp?', ORDEN.wa, texto);
-    if (await accion('retirar')) location = '/ordenes';
+  if (est === 'Listo para retirar') add('Retira equipo', 'ok', async () => {
+    const quien = await preguntarQuienRetira(); if (!quien) return;
+    let cobro = {};
+    if (ORDEN.ventas) { cobro = await preguntarCobro(); if (cobro === null) return; }
+    const j = await api(`/api/orden/${ORDEN.id}/accion`, {accion: 'retirar', otra: quien.otra, retira: quien.nombre, ...cobro});
+    if (!j.ok) return aviso(j.error);
+    const eq = ORDEN.equipo_txt;
+    const texto = quien.otra ? `Hola, tu equipo (${eq}) fue retirado por ${quien.nombre}. Gracias por confiar en nosotros.`
+                             : `Hola, retiraste tu equipo (${eq}). Gracias por confiar en nosotros.`;
+    await ofrecerWhatsApp('Equipo retirado: ¿avisar al cliente por WhatsApp?', ORDEN.wa, texto);
+    location = '/ordenes';
   });
   if (!final) add(ORDEN.dev ? 'Modificar devolución' : 'Registrar devolución', '', async () => {
     const f = await formulario('Devolución de dinero', [{k: 'dev_monto', t: 'Monto a devolver', num: 1}, {k: 'dev_motivo', t: 'Motivo', area: 1}], 'Registrar');

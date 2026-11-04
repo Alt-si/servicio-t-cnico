@@ -430,7 +430,13 @@ def orden_ver(oid):
         equipo = con.execute("SELECT * FROM equipos WHERE id=?", (o["equipo_id"],)).fetchone() if o["equipo_id"] else None
         extras = [dict(monto=m, detalle=t) for m, t in opciones_de(con, oid)]
     equipo_txt = texto_equipo(equipo["tipo"], equipo["marca"], equipo["modelo"]) if equipo else "equipo"
-    return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False,
+    formas, saldo = [], 0
+    if "ventas" in g.modulos:       # con Ventas activo, al retirar se registra el cobro y su forma de pago
+        with db() as con:
+            formas = [dict(id=r["id"], nombre=r["nombre"]) for r in con.execute("SELECT id, nombre FROM stock_formas_pago ORDER BY id")]
+        saldo = saldo_a_abonar(o["presupuesto_monto"], o["sena_monto"], o["reembolso_monto"], o["presupuesto_respuesta"] == "rechazado") or 0
+    return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False, formas=formas, saldo=saldo,
+                           nombre_completo=core.nombre_natural(cliente),
                            wa_numero=telefono_whatsapp(cliente["telefono"]), equipo_txt=equipo_txt,
                            nombre_pila=(cliente["nombre"] or "").strip().title(), extras=extras)
 
@@ -857,8 +863,29 @@ def api_orden_accion(oid):
         elif accion == "retirar":
             if estado != E_LISTO:
                 return error("Solo se puede retirar una orden que está lista para retirar.")
-            cambiar(E_RETIRADO, ", espera_repuesto=0, fecha_retiro=?", (ahora,))
-            core.registrar_evento(con, oid, E_RETIRADO, core.texto_evento_estado(estado, E_RETIRADO, saldo_a_abonar(monto, sena, dev, resp == "rechazado"), bool(dev)))
+            cli = con.execute("SELECT * FROM clientes WHERE id=?", (o["cliente_id"],)).fetchone()
+            otra = bool(d.get("otra"))
+            quien = " ".join(U(d.get("retira")).split()) if otra else ""
+            if otra and not quien:
+                return error("Escribí el nombre de quien retira el equipo.")
+            cobro, forma = 0.0, None
+            if "ventas" in g.modulos and d.get("monto") not in (None, ""):
+                try:
+                    cobro = parse_monto(d.get("monto")) or 0.0
+                except ValueError:
+                    return error("El importe a cobrar no es válido.")
+                if cobro < 0:
+                    return error("El importe a cobrar no puede ser negativo.")
+                if cobro > 0:
+                    forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
+                    if not forma:
+                        return error("Elegí la forma de pago.")
+            nombre_ret = quien or (core.nombre_natural(cli) if cli else "")
+            cambiar(E_RETIRADO, ", espera_repuesto=0, fecha_retiro=?, retiro_nombre=?, retiro_otra=?", (ahora, nombre_ret or None, 1 if otra else 0))
+            core.registrar_evento(con, oid, E_RETIRADO, core.texto_evento_estado(estado, E_RETIRADO, None, bool(dev), quien or None))
+            if cobro > 0:
+                con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma) VALUES (?,?,?,?,?)", (ahora, oid, cobro, forma["id"], forma["nombre"]))
+                core.registrar_evento(con, oid, E_RETIRADO, f"Cobro al retirar: {core.fmt_monto(cobro)} ({forma['nombre']})")
         elif accion == "scrap":
             if core.requiere_codigo(estado, E_SCRAP):
                 r = pide_codigo(d, "Pasar la orden a Scrap desde ese estado requiere el código de validación.")

@@ -72,7 +72,8 @@ const ORDEN = {{ ({
   'id': o.id if o else None, 'estado': o.estado if o else None, 'resp': o.presupuesto_respuesta if o else None,
   'dev': o.reembolso_monto if o else None, 'cliente_id': cliente.id if cliente else None,
   'equipo_id': (o.equipo_id if o else None), 'wa': wa_numero if o else '', 'nombre': nombre_pila if o else '',
-  'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre,
+  'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre, 'cliente_nombre': nombre_completo if o else '',
+  'ventas': 'ventas' in modulos, 'formas': formas, 'saldo': saldo,
   'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else '',
   'imposible': (o.imposible_reparar if o else 0), 'imposible_motivo': ((o.imposible_motivo or '') if o else ''), 'extra': extras if extras is defined else []
 }) | tojson }};

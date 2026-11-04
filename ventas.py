@@ -15,6 +15,9 @@ def crear_tablas(con):
             id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER NOT NULL, producto_id INTEGER, codigo TEXT, nombre TEXT NOT NULL,
             abrev TEXT, decimales INTEGER NOT NULL DEFAULT 0, cantidad REAL NOT NULL, precio_unit REAL NOT NULL,
             descuento_pct REAL, subtotal REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS cobros (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, orden_id INTEGER, monto REAL NOT NULL, forma_id INTEGER, forma TEXT, nota TEXT);
+        CREATE INDEX IF NOT EXISTS ix_cobros_fecha ON cobros(fecha);
         CREATE INDEX IF NOT EXISTS ix_ventas_fecha ON ventas(fecha);
         CREATE INDEX IF NOT EXISTS ix_venta_items_venta ON venta_items(venta_id);
     """)
@@ -154,6 +157,68 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 total += v["total"]
         return render_template("ventas/historial.html", filas=filas, desde=desde, hasta=hasta, por_forma=sorted(por_forma.items()),
                                total=total, cantidad=sum(1 for v in filas if not v["anulada"]), fmt_fecha=core.fmt_fecha)
+
+    @app.route("/ventas/estadisticas")
+    @login_requerido
+    @modulo_requerido("ventas")
+    def ventas_estadisticas():
+        """A dónde fue el dinero: ventas de mostrador y cobros de órdenes, por forma de pago, en el día, la semana o el mes."""
+        from datetime import date, timedelta
+        modo = request.args.get("p") if request.args.get("p") in ("dia", "semana", "mes") else "dia"
+        try:
+            ref = date.fromisoformat((request.args.get("f") or core.ahora()[:10])[:10])
+        except ValueError:
+            ref = date.fromisoformat(core.ahora()[:10])
+        if modo == "dia":
+            d1 = d2 = ref
+            ant, sig = ref - timedelta(days=1), ref + timedelta(days=1)
+        elif modo == "semana":
+            d1 = ref - timedelta(days=ref.weekday())
+            d2 = d1 + timedelta(days=6)
+            ant, sig = d1 - timedelta(days=7), d1 + timedelta(days=7)
+        else:
+            d1 = ref.replace(day=1)
+            sig = (d1 + timedelta(days=32)).replace(day=1)
+            d2 = sig - timedelta(days=1)
+            ant = (d1 - timedelta(days=1)).replace(day=1)
+        a, b = d1.isoformat(), d2.isoformat()
+        with db() as con:
+            vts = con.execute("SELECT substr(fecha,1,10) AS dia, COALESCE(forma,'—') AS forma, SUM(total) AS t, COUNT(*) AS n FROM ventas "
+                              "WHERE anulada=0 AND substr(fecha,1,10) BETWEEN ? AND ? GROUP BY dia, forma", (a, b)).fetchall()
+            cbs = con.execute("SELECT substr(fecha,1,10) AS dia, COALESCE(forma,'—') AS forma, SUM(monto) AS t, COUNT(*) AS n FROM cobros "
+                              "WHERE substr(fecha,1,10) BETWEEN ? AND ? GROUP BY dia, forma", (a, b)).fetchall()
+            movs = []
+            if modo == "dia":
+                movs = [dict(hora=r["fecha"][11:16], origen="Venta N° %d" % r["id"], forma=r["forma"] or "—", monto=r["total"]) for r in
+                        con.execute("SELECT id, fecha, forma, total FROM ventas WHERE anulada=0 AND substr(fecha,1,10)=? ORDER BY id", (a,))]
+                movs += [dict(hora=r["fecha"][11:16], origen="Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"]) for r in
+                         con.execute("SELECT c.fecha, c.orden_id, c.forma, c.monto, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
+                                     "WHERE o.id=c.orden_id) AS cliente FROM cobros c WHERE substr(c.fecha,1,10)=? ORDER BY c.id", (a,))]
+                movs.sort(key=lambda m: m["hora"])
+        formas, dias = {}, {}
+        tot_v = tot_c = 0.0
+        for r in vts:
+            f = formas.setdefault(r["forma"], [0.0, 0.0]); f[0] += r["t"]; tot_v += r["t"]
+            dd = dias.setdefault(r["dia"], [0.0, 0.0]); dd[0] += r["t"]
+        for r in cbs:
+            f = formas.setdefault(r["forma"], [0.0, 0.0]); f[1] += r["t"]; tot_c += r["t"]
+            dd = dias.setdefault(r["dia"], [0.0, 0.0]); dd[1] += r["t"]
+        total = tot_v + tot_c
+        filas = sorted(([k, v[0], v[1], v[0] + v[1], (100 * (v[0] + v[1]) / total) if total else 0] for k, v in formas.items()), key=lambda x: -x[3])
+        lista_dias = []
+        d = d1
+        while d <= d2 and modo != "dia":
+            v = dias.get(d.isoformat(), [0.0, 0.0])
+            lista_dias.append(dict(fecha=d.isoformat(), txt=core.fmt_fecha(d.isoformat()), dia=core.DIAS[d.weekday()].capitalize(), v=v[0], c=v[1], t=v[0] + v[1]))
+            d += timedelta(days=1)
+        if modo == "dia":
+            titulo = core.fmt_fecha(a)
+        elif modo == "semana":
+            titulo = f"{core.fmt_fecha(a)} al {core.fmt_fecha(b)}"
+        else:
+            titulo = f"{['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][d1.month - 1]} {d1.year}"
+        return render_template("ventas/estadisticas.html", modo=modo, titulo=titulo, ref=ref.isoformat(), ant=ant.isoformat(), sig=sig.isoformat(), filas=filas,
+                               total=total, tot_v=tot_v, tot_c=tot_c, dias=lista_dias, movs=movs, hoy=core.ahora()[:10])
 
     @app.route("/api/ventas/<int:vid>")
     @login_requerido

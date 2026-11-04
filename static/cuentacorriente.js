@@ -50,11 +50,15 @@ function ccFormulario(tipo, d, est) {
     const j = await api('/api/cc/doc', {id: d ? d.id : null, tipo, persona: est.persona, emision: est.emision, vence: conFactura ? est.vence : '', numero: est.numero, sin_factura: est.sinf,
       total: conFactura ? est.total : '', obs: est.obs, pagado_inicial: nuevo && conFactura ? est.ini : null, items: CC_STOCK ? est.items : undefined});
     if (!j.ok) { const e = q('#cc-err'); e.textContent = j.error || 'No se pudo guardar.'; e.style.display = 'block'; return; }
+    if (j.aplicado > 0) await aviso(`Se descontaron $ ${ccNum(j.aplicado)} de las entregas que había a favor.`);
     location.reload();
   };
   setTimeout(() => q(est.persona ? '#cc-obs' : '#cc-per').focus(), 50);
 }
-function ccNuevo(tipo) { ccFormulario(tipo, null); }
+function ccNuevo(tipo, persona) {
+  ccFormulario(tipo, null);
+  if (persona) { const i = document.querySelector('#cc-per'); i.value = persona; const o = document.querySelector('#cc-obs'); if (o) o.focus(); }
+}
 async function ccFactura(id, tipo) { const j = await api('/api/cc/doc/' + id); if (j.ok) ccFormulario(tipo, {...j.doc, items: j.items}); else aviso(j.error); }
 
 // Buscador de productos del stock; resuelve con {producto_id, nombre, cantidad, precio, abrev} o null
@@ -154,4 +158,56 @@ async function ccVer(id, tipo) {
     if (!r.ok) return aviso(r.error);
     location.reload();
   });
+}
+
+// Entrega de dinero a cuenta: se descuenta de las facturas más viejas y queda la diferencia a abonar
+async function ccEntrega(tipo, nombre) {
+  const L = ccEtiq(tipo), noun = tipo === 'cliente' ? 'Entrega de dinero' : 'Pago a cuenta';
+  const m = modal(`<h2>${noun}</h2><div id="en-err" class="msg error" style="display:none"></div>
+    <label>${L.persona} *</label><input id="en-per" list="cc-nombres" autocomplete="off" value="${esc(nombre || '')}">
+    <div id="en-info" class="mut" style="margin:4px 0;min-height:20px"></div>
+    <div class="grid"><div><label>Importe ($) *</label><input id="en-m" class="moneda" inputmode="decimal"></div>
+    <div><label>Fecha</label><input id="en-f" type="date" value="${CC_HOY}"></div></div>
+    <div id="en-fp"></div>
+    <label>Nota (opcional)</label><input id="en-n" placeholder="Ej: seña por los próximos retiros">
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="en-ok">Registrar</button><button class="btn" id="en-no">Cancelar</button></div>`);
+  const q = s => m.querySelector(s);
+  let formas = [];
+  const info = async () => {
+    const n = q('#en-per').value.trim(); if (!n) { q('#en-info').textContent = ''; return; }
+    const j = await api('/api/cc/persona?tipo=' + tipo + '&nombre=' + encodeURIComponent(n));
+    if (!j.ok) return;
+    q('#en-info').innerHTML = `Saldo actual: <b>$ ${ccNum(j.saldo)}</b>${j.a_favor ? ` · Entrega a favor: <b>$ ${ccNum(j.a_favor)}</b>` : ''}${j.sin_facturar ? ` · ${j.sin_facturar} retiro(s) sin facturar` : ''}`;
+    formas = j.formas || [];
+    q('#en-fp').innerHTML = formas.length ? `<label>Forma de pago *</label><select id="en-forma">${formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>` : '';
+  };
+  q('#en-per').addEventListener('change', info); q('#en-f').addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} });
+  q('#en-no').onclick = cerrar;
+  q('#en-ok').onclick = async () => {
+    const err = x => { const e = q('#en-err'); e.textContent = x; e.style.display = 'block'; };
+    await info();
+    const datos = {tipo, persona: q('#en-per').value, monto: q('#en-m').value, fecha: q('#en-f').value, nota: q('#en-n').value};
+    if (!datos.persona.trim()) return err(`Escribí el nombre del ${L.persona.toLowerCase()}.`);
+    if (!datos.monto.trim()) return err('Escribí el importe.');
+    const fs = q('#en-forma');
+    if (fs) {
+      datos.forma_id = fs.value;
+      const f = formas.find(x => x.id == fs.value);
+      if (f && f.cheque) { cerrar(); datos.cheque = await pedirCheque(datos.monto, datos.persona); if (!datos.cheque) return; }
+    }
+    const r = await api('/api/cc/entrega', datos);
+    if (!r.ok) { if (!m.isConnected) return aviso(r.error || 'No se pudo registrar.'); return err(r.error || 'No se pudo registrar.'); }
+    cerrar();
+    await aviso(`Entrega registrada.${r.aplicado ? ` Se descontaron $ ${ccNum(r.aplicado)} de lo adeudado.` : ''} ${r.diferencia > 0 ? `Diferencia a ${tipo === 'cliente' ? 'abonar' : 'pagar'}: $ ${ccNum(r.diferencia)}.` : 'No queda deuda con facturas.'}${r.a_favor ? ` Queda $ ${ccNum(r.a_favor)} a favor para los próximos retiros.` : ''}`, noun);
+    location.reload();
+  };
+  if (nombre) info();
+  setTimeout(() => q(nombre ? '#en-m' : '#en-per').focus(), 50);
+}
+async function ccEntregaEliminar(id) {
+  if (!await confirmar('¿Eliminar esta entrega? Se quita también de los pagos y del Historial de cobros.')) return;
+  const r = await apiCodigo('/api/cc/entrega/' + id + '/eliminar', {});
+  if (r.cancelado) return;
+  if (!r.ok) return aviso(r.error);
+  location.reload();
 }

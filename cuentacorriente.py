@@ -23,6 +23,9 @@ def crear_tablas(con):
         CREATE TABLE IF NOT EXISTS cc_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id INTEGER NOT NULL, producto_id INTEGER, nombre TEXT NOT NULL,
             cantidad REAL NOT NULL, precio REAL NOT NULL, abrev TEXT);
+        CREATE TABLE IF NOT EXISTS cc_entregas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, persona TEXT NOT NULL, fecha TEXT NOT NULL,
+            monto REAL NOT NULL, restante REAL NOT NULL, nota TEXT, creado TEXT);
         CREATE INDEX IF NOT EXISTS ix_cc_items_doc ON cc_items(doc_id);
         CREATE INDEX IF NOT EXISTS ix_cc_docs_tipo ON cc_docs(tipo);
         CREATE INDEX IF NOT EXISTS ix_cc_pagos_doc ON cc_pagos(doc_id);
@@ -31,6 +34,8 @@ def crear_tablas(con):
 
 
 def _migrar(con):
+    if "entrega_id" not in [r[1] for r in con.execute("PRAGMA table_info(cc_pagos)")]:
+        con.execute("ALTER TABLE cc_pagos ADD COLUMN entrega_id INTEGER")      # pago que salió de una entrega de dinero a cuenta
     if "sin_factura" not in [r[1] for r in con.execute("PRAGMA table_info(cc_docs)")]:
         con.execute("ALTER TABLE cc_docs ADD COLUMN sin_factura INTEGER NOT NULL DEFAULT 0")      # se cobra sin factura (puede pedirla después)
 
@@ -70,6 +75,34 @@ def _quitar_cobros(con, donde, par):
         con.execute("DELETE FROM cobros WHERE id=?", (i,))
 
 
+def aplicar_creditos(con, tipo, persona):
+    """Las entregas de dinero con saldo a favor se descuentan de las facturas con deuda de esa persona, de la más vieja a la más nueva.
+    Devuelve cuánto se aplicó."""
+    aplicado = 0.0
+    entregas = con.execute("SELECT * FROM cc_entregas WHERE tipo=? AND lower(persona)=lower(?) AND restante>0.004 ORDER BY fecha, id", (tipo, persona)).fetchall()
+    for e in entregas:
+        resto = e["restante"]
+        docs = con.execute(SQL_DOCS + " WHERE d.tipo=? AND lower(d.persona)=lower(?) AND d.total>0 AND (IFNULL(d.numero,'')<>'' OR d.sin_factura=1) ORDER BY d.emision, d.id", (tipo, persona)).fetchall()
+        for d in docs:
+            if resto <= 0.004:
+                break
+            saldo = round(d["total"] - d["pagado"], 2)
+            if saldo <= 0.004:
+                continue
+            m = round(min(saldo, resto), 2)
+            con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota, entrega_id) VALUES (?,?,?,?,?)", (d["id"], e["fecha"], m, "Entrega de dinero", e["id"]))
+            resto = round(resto - m, 2)
+            aplicado += m
+        con.execute("UPDATE cc_entregas SET restante=? WHERE id=?", (max(resto, 0), e["id"]))
+    return aplicado
+
+
+def _liberar_entregas(con, filtro, par):
+    """Los pagos que salieron de una entrega vuelven a ser saldo a favor de esa entrega."""
+    for p in con.execute(f"SELECT id, monto, entrega_id FROM cc_pagos WHERE entrega_id IS NOT NULL AND {filtro}", par).fetchall():
+        con.execute("UPDATE cc_entregas SET restante=restante+? WHERE id=?", (p["monto"], p["entrega_id"]))
+
+
 def registrar(app, login_requerido, modulo_requerido, db, U, error):
 
     def enriquecer(filas, hoy):
@@ -107,7 +140,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         tipo = request.args.get("t") if request.args.get("t") in TIPOS else "cliente"
         estado = request.args.get("e") if request.args.get("e") in ("deuda", "pendiente", "vencido", "pagado", "todos") else "deuda"
         q = (request.args.get("q") or "").strip()
-        vista = request.args.get("v") if request.args.get("v") == "personas" else "docs"
+        vista = request.args.get("v") if request.args.get("v") in ("personas", "entregas") else "docs"
         with db() as con:
             todos = enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo=?", (tipo,)).fetchall(), core.ahora()[:10])
             filas = listar(con, tipo, estado, q)
@@ -122,9 +155,18 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             p["saldo"] += f["saldo"]
             if f["estado"] == "vencido":
                 p["vencido"] += f["saldo"]
-        personas = sorted([p for p in personas.values() if p["saldo"] > 0], key=lambda p: -p["saldo"])
+        with db() as con:
+            entregas = [dict(r) for r in con.execute("SELECT * FROM cc_entregas WHERE tipo=? ORDER BY fecha DESC, id DESC", (tipo,))]
+        for e in entregas:
+            if not q:
+                p = personas.setdefault(e["persona"].strip().lower(), dict(nombre=e["persona"], docs=0, saldo=0, vencido=0))
+            else:
+                p = personas.get(e["persona"].strip().lower())
+            if p is not None:
+                p["a_favor"] = round(p.get("a_favor", 0) + e["restante"], 2)
+        personas = sorted([p for p in personas.values() if p["saldo"] > 0 or p.get("a_favor", 0) > 0], key=lambda p: -p["saldo"])
         return render_template("cuentacorriente.html", tipo=tipo, T=TIPOS[tipo], estado=estado, q=q, vista=vista, filas=filas, resumen=resumen,
-                               personas=personas, nombres=nombres, con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
+                               personas=personas, entregas=entregas, con_ventas="ventas" in g.modulos, nombres=nombres, con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
 
     @app.route("/cuenta-corriente/exportar.csv")
     @login_requerido
@@ -267,7 +309,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     if e:
                         con.rollback()
                         return error(e)
-                return jsonify(ok=True, id=did)
+                ap = aplicar_creditos(con, tipo, persona) if (numero or sin_factura) else 0
+                return jsonify(ok=True, id=did, aplicado=ap)
             m = 0
             if (numero or sin_factura) and d.get("pagado_inicial") not in (None, ""):
                 try:
@@ -285,7 +328,85 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     return error(e)
             if m > 0:
                 con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota) VALUES (?,?,?,?)", (did, emision, m, "Entrega inicial"))
-        return jsonify(ok=True, id=did)
+            ap = aplicar_creditos(con, tipo, persona) if (numero or sin_factura) else 0
+        return jsonify(ok=True, id=did, aplicado=ap)
+
+    def saldo_persona(con, tipo, persona):
+        docs = enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo=? AND lower(d.persona)=lower(?)", (tipo, persona)).fetchall(), core.ahora()[:10])
+        a_favor = con.execute("SELECT IFNULL(SUM(restante),0) FROM cc_entregas WHERE tipo=? AND lower(persona)=lower(?)", (tipo, persona)).fetchone()[0]
+        return round(sum(d["saldo"] for d in docs), 2), round(a_favor, 2), sum(1 for d in docs if d["estado"] == "sinfacturar")
+
+    @app.route("/api/cc/persona")
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_persona():
+        tipo = request.args.get("tipo")
+        nombre = " ".join(U(request.args.get("nombre")).split())
+        if tipo not in TIPOS:
+            return error("Tipo inválido.")
+        with db() as con:
+            saldo, a_favor, sin_fact = saldo_persona(con, tipo, nombre)
+            formas = []
+            if "ventas" in g.modulos and tipo == "cliente":
+                formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
+        return jsonify(ok=True, saldo=saldo, a_favor=a_favor, sin_facturar=sin_fact, formas=formas)
+
+    @app.route("/api/cc/entrega", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_entrega():
+        d = request.get_json(force=True, silent=True) or {}
+        tipo = d.get("tipo")
+        persona = " ".join(U(d.get("persona")).split())
+        fecha = _fecha_ok(d.get("fecha")) or core.ahora()[:10]
+        if tipo not in TIPOS:
+            return error("Tipo inválido.")
+        if not persona:
+            return error(f"Escribí el nombre del {TIPOS[tipo][4].lower()}.")
+        try:
+            m = core.parse_monto(d.get("monto"))
+        except ValueError:
+            m = None
+        if not m or m <= 0:
+            return error("Escribí el importe de la entrega.")
+        with db() as con:
+            forma = cheque = None
+            if "ventas" in g.modulos and tipo == "cliente":
+                forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
+                if not forma:
+                    return error("Elegí la forma de pago.")
+                if forma["pide_cheque"]:
+                    cheque, msg = ventas.validar_cheque(d.get("cheque"))
+                    if msg:
+                        return error(msg)
+            eid = con.execute("INSERT INTO cc_entregas (tipo, persona, fecha, monto, restante, nota, creado) VALUES (?,?,?,?,?,?,?)",
+                              (tipo, persona, fecha, m, m, U(d.get("nota"))[:200] or None, core.ahora())).lastrowid
+            if forma:      # la plata entró: va al Historial de cobros
+                cobro_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_entrega_id) VALUES (?,?,?,?,?,?,?)",
+                                       (fecha + core.ahora()[10:], None, m, forma["id"], forma["nombre"], persona, eid)).lastrowid
+                if cheque:
+                    ventas.guardar_cheque(con, cheque, forma["nombre"], m, "cuenta corriente", cobro_id=cobro_id)
+            aplicado = aplicar_creditos(con, tipo, persona)
+            saldo, a_favor, sin_fact = saldo_persona(con, tipo, persona)
+        return jsonify(ok=True, aplicado=round(aplicado, 2), diferencia=saldo, a_favor=a_favor, sin_facturar=sin_fact)
+
+    @app.route("/api/cc/entrega/<int:eid>/eliminar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_entrega_eliminar(eid):
+        d = request.get_json(force=True, silent=True) or {}
+        r = sin_codigo(d, "Eliminar una entrega requiere el código de validación.")
+        if r:
+            return r
+        with db() as con:
+            e = con.execute("SELECT * FROM cc_entregas WHERE id=?", (eid,)).fetchone()
+            if not e:
+                return error("No existe la entrega.", 404)
+            con.execute("DELETE FROM cc_pagos WHERE entrega_id=?", (eid,))
+            _quitar_cobros(con, "cc_entrega_id=?", (eid,))
+            con.execute("DELETE FROM cc_entregas WHERE id=?", (eid,))
+            aplicar_creditos(con, e["tipo"], e["persona"])
+        return jsonify(ok=True)
 
     @app.route("/api/cc/doc/<int:did>/pago", methods=["POST"])
     @login_requerido
@@ -335,6 +456,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             return r
         with db() as con:
             _quitar_cobros(con, "cc_pago_id=?", (pid,))
+            _liberar_entregas(con, "id=?", (pid,))
             con.execute("DELETE FROM cc_pagos WHERE id=?", (pid,))
         return jsonify(ok=True)
 
@@ -350,6 +472,10 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             _quitar_cobros(con, "cc_pago_id IN (SELECT id FROM cc_pagos WHERE doc_id=?)", (did,))
             if "stock" in g.modulos:
                 aplicar_items(con, did, [], items_de(con, did))
+            _liberar_entregas(con, "doc_id=?", (did,))
+            doc = con.execute("SELECT tipo, persona FROM cc_docs WHERE id=?", (did,)).fetchone()
             con.execute("DELETE FROM cc_pagos WHERE doc_id=?", (did,))
             con.execute("DELETE FROM cc_docs WHERE id=?", (did,))
+            if doc:
+                aplicar_creditos(con, doc["tipo"], doc["persona"])
         return jsonify(ok=True)

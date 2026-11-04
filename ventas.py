@@ -26,6 +26,8 @@ def crear_tablas(con):
     """)
     if "cc_pago_id" not in [r[1] for r in con.execute("PRAGMA table_info(cobros)")]:
         con.execute("ALTER TABLE cobros ADD COLUMN cc_pago_id INTEGER")      # cobro que viene de un pago de Cuenta corriente
+    if "cc_entrega_id" not in [r[1] for r in con.execute("PRAGMA table_info(cobros)")]:
+        con.execute("ALTER TABLE cobros ADD COLUMN cc_entrega_id INTEGER")      # cobro que viene de una entrega de Cuenta corriente
     if "cobro_id" not in [r[1] for r in con.execute("PRAGMA table_info(cheques)")]:
         con.execute("ALTER TABLE cheques ADD COLUMN cobro_id INTEGER")
     if not existia:        # la primera vez, se suma «Billetera virtual» a las formas de pago
@@ -218,6 +220,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             c = con.execute("SELECT * FROM cobros WHERE id=?", (cid_,)).fetchone()
             if not c:
                 return error("No existe el cobro.", 404)
+            if c["cc_entrega_id"]:
+                return error("Es una entrega de Cuenta corriente: modificala o eliminala desde esa sección.")
             ch = con.execute("SELECT * FROM cheques WHERE cobro_id=?", (cid_,)).fetchone()
             formas = [dict(id=r["id"], nombre=r["nombre"], cheque=bool(r["pide_cheque"])) for r in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
         return jsonify(ok=True, cobro=dict(c), cheque=dict(ch) if ch else None, formas=formas)
@@ -240,6 +244,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             c = con.execute("SELECT * FROM cobros WHERE id=?", (cid_,)).fetchone()
             if not c:
                 return error("No existe el cobro.", 404)
+            if c["cc_entrega_id"]:
+                return error("Es una entrega de Cuenta corriente: modificala o eliminala desde esa sección.")
             forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
             if not forma:
                 return error("Elegí la forma de pago.")
@@ -276,6 +282,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             c = con.execute("SELECT * FROM cobros WHERE id=?", (cid_,)).fetchone()
             if not c:
                 return error("No existe el cobro.", 404)
+            if c["cc_entrega_id"]:
+                return error("Es una entrega de Cuenta corriente: modificala o eliminala desde esa sección.")
             con.execute("DELETE FROM cheques WHERE cobro_id=?", (cid_,))
             con.execute("DELETE FROM cobros WHERE id=?", (cid_,))
             if c["cc_pago_id"]:
@@ -346,8 +354,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             if modo == "dia":
                 movs = [dict(hora=r["fecha"][11:16], origen="Venta N° %d" % r["id"], forma=r["forma"] or "—", monto=r["total"]) for r in
                         con.execute("SELECT id, fecha, forma, total FROM ventas WHERE anulada=0 AND substr(fecha,1,10)=? ORDER BY id", (a,))]
-                movs += [dict(hora=r["fecha"][11:16], origen=("Cuenta corriente · %s" % (r["nota"] or "")) if r["cc_pago_id"] else "Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"], cobro=r["id"]) for r in
-                         con.execute("SELECT c.id, c.fecha, c.orden_id, c.forma, c.monto, c.nota, c.cc_pago_id, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
+                movs += [dict(hora=r["fecha"][11:16], origen=("Cuenta corriente · %s" % (r["nota"] or "")) if (r["cc_pago_id"] or r["cc_entrega_id"]) else "Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"], cobro=None if r["cc_entrega_id"] else r["id"]) for r in
+                         con.execute("SELECT c.id, c.fecha, c.orden_id, c.forma, c.monto, c.nota, c.cc_pago_id, c.cc_entrega_id, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
                                      "WHERE o.id=c.orden_id) AS cliente FROM cobros c WHERE substr(c.fecha,1,10)=? ORDER BY c.id", (a,))]
                 movs.sort(key=lambda m: m["hora"])
         formas, dias = {}, {}

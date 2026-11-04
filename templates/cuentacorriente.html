@@ -9,7 +9,7 @@
 .cc-tabla td.acc .btn{display:block;width:100%;margin:0 0 4px;padding:3px 8px;font-size:12px}
 </style>
 <div class="card">
-  <div class="row"><h1 style="margin:0">Cuenta corriente</h1><div class="der row"><a class="btn" href="{{ url_for('cuenta_corriente_csv', t=tipo) }}">Exportar a Excel (CSV)</a><button class="btn pri" onclick="ccNuevo('{{ tipo }}')">+ Nueva {{ 'venta a cuenta' if tipo == 'cliente' else 'compra a cuenta' }}</button></div></div>
+  <div class="row"><h1 style="margin:0">Cuenta corriente</h1><div class="der row"><a class="btn" href="{{ url_for('cuenta_corriente_csv', t=tipo) }}">Exportar a Excel (CSV)</a><button class="btn" onclick="ccEntrega('{{ tipo }}')">{{ 'Entrega de dinero' if tipo == 'cliente' else 'Pago a cuenta' }}</button><button class="btn pri" onclick="ccNuevo('{{ tipo }}')">+ Nueva {{ 'venta a cuenta' if tipo == 'cliente' else 'compra a cuenta' }}</button></div></div>
   <div class="row" style="margin:12px 0">
     {% for k, n in (('cliente', 'Clientes (a cobrar)'), ('proveedor', 'Proveedores (a pagar)')) %}<a class="btn {{ 'pri' if tipo == k }}" href="?t={{ k }}">{{ n }}</a>{% endfor %}
   </div>
@@ -26,11 +26,16 @@
     {% for k, n in (('deuda', 'Con saldo'), ('vencido', 'Vencidos'), ('pendiente', T[1]), ('pagado', T[2]), ('sinfacturar', 'Sin facturar'), ('todos', 'Todos')) %}<a class="btn {{ 'pri' if estado == k }}" href="?t={{ tipo }}&e={{ k }}&v={{ vista }}&q={{ q|urlencode }}">{{ n }}</a>{% endfor %}
     <input type="hidden" name="e" value="{{ estado }}"><input name="q" value="{{ q }}" placeholder="Buscar por nombre, factura o lo que retiró" style="flex:1;min-width:200px"><button class="btn">Buscar</button>
   </form>
-  <div class="row" style="margin-bottom:8px"><a class="btn {{ 'pri' if vista == 'docs' }}" href="?t={{ tipo }}&e={{ estado }}&q={{ q|urlencode }}">Movimientos</a><a class="btn {{ 'pri' if vista == 'personas' }}" href="?t={{ tipo }}&e={{ estado }}&q={{ q|urlencode }}&v=personas">Saldo por {{ T[4]|lower }}</a></div>
-  {% if vista == 'personas' %}
-  <div class="tabla-wrap"><table><thead><tr><th>{{ T[4] }}</th><th>Comprobantes con saldo</th><th style="text-align:right">Saldo</th><th style="text-align:right">Vencido</th></tr></thead><tbody class="clientes">
-  {% for p in personas %}<tr><td><a href="?t={{ tipo }}&e=deuda&q={{ p.nombre|urlencode }}">{{ p.nombre }}</a></td><td>{{ p.docs }}</td><td style="text-align:right"><b>$ {{ p.saldo|monto_input }}</b></td><td style="text-align:right;color:#b91c1c">{{ ('$ ' ~ (p.vencido|monto_input)) if p.vencido else '' }}</td></tr>
-  {% else %}<tr><td colspan="4" class="mut">Nadie tiene saldo pendiente.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="row" style="margin-bottom:8px"><a class="btn {{ 'pri' if vista == 'docs' }}" href="?t={{ tipo }}&e={{ estado }}&q={{ q|urlencode }}">Movimientos</a><a class="btn {{ 'pri' if vista == 'personas' }}" href="?t={{ tipo }}&e={{ estado }}&q={{ q|urlencode }}&v=personas">Saldo por {{ T[4]|lower }}</a><a class="btn {{ 'pri' if vista == 'entregas' }}" href="?t={{ tipo }}&v=entregas">{{ 'Entregas' if tipo == 'cliente' else 'Pagos a cuenta' }}</a></div>
+  {% if vista == 'entregas' %}
+  <div class="tabla-wrap cc-tabla"><table><thead><tr><th>Fecha</th><th>{{ T[4] }}</th><th style="text-align:right">Importe</th><th style="text-align:right">Aplicado</th><th style="text-align:right">A favor</th><th>Nota</th><th></th></tr></thead><tbody class="clientes">
+  {% for e in entregas %}<tr><td>{{ fmt_fecha(e.fecha) }}</td><td>{{ e.persona }}</td><td style="text-align:right"><b>$ {{ e.monto|monto_input }}</b></td><td style="text-align:right">$ {{ (e.monto - e.restante)|round(2)|monto_input or '0' }}</td><td style="text-align:right">$ {{ e.restante|monto_input or '0' }}</td><td class="obs">{{ e.nota or '' }}</td><td class="acc"><button class="btn" onclick="ccEntregaEliminar({{ e.id }})">Eliminar</button></td></tr>
+  {% else %}<tr><td colspan="7" class="mut">Todavía no hay entregas.</td></tr>{% endfor %}</tbody></table></div>
+  {% elif vista == 'personas' %}
+  <div class="tabla-wrap cc-tabla"><table><thead><tr><th>{{ T[4] }}</th><th>Con saldo</th><th style="text-align:right">Diferencia a {{ 'abonar' if tipo == 'cliente' else 'pagar' }}</th><th style="text-align:right">Vencido</th><th style="text-align:right">Entrega a favor</th><th></th></tr></thead><tbody class="clientes">
+  {% for p in personas %}<tr><td><a href="?t={{ tipo }}&e=deuda&q={{ p.nombre|urlencode }}">{{ p.nombre }}</a></td><td>{{ p.docs }}</td><td style="text-align:right"><b>$ {{ p.saldo|monto_input or '0' }}</b></td><td style="text-align:right;color:#b91c1c">{{ ('$ ' ~ (p.vencido|monto_input)) if p.vencido else '' }}</td><td style="text-align:right">{{ ('$ ' ~ (p.a_favor|monto_input)) if p.a_favor else '' }}</td>
+    <td class="acc"><button class="btn ok" data-n="{{ p.nombre }}" onclick="ccEntrega('{{ tipo }}', this.dataset.n)">{{ 'Entrega' if tipo == 'cliente' else 'Pago' }}</button><button class="btn" data-n="{{ p.nombre }}" onclick="ccNuevo('{{ tipo }}', this.dataset.n)">+ Otro retiro</button></td></tr>
+  {% else %}<tr><td colspan="6" class="mut">Nadie tiene saldo pendiente.</td></tr>{% endfor %}</tbody></table></div>
   {% else %}
   <div class="tabla-wrap cc-tabla"><table><thead><tr><th>Estado</th><th>Emisión</th><th>Vencimiento</th><th>{{ T[4] }}</th><th>N° de factura</th><th style="text-align:right">Total</th><th style="text-align:right">{{ T[2] }}</th><th style="text-align:right">Saldo</th><th>Atraso</th><th>Qué retiró / servicio</th><th></th></tr></thead><tbody class="clientes">
   {% for f in filas %}<tr class="{{ 'st-inactivo' if f.estado == 'pagado' }}">

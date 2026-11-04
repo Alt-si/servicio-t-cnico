@@ -44,6 +44,14 @@
 </form></div>
 {% endif %}
 
+{% if 'ventas' in modulos or 'stock' in modulos %}
+<div class="card" id="formas-pago"><div class="row"><h1 style="margin:0">Formas de pago y cuentas</h1><button class="btn pri der" type="button" onclick="fpForm()">+ Agregar</button></div>
+  <p class="mut">Son las opciones que aparecen al cobrar una venta o al retirar un equipo, y en las estadísticas de a dónde fue el dinero. Podés tener varias cuentas: por ejemplo «Transferencia Mercado Pago» y «Transferencia Banco Nación».</p>
+  <div class="tabla-wrap"><table><tbody class="clientes">{% for f in formas_pago_lista() %}<tr><td><b>{{ f.nombre }}</b></td><td class="mut">{{ 'Aplica descuento' if f.aplica_descuento else 'Precio de lista' }}</td><td style="text-align:right">
+    <button class="btn" type="button" onclick='fpForm({{ f|tojson }})'>Editar</button> <button class="btn" type="button" onclick='fpEliminar({{ f.id }}, {{ f.nombre|tojson }})'>Eliminar</button></td></tr>
+  {% else %}<tr><td class="mut">Todavía no hay formas de pago.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endif %}
+
 {% if 'recordatorios' in modulos %}
 <div class="card" id="recordatorios"><h1>Recordatorios</h1>
 <form method="post" action="{{ url_for('configuracion_recordatorios') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
@@ -168,7 +176,7 @@ async function tecBorrar(id, nombre, usos) {
   <p><button class="btn pri" id="k-ok">Cambiar clave</button></p>
 </div>
 {% endblock %}
-{% block js %}{% if 'facturacion' in modulos %}<script src="{{ url_for('static', filename='afip.js') }}"></script>{% endif %}<script>
+{% block js %}{% if 'ventas' in modulos or 'stock' in modulos %}<script src="{{ url_for('static', filename='formaspago.js') }}"></script>{% endif %}{% if 'facturacion' in modulos %}<script src="{{ url_for('static', filename='afip.js') }}"></script>{% endif %}<script>
 const msg=(id,t,ok)=>{const e=document.getElementById(id);e.textContent=t;e.className='msg '+(ok?'ok':'error');e.style.display='block'};
 document.getElementById('c-ok').onclick=async()=>{
   const j=await api('/api/codigo/cambiar',{actual:$('#c-act').value,nuevo:$('#c-nue').value,repetir:$('#c-rep').value,mail:$('#c-mail')?.value});

@@ -283,7 +283,7 @@ function preguntarCobro() {
       ${ORDEN.monto ? `<div class="mut" style="margin:4px 0 8px;line-height:1.6">Total del trabajo: <b>${esc(fmt(ORDEN.monto))}</b>${ORDEN.sena ? `<br>Seña entregada: <b>− ${esc(fmt(ORDEN.sena))}</b>` : ''}<br>Saldo a cobrar: <b>${esc(fmt(saldo))}</b></div>` : ''}
       <label>Forma de pago</label>
       <select id="c-forma">${formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>
-      <p class="mut" style="font-size:13px;margin:4px 0">Las formas de pago y cuentas se editan en <a href="/stock/listas" target="_blank">Stock → Listas</a>.</p>
+      <p class="mut" style="font-size:13px;margin:4px 0">Las formas de pago y cuentas se editan en <a href="/configuracion#formas-pago" target="_blank">Configuración → Formas de pago</a>.</p>
       <div class="row" style="margin-top:12px"><button class="btn pri" id="c-ok">Registrar cobro</button><button class="btn" id="c-sin">No abona nada</button><button class="btn" id="c-no">Cancelar</button></div>`);
     if ($('#c-monto', c).value) aplicarMoneda($('#c-monto', c));
     $('#c-no', c).onclick = () => { cerrar(); res(null); };
@@ -291,7 +291,7 @@ function preguntarCobro() {
     $('#c-ok', c).onclick = () => {
       const m = $('#c-monto', c).value.trim();
       if (!m || !num(m)) { const e = $('#c-err', c); e.textContent = 'Escribí el importe, o tocá «No abona nada».'; e.style.display = 'block'; return; }
-      if (!formas.length) { const e = $('#c-err', c); e.textContent = 'Primero cargá una forma de pago en Stock → Listas.'; e.style.display = 'block'; return; }
+      if (!formas.length) { const e = $('#c-err', c); e.textContent = 'Primero cargá una forma de pago en Configuración → Formas de pago.'; e.style.display = 'block'; return; }
       const f = $('#c-forma', c).value; cerrar(); res({monto: m, forma_id: parseInt(f)});
     };
   });

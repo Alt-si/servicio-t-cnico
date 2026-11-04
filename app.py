@@ -506,6 +506,10 @@ def usa_tecnicos():
 
 app.jinja_env.globals["lista_tecnicos"] = lista_tecnicos
 app.jinja_env.globals["usa_tecnicos"] = usa_tecnicos
+def formas_pago_lista():
+    with db() as con:
+        return [dict(r) for r in con.execute("SELECT id, nombre, aplica_descuento FROM stock_formas_pago ORDER BY id")]
+app.jinja_env.globals["formas_pago_lista"] = formas_pago_lista
 app.jinja_env.globals["rec_repetir"] = lambda: core.repetir_recordatorios(g.cuenta["id"])
 
 

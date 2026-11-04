@@ -8,6 +8,7 @@ from flask import Response, g, jsonify, render_template, request
 
 import core
 import ventas
+from stock import cant_o_error, fmt_cant
 
 TIPOS = {"cliente": ("Clientes", "A cobrar", "Cobrado", "Cobrado", "Cliente"), "proveedor": ("Proveedores", "A pagar", "Pagado", "Pagado", "Proveedor")}
 
@@ -19,6 +20,10 @@ def crear_tablas(con):
             numero TEXT, total REAL NOT NULL, obs TEXT, creado TEXT);
         CREATE TABLE IF NOT EXISTS cc_pagos (
             id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id INTEGER NOT NULL, fecha TEXT NOT NULL, monto REAL NOT NULL, nota TEXT);
+        CREATE TABLE IF NOT EXISTS cc_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id INTEGER NOT NULL, producto_id INTEGER, nombre TEXT NOT NULL,
+            cantidad REAL NOT NULL, precio REAL NOT NULL, abrev TEXT);
+        CREATE INDEX IF NOT EXISTS ix_cc_items_doc ON cc_items(doc_id);
         CREATE INDEX IF NOT EXISTS ix_cc_docs_tipo ON cc_docs(tipo);
         CREATE INDEX IF NOT EXISTS ix_cc_pagos_doc ON cc_pagos(doc_id);
     """)
@@ -28,6 +33,8 @@ SQL_DOCS = ("SELECT d.*, IFNULL((SELECT SUM(monto) FROM cc_pagos WHERE doc_id=d.
 
 
 def _estado(d, hoy):
+    if not (d["total"] or 0) > 0 or not d["numero"]:
+        return "sinfacturar", 0         # todavía sin número de factura ni importe
     saldo = round(d["total"] - d["pagado"], 2)
     if saldo <= 0.004:
         return "pagado", 0
@@ -63,8 +70,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         out = []
         for r in filas:
             d = dict(r)
-            d["saldo"] = max(round(d["total"] - d["pagado"], 2), 0)
             d["estado"], d["atraso"] = _estado(d, hoy)
+            d["saldo"] = 0 if d["estado"] == "sinfacturar" else max(round(d["total"] - d["pagado"], 2), 0)
             out.append(d)
         return out
 
@@ -76,7 +83,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             par += [f"%{w}%"] * 3
         sql += " ORDER BY d.vence, d.id"
         filas = enriquecer(con.execute(sql, par).fetchall(), hoy)
-        if estado in ("pendiente", "vencido", "pagado"):
+        if estado in ("pendiente", "vencido", "pagado", "sinfacturar"):
             filas = [f for f in filas if f["estado"] == estado]
         elif estado == "deuda":
             filas = [f for f in filas if f["estado"] != "pagado"]
@@ -100,7 +107,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             filas = listar(con, tipo, estado, q)
             nombres = sorted({r[0] for r in con.execute("SELECT persona FROM cc_docs WHERE tipo=?", (tipo,))} |
                              ({core.nombre_natural(c) for c in con.execute("SELECT * FROM clientes")} if tipo == "cliente" else set()))
-        resumen = dict(cantidad=len(todos), total=sum(f["total"] for f in todos), pagado=sum(f["pagado"] for f in todos),
+        resumen = dict(cantidad=len(todos), sinfacturar=sum(1 for f in todos if f["estado"] == "sinfacturar"), total=sum(f["total"] for f in todos if f["estado"] != "sinfacturar"), pagado=sum(f["pagado"] for f in todos if f["estado"] != "sinfacturar"),
                        pendiente=sum(f["saldo"] for f in todos if f["estado"] == "pendiente"), vencido=sum(f["saldo"] for f in todos if f["estado"] == "vencido"))
         personas = {}
         for f in filas if q else todos:
@@ -111,7 +118,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 p["vencido"] += f["saldo"]
         personas = sorted([p for p in personas.values() if p["saldo"] > 0], key=lambda p: -p["saldo"])
         return render_template("cuentacorriente.html", tipo=tipo, T=TIPOS[tipo], estado=estado, q=q, vista=vista, filas=filas, resumen=resumen,
-                               personas=personas, nombres=nombres, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
+                               personas=personas, nombres=nombres, con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
 
     @app.route("/cuenta-corriente/exportar.csv")
     @login_requerido
@@ -122,11 +129,14 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             filas = listar(con, tipo, "todos", "")
         sal = io.StringIO()
         w = csv.writer(sal, delimiter=";")
-        w.writerow(["Estado", "Emisión", "Vencimiento", TIPOS[tipo][4], "N° comprobante", "Total", "Pagado", "Saldo", "Atraso (días)", "Observaciones"])
+        w.writerow(["Estado", "Emisión", "Vencimiento", TIPOS[tipo][4], "N° de factura", "Total", "Pagado", "Saldo", "Atraso (días)", "Observaciones"])
         for f in filas:
-            w.writerow([{"pagado": TIPOS[tipo][2], "vencido": "Vencido", "pendiente": TIPOS[tipo][1]}[f["estado"]], f["emision"], f["vence"], f["persona"], f["numero"] or "",
+            w.writerow([{"pagado": TIPOS[tipo][2], "vencido": "Vencido", "pendiente": TIPOS[tipo][1], "sinfacturar": "Sin facturar"}[f["estado"]], f["emision"], f["vence"], f["persona"], f["numero"] or "",
                         str(f["total"]).replace(".", ","), str(f["pagado"]).replace(".", ","), str(f["saldo"]).replace(".", ","), f["atraso"], f["obs"] or ""])
         return Response("﻿" + sal.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename=cuenta_corriente_{tipo}.csv"})
+
+    def items_de(con, did):
+        return [dict(r) for r in con.execute("SELECT * FROM cc_items WHERE doc_id=? ORDER BY id", (did,))]
 
     @app.route("/api/cc/doc/<int:did>")
     @login_requerido
@@ -137,12 +147,70 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if not r:
                 return error("No existe el registro.", 404)
             pagos = [dict(p) for p in con.execute("SELECT * FROM cc_pagos WHERE doc_id=? ORDER BY fecha, id", (did,))]
-        d = enriquecer([r], core.ahora()[:10])[0]
-        formas = []
-        if "ventas" in g.modulos and r["tipo"] == "cliente":      # los cobros de clientes también van al Historial de cobros
-            with db() as con:
+            items = items_de(con, did)
+            formas = []
+            if "ventas" in g.modulos and r["tipo"] == "cliente":      # los cobros de clientes también van al Historial de cobros
                 formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
-        return jsonify(ok=True, doc=d, pagos=pagos, formas=formas)
+        d = enriquecer([r], core.ahora()[:10])[0]
+        return jsonify(ok=True, doc=d, pagos=pagos, items=items, formas=formas)
+
+    @app.route("/api/cc/productos")
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_productos():
+        if "stock" not in g.modulos:
+            return jsonify(ok=True, items=[])
+        sql = "SELECT p.*, u.abrev, u.decimales FROM stock_productos p JOIN stock_unidades u ON u.id=p.unidad_id WHERE p.activo=1"
+        par = []
+        for w in (request.args.get("q") or "").split()[:4]:
+            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR IFNULL(p.codigo_barras,'') LIKE ?)"
+            par += [f"%{w}%"] * 3
+        with db() as con:
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], precio=r["precio"], stock=r["stock_actual"], abrev=r["abrev"], decimales=r["decimales"])
+                     for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT 30", par)]
+        return jsonify(ok=True, items=items)
+
+    def aplicar_items(con, did, items, tabla_prev):
+        """Deja los productos del registro como en `items` (devuelve al stock los anteriores y descuenta los nuevos). Devuelve un error o None."""
+        ahora = core.ahora()
+        prev = {}
+        for r in tabla_prev:
+            if r["producto_id"]:
+                prev[r["producto_id"]] = prev.get(r["producto_id"], 0) + r["cantidad"]
+        nuevos, pedido = [], {}
+        for it in items:
+            p = con.execute("SELECT p.*, u.abrev, u.decimales FROM stock_productos p JOIN stock_unidades u ON u.id=p.unidad_id WHERE p.id=? AND p.activo=1", (it.get("producto_id"),)).fetchone()
+            if not p:
+                return "Uno de los productos ya no existe en Stock."
+            try:
+                cant = cant_o_error(it.get("cantidad"), p["decimales"])
+                precio = core.parse_monto(it.get("precio")) if it.get("precio") not in (None, "") else p["precio"]
+            except ValueError:
+                return f"Revisá la cantidad o el precio de {p['nombre']}."
+            if cant <= 0 or precio is None or precio < 0:
+                return f"Revisá la cantidad o el precio de {p['nombre']}."
+            pedido[p["id"]] = pedido.get(p["id"], 0) + cant
+            nuevos.append((p, cant, precio))
+        for pid_, cant in pedido.items():
+            p = con.execute("SELECT nombre, stock_actual FROM stock_productos WHERE id=?", (pid_,)).fetchone()
+            if cant > round(p["stock_actual"] + prev.get(pid_, 0), 6) + 1e-9:
+                return f"Stock insuficiente de {p['nombre']}: hay {fmt_cant(p['stock_actual'] + prev.get(pid_, 0))}."
+        for pid_, cant in prev.items():        # se devuelve lo anterior...
+            p = con.execute("SELECT stock_actual FROM stock_productos WHERE id=?", (pid_,)).fetchone()
+            if p:
+                nuevo = round(p["stock_actual"] + cant, 6)
+                con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, pid_))
+                con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
+                            (pid_, ahora, "ingreso", cant, nuevo, "Cuenta corriente: producto quitado"))
+        con.execute("DELETE FROM cc_items WHERE doc_id=?", (did,))
+        for p, cant, precio in nuevos:         # ...y se descuenta lo nuevo
+            act = con.execute("SELECT stock_actual FROM stock_productos WHERE id=?", (p["id"],)).fetchone()["stock_actual"]
+            nuevo = round(act - cant, 6)
+            con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, p["id"]))
+            con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
+                        (p["id"], ahora, "egreso", -cant, nuevo, "Cuenta corriente: %s" % con.execute("SELECT persona FROM cc_docs WHERE id=?", (did,)).fetchone()["persona"]))
+            con.execute("INSERT INTO cc_items (doc_id, producto_id, nombre, cantidad, precio, abrev) VALUES (?,?,?,?,?,?)", (did, p["id"], p["nombre"], cant, precio, p["abrev"]))
+        return None
 
     @app.route("/api/cc/doc", methods=["POST"])
     @login_requerido
@@ -151,33 +219,50 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         d = request.get_json(force=True, silent=True) or {}
         tipo = d.get("tipo")
         persona = " ".join(U(d.get("persona")).split())
-        emision, vence = _fecha_ok(d.get("emision")), _fecha_ok(d.get("vence"))
+        emision = _fecha_ok(d.get("emision"))
+        numero = " ".join(str(d.get("numero") or "").split())[:40] or None
+        obs = U(d.get("obs"))[:500] or None
         if tipo not in TIPOS:
             return error("Tipo inválido.")
         if not persona:
             return error(f"Escribí el nombre del {TIPOS[tipo][4].lower()}.")
-        if not emision or not vence:
-            return error("Completá la fecha de emisión y el vencimiento.")
-        if vence < emision:
-            return error("El vencimiento no puede ser anterior a la emisión.")
-        try:
-            total = core.parse_monto(d.get("total"))
-        except ValueError:
-            total = None
-        if not total or total <= 0:
-            return error("Escribí el importe total.")
-        numero, obs = " ".join(str(d.get("numero") or "").split())[:40] or None, U(d.get("obs"))[:500] or None
+        if not emision:
+            return error("Completá la fecha.")
+        total, vence = 0.0, ""
+        if numero:      # con número de factura, el importe y el vencimiento son obligatorios
+            try:
+                total = core.parse_monto(d.get("total"))
+            except ValueError:
+                total = None
+            if not total or total <= 0:
+                return error("Con número de factura, el importe total es obligatorio.")
+            vence = _fecha_ok(d.get("vence"))
+            if not vence:
+                return error("Completá el vencimiento.")
+            if vence < emision:
+                return error("El vencimiento no puede ser anterior a la emisión.")
+        elif not obs and not d.get("items"):
+            return error("Anotá en observaciones qué retiró o qué servicio se le hizo, o cargá el número de factura.")
+        items = d.get("items") if "stock" in g.modulos and isinstance(d.get("items"), list) else None
         with db() as con:
             if d.get("id"):
                 r = con.execute(SQL_DOCS + " WHERE d.id=?", (d.get("id"),)).fetchone()
                 if not r:
                     return error("No existe el registro.", 404)
-                if total + 0.004 < r["pagado"]:
+                if numero and total + 0.004 < r["pagado"]:
                     return error("El total no puede ser menor a lo ya pagado.")
-                con.execute("UPDATE cc_docs SET persona=?, emision=?, vence=?, numero=?, total=?, obs=? WHERE id=?", (persona, emision, vence, numero, total, obs, r["id"]))
-                return jsonify(ok=True, id=r["id"])
+                if not numero and r["pagado"] > 0:
+                    return error("Ya tiene pagos registrados: no se puede quitar el número de factura.")
+                did = r["id"]
+                con.execute("UPDATE cc_docs SET persona=?, emision=?, vence=?, numero=?, total=?, obs=? WHERE id=?", (persona, emision, vence, numero, total, obs, did))
+                if items is not None:
+                    e = aplicar_items(con, did, items, items_de(con, did))
+                    if e:
+                        con.rollback()
+                        return error(e)
+                return jsonify(ok=True, id=did)
             m = 0
-            if d.get("pagado_inicial") not in (None, ""):
+            if numero and d.get("pagado_inicial") not in (None, ""):
                 try:
                     m = core.parse_monto(d.get("pagado_inicial")) or 0
                 except ValueError:
@@ -186,6 +271,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     return error("Lo ya cobrado/pagado no puede superar el total.")
             did = con.execute("INSERT INTO cc_docs (tipo, persona, emision, vence, numero, total, obs, creado) VALUES (?,?,?,?,?,?,?,?)",
                               (tipo, persona, emision, vence, numero, total, obs, core.ahora())).lastrowid
+            if items:
+                e = aplicar_items(con, did, items, [])
+                if e:
+                    con.rollback()
+                    return error(e)
             if m > 0:
                 con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota) VALUES (?,?,?,?)", (did, emision, m, "Entrega inicial"))
         return jsonify(ok=True, id=did)
@@ -206,6 +296,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             r = con.execute(SQL_DOCS + " WHERE d.id=?", (did,)).fetchone()
             if not r:
                 return error("No existe el registro.", 404)
+            if not r["numero"] or not (r["total"] or 0) > 0:
+                return error("Primero cargá el número de factura y el importe.")
             saldo = round(r["total"] - r["pagado"], 2)
             if m > saldo + 0.004:
                 return error(f"El importe supera el saldo pendiente ({core.fmt_monto(saldo)}).")
@@ -249,6 +341,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             return r
         with db() as con:
             _quitar_cobros(con, "cc_pago_id IN (SELECT id FROM cc_pagos WHERE doc_id=?)", (did,))
+            if "stock" in g.modulos:
+                aplicar_items(con, did, [], items_de(con, did))
             con.execute("DELETE FROM cc_pagos WHERE doc_id=?", (did,))
             con.execute("DELETE FROM cc_docs WHERE id=?", (did,))
         return jsonify(ok=True)

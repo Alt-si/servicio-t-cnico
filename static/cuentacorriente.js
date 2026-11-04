@@ -3,31 +3,92 @@ const ccNum = v => Number(v).toLocaleString('es-AR', {minimumFractionDigits: Num
 const ccSumar = (iso, dias) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + dias); return d.toISOString().slice(0, 10); };
 const ccEtiq = t => t === 'cliente' ? {persona: 'Cliente', pagado: 'cobrado', accion: 'Cobrar'} : {persona: 'Proveedor', pagado: 'pagado', accion: 'Pagar'};
 
-function ccFormulario(tipo, d) {
+// Estado del formulario: se conserva al ir al buscador de productos y volver
+function ccFormulario(tipo, d, est) {
   const L = ccEtiq(tipo), nuevo = !d;
+  est = est || {persona: d ? d.persona : '', emision: d ? d.emision : CC_HOY, obs: d ? d.obs || '' : '', numero: d ? d.numero || '' : '',
+    total: d && d.total > 0 ? ccNum(d.total) : '', vence: d && d.vence ? d.vence : '', ini: '', items: (d && d.items) ? d.items.map(i => ({...i})) : []};
+  const sumItems = () => est.items.reduce((s, i) => s + i.cantidad * i.precio, 0);
   const m = modal(`<h2>${nuevo ? 'Nueva cuenta corriente' : 'Editar'} · ${L.persona}</h2><div id="cc-err" class="msg error" style="display:none"></div>
-    <label>${L.persona} *</label><input id="cc-per" list="cc-nombres" autocomplete="off" value="${esc(d ? d.persona : '')}">
-    <div class="grid"><div><label>Fecha de emisión *</label><input id="cc-em" type="date" value="${d ? d.emision : CC_HOY}"></div>
-    <div><label>Vencimiento *</label><input id="cc-ve" type="date" value="${d ? d.vence : ccSumar(CC_HOY, 7)}"></div></div>
-    <div class="row" style="margin:4px 0"><span class="mut">Plazo:</span>${[7, 15, 30, 60].map(n => `<button type="button" class="btn" data-p="${n}" style="padding:2px 8px">${n} días</button>`).join('')}</div>
-    <div class="grid"><div><label>N° de comprobante</label><input id="cc-num" autocomplete="off" value="${esc(d ? d.numero || '' : '')}"></div>
-    <div><label>Importe total ($) *</label><input id="cc-tot" class="moneda" inputmode="decimal" value="${d ? ccNum(d.total) : ''}"></div></div>
-    ${nuevo ? `<label>Ya ${L.pagado} (opcional)</label><input id="cc-ini" class="moneda" inputmode="decimal" placeholder="0">` : ''}
-    <label>Observaciones</label><input id="cc-obs" value="${esc(d ? d.obs || '' : '')}">
+    <label>${L.persona} *</label><input id="cc-per" list="cc-nombres" autocomplete="off" value="${esc(est.persona)}">
+    <label>Fecha *</label><input id="cc-em" type="date" value="${est.emision}">
+    <label>${tipo === 'cliente' ? 'Qué retiró / servicio que se le realizó' : 'Qué se compró'} *</label><textarea id="cc-obs" rows="3">${esc(est.obs)}</textarea>
+    ${CC_STOCK ? `<div style="margin:6px 0"><b>Productos del stock</b> <button type="button" class="btn" id="cc-addp" style="padding:2px 10px">+ Agregar producto</button>
+      ${est.items.length ? `<table class="tabla" style="width:100%;margin-top:6px">${est.items.map((i, n) => `<tr><td>${esc(i.nombre)}</td><td>${ccNum(i.cantidad)} ${esc(i.abrev || '')}</td><td style="text-align:right">$ ${ccNum(i.cantidad * i.precio)}</td><td><button type="button" class="btn" style="padding:1px 8px" data-q="${n}">×</button></td></tr>`).join('')}
+      <tr><td colspan="2" style="text-align:right">Total productos</td><td style="text-align:right"><b>$ ${ccNum(sumItems())}</b></td><td></td></tr></table>` : '<div class="mut" style="font-size:13px">Descuentan del stock al guardar.</div>'}</div>` : ''}
+    <hr><label>N° de factura <span class="mut">(al cargarlo se piden el importe y el vencimiento)</span></label><input id="cc-num" autocomplete="off" value="${esc(est.numero)}">
+    <div id="cc-fact" style="display:none">
+      <div class="grid"><div><label>Importe total ($) *</label><input id="cc-tot" class="moneda" inputmode="decimal" value="${esc(est.total)}"></div>
+      <div><label>Vencimiento *</label><input id="cc-ve" type="date" value="${est.vence}"></div></div>
+      <div class="row" style="margin:4px 0"><span class="mut">Plazo:</span>${[7, 15, 30, 60].map(n => `<button type="button" class="btn" data-p="${n}" style="padding:2px 8px">${n} días</button>`).join('')}</div>
+      ${nuevo ? `<label>Ya ${L.pagado} (opcional)</label><input id="cc-ini" class="moneda" inputmode="decimal" value="${esc(est.ini)}" placeholder="0">` : ''}
+    </div>
     <div class="row" style="margin-top:12px"><button class="btn pri" id="cc-ok">Guardar</button><button class="btn" id="cc-no">Cancelar</button></div>`);
-  ['cc-em', 've', 'cc-ve'].forEach(i => { const e = m.querySelector('#' + i); if (e) e.addEventListener('click', ev => { try { ev.target.showPicker(); } catch (x) {} }); });
-  m.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { m.querySelector('#cc-ve').value = ccSumar(m.querySelector('#cc-em').value || CC_HOY, +b.dataset.p); });
-  m.querySelector('#cc-no').onclick = cerrar;
-  m.querySelector('#cc-ok').onclick = async () => {
-    const j = await api('/api/cc/doc', {id: d ? d.id : null, tipo, persona: m.querySelector('#cc-per').value, emision: m.querySelector('#cc-em').value,
-      vence: m.querySelector('#cc-ve').value, numero: m.querySelector('#cc-num').value, total: m.querySelector('#cc-tot').value,
-      obs: m.querySelector('#cc-obs').value, pagado_inicial: nuevo ? m.querySelector('#cc-ini').value : null});
-    if (!j.ok) { const e = m.querySelector('#cc-err'); e.textContent = j.error || 'No se pudo guardar.'; e.style.display = 'block'; return; }
+  const q = s => m.querySelector(s);
+  const leer = () => { est.persona = q('#cc-per').value; est.emision = q('#cc-em').value; est.obs = q('#cc-obs').value; est.numero = q('#cc-num').value;
+    est.total = q('#cc-tot').value; est.vence = q('#cc-ve').value; if (q('#cc-ini')) est.ini = q('#cc-ini').value; };
+  const mostrar = () => {
+    const con = q('#cc-num').value.trim() !== '';
+    q('#cc-fact').style.display = con ? 'block' : 'none';
+    if (con) {
+      if (!q('#cc-tot').value && sumItems() > 0) { q('#cc-tot').value = ccNum(sumItems()); }
+      if (!q('#cc-ve').value) q('#cc-ve').value = ccSumar(q('#cc-em').value || CC_HOY, 7);
+    }
+  };
+  q('#cc-num').addEventListener('input', mostrar); mostrar();
+  ['cc-em', 'cc-ve'].forEach(i => q('#' + i).addEventListener('click', ev => { try { ev.target.showPicker(); } catch (x) {} }));
+  m.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { q('#cc-ve').value = ccSumar(q('#cc-em').value || CC_HOY, +b.dataset.p); });
+  m.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { leer(); est.items.splice(+b.dataset.q, 1); cerrar(); ccFormulario(tipo, d, est); });
+  if (q('#cc-addp')) q('#cc-addp').onclick = async () => { leer(); cerrar(); const it = await ccElegirProducto(); if (it) est.items.push(it); ccFormulario(tipo, d, est); };
+  q('#cc-no').onclick = cerrar;
+  q('#cc-ok').onclick = async () => {
+    leer();
+    const conFactura = est.numero.trim() !== '';
+    const j = await api('/api/cc/doc', {id: d ? d.id : null, tipo, persona: est.persona, emision: est.emision, vence: conFactura ? est.vence : '', numero: est.numero,
+      total: conFactura ? est.total : '', obs: est.obs, pagado_inicial: nuevo && conFactura ? est.ini : null, items: CC_STOCK ? est.items : undefined});
+    if (!j.ok) { const e = q('#cc-err'); e.textContent = j.error || 'No se pudo guardar.'; e.style.display = 'block'; return; }
     location.reload();
   };
-  setTimeout(() => m.querySelector('#cc-per').focus(), 50);
+  setTimeout(() => q(est.persona ? '#cc-obs' : '#cc-per').focus(), 50);
 }
 function ccNuevo(tipo) { ccFormulario(tipo, null); }
+async function ccFactura(id, tipo) { const j = await api('/api/cc/doc/' + id); if (j.ok) ccFormulario(tipo, {...j.doc, items: j.items}); else aviso(j.error); }
+
+// Buscador de productos del stock; resuelve con {producto_id, nombre, cantidad, precio, abrev} o null
+function ccElegirProducto() {
+  return new Promise(res => {
+    const m = modal(`<h2>Agregar producto del stock</h2><div id="pp-err" class="msg error" style="display:none"></div>
+      <input id="pp-q" autocomplete="off" placeholder="Buscar por nombre o código"><div id="pp-l" style="max-height:200px;overflow:auto;margin:6px 0"></div>
+      <div id="pp-s" style="display:none"><p style="margin:4px 0"><b id="pp-n"></b> <span class="mut" id="pp-st"></span></p>
+      <div class="grid"><div><label>Cantidad</label><input id="pp-c" inputmode="decimal" value="1"></div><div><label>Precio unitario ($)</label><input id="pp-p" class="moneda" inputmode="decimal"></div></div></div>
+      <div class="row" style="margin-top:12px"><button class="btn pri" id="pp-ok">Agregar</button><button class="btn" id="pp-no">Cancelar</button></div>`);
+    let sel = null, t = null;
+    const buscar = async () => {
+      const j = await api('/api/cc/productos?q=' + encodeURIComponent(m.querySelector('#pp-q').value));
+      const l = m.querySelector('#pp-l'); l.innerHTML = '';
+      (j.items || []).forEach(p => {
+        const b = document.createElement('button'); b.className = 'btn'; b.style.cssText = 'display:block;width:100%;text-align:left;margin-bottom:4px';
+        b.textContent = `${p.nombre}${p.codigo ? ' · ' + p.codigo : ''} — stock ${p.stock} ${p.abrev}` + (p.precio != null ? ` — $ ${ccNum(p.precio)}` : '');
+        b.onclick = () => { sel = p; m.querySelector('#pp-s').style.display = 'block'; m.querySelector('#pp-n').textContent = p.nombre; m.querySelector('#pp-st').textContent = `(stock: ${p.stock} ${p.abrev})`;
+          m.querySelector('#pp-p').value = p.precio != null ? ccNum(p.precio) : ''; l.innerHTML = ''; };
+        l.appendChild(b);
+      });
+      if (!(j.items || []).length) l.innerHTML = '<p class="mut">No hay productos con ese nombre en Stock.</p>';
+    };
+    m.querySelector('#pp-q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(buscar, 250); });
+    m.querySelector('#pp-no').onclick = () => { cerrar(); res(null); };
+    m.querySelector('#pp-ok').onclick = () => {
+      const err = x => { const e = m.querySelector('#pp-err'); e.textContent = x; e.style.display = 'block'; };
+      if (!sel) return err('Elegí un producto de la lista.');
+      const cant = parseFloat(String(m.querySelector('#pp-c').value).replace(',', '.')), pr = parseFloat(String(m.querySelector('#pp-p').value).replace(/\./g, '').replace(',', '.'));
+      if (!(cant > 0)) return err('Escribí una cantidad válida.');
+      if (!(pr >= 0)) return err('Escribí el precio unitario.');
+      if (cant > sel.stock) return err(`Stock insuficiente: hay ${sel.stock} ${sel.abrev}.`);
+      cerrar(); res({producto_id: sel.id, nombre: sel.nombre, cantidad: cant, precio: pr, abrev: sel.abrev});
+    };
+    buscar(); setTimeout(() => m.querySelector('#pp-q').focus(), 50);
+  });
+}
 
 async function ccPago(id, tipo) {
   const j = await api('/api/cc/doc/' + id);
@@ -68,12 +129,13 @@ async function ccVer(id, tipo) {
   const L = ccEtiq(tipo), d = j.doc;
   const fe = s => s.split('-').reverse().join('/');
   const m = modal(`<h2>${esc(d.persona)}</h2>
-    <p class="mut" style="line-height:1.6">Emisión ${fe(d.emision)} · Vence ${fe(d.vence)}${d.numero ? ' · Comp. ' + esc(d.numero) : ''}<br>Total $ ${ccNum(d.total)} · ${L.pagado} $ ${ccNum(d.pagado)} · <b>Saldo $ ${ccNum(d.saldo)}</b>${d.obs ? '<br>' + esc(d.obs) : ''}</p>
+    <p class="mut" style="line-height:1.6">Fecha ${fe(d.emision)}${d.vence ? ' · Vence ' + fe(d.vence) : ''}${d.numero ? ' · Factura ' + esc(d.numero) : ' · Sin facturar'}<br>Total $ ${ccNum(d.total)} · ${L.pagado} $ ${ccNum(d.pagado)} · <b>Saldo $ ${ccNum(d.saldo)}</b>${d.obs ? '<br>' + esc(d.obs) : ''}</p>
+    ${j.items.length ? `<p class="mut" style="margin:0">Productos: ${j.items.map(i => esc(i.nombre) + ' x' + ccNum(i.cantidad)).join(', ')}</p>` : ''}
     <table class="tabla" style="width:100%"><tr><th>Fecha</th><th>Nota</th><th style="text-align:right">Importe</th><th></th></tr>
     ${j.pagos.map(p => `<tr><td>${fe(p.fecha)}</td><td>${esc(p.nota || '')}</td><td style="text-align:right">$ ${ccNum(p.monto)}</td><td><button class="btn" style="padding:1px 8px" data-pp="${p.id}">×</button></td></tr>`).join('') || '<tr><td colspan="4" class="mut">Sin pagos registrados.</td></tr>'}</table>
     <div class="row" style="margin-top:12px"><button class="btn" id="cv-ed">Editar</button><button class="btn bad" id="cv-del">Eliminar</button><button class="btn" id="cv-no">Cerrar</button></div>`);
   m.querySelector('#cv-no').onclick = cerrar;
-  m.querySelector('#cv-ed').onclick = () => { cerrar(); ccFormulario(tipo, d); };
+  m.querySelector('#cv-ed').onclick = () => { cerrar(); ccFormulario(tipo, {...d, items: j.items}); };
   m.querySelector('#cv-del').onclick = async () => {
     cerrar();
     if (!await confirmar('¿Eliminar este registro y todos sus pagos?')) return;

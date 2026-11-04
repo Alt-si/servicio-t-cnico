@@ -62,11 +62,15 @@
 
 {% if o %}
 <div class="card"><h2>Acciones</h2><div class="row" id="acciones"></div></div>
+{% if cobros %}<div class="card"><h2>Historial de cobros</h2><table class="tabla"><tr><th>Fecha</th><th>Forma de pago</th><th style="text-align:right">Importe</th><th></th></tr>
+  {% for c in cobros %}<tr><td>{{ c.fecha[8:10] }}/{{ c.fecha[5:7] }}/{{ c.fecha[:4] }} {{ c.fecha[11:16] }}</td><td>{{ c.forma }}</td><td style="text-align:right"><b>$ {{ c.monto|monto_input }}</b></td>
+  <td style="text-align:right"><button class="btn" style="padding:2px 8px" onclick="cobroEditar({{ c.id }})">Editar</button> <button class="btn" style="padding:2px 8px" onclick="cobroEliminar({{ c.id }})">Eliminar</button></td></tr>{% endfor %}</table></div>{% endif %}
 <div class="card"><details id="hist-det"><summary class="resumen-hist"><span id="hist-tit">Historial</span></summary>
   <ul class="hist" id="hist" style="margin-top:10px"></ul></details></div>
 {% endif %}
 {% endblock %}
 {% block js %}
+<script src="{{ url_for('static', filename='cobros.js') }}"></script>
 <script>
 const ORDEN = {{ ({
   'id': o.id if o else None, 'estado': o.estado if o else None, 'resp': o.presupuesto_respuesta if o else None,

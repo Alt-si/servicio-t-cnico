@@ -434,12 +434,13 @@ def orden_ver(oid):
         equipo = con.execute("SELECT * FROM equipos WHERE id=?", (o["equipo_id"],)).fetchone() if o["equipo_id"] else None
         extras = [dict(monto=m, detalle=t) for m, t in opciones_de(con, oid)]
     equipo_txt = texto_equipo(equipo["tipo"], equipo["marca"], equipo["modelo"]) if equipo else "equipo"
-    formas, saldo = [], 0
+    formas, saldo, cobros = [], 0, []
     if "ventas" in g.modulos:       # con Ventas activo, al retirar se registra el cobro y su forma de pago
         with db() as con:
             formas = [dict(id=r["id"], nombre=r["nombre"], cheque=bool(r["pide_cheque"])) for r in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
+            cobros = [dict(r) for r in con.execute("SELECT id, fecha, monto, forma FROM cobros WHERE orden_id=? ORDER BY id", (oid,))]
         saldo = saldo_a_abonar(o["presupuesto_monto"], o["sena_monto"], o["reembolso_monto"], o["presupuesto_respuesta"] == "rechazado") or 0
-    return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False, formas=formas, saldo=saldo,
+    return render_template("orden.html", o=o, cliente=cliente, equipo=equipo, TIPOS=core.TIPOS_EQUIPO, necesita_cliente=False, formas=formas, saldo=saldo, cobros=cobros,
                            nombre_completo=core.nombre_natural(cliente),
                            wa_numero=telefono_whatsapp(cliente["telefono"]), equipo_txt=equipo_txt,
                            nombre_pila=(cliente["nombre"] or "").strip().title(), extras=extras)

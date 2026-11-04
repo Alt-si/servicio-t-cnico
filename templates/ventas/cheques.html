@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">Cheques y e-cheqs</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_estadisticas') }}">Estadísticas</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
+  <div class="row"><h1 style="margin:0">Cheques y e-cheqs</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_estadisticas') }}">Cobros</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
   <div class="resumen-stock" style="margin:12px 0">
     <div><span class="mut">En cartera (sin cobrar)</span><b>{{ n_cartera }}</b></div>
     <div><span class="mut">Importe en cartera</span><b>$ {{ total_cartera|monto_input or '0' }}</b></div>

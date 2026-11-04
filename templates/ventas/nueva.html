@@ -2,7 +2,7 @@
 {% block cuerpo %}
 <div class="venta-grid">
   <div class="card">
-    <div class="row"><h1 style="margin:0">Nueva venta</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_cheques') }}">Cheques</a><a class="btn" href="{{ url_for('ventas_estadisticas') }}">Estadísticas</a><a class="btn" href="{{ url_for('ventas_historial') }}">Ventas del día</a></div></div>
+    <div class="row"><h1 style="margin:0">Nueva venta</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_cheques') }}">Cheques</a><a class="btn" href="{{ url_for('ventas_estadisticas') }}">Cobros</a><a class="btn" href="{{ url_for('ventas_historial') }}">Ventas del día</a></div></div>
     <div style="position:relative;margin:12px 0">
       <input id="v-scan" autocomplete="off" autofocus placeholder="Escaneá el código de barras o escribí el código / nombre del producto y Enter" style="font-size:18px;padding:12px">
       <div id="v-res" class="v-res" style="display:none"></div>

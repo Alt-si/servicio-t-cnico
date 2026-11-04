@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">Cobros: a dónde fue el dinero</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_cheques') }}">Cheques</a><a class="btn" href="{{ url_for('ventas_historial') }}">Ventas del día</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
+  <div class="row"><h1 style="margin:0">Historial de cobros</h1><div class="der row"><a class="btn" href="{{ url_for('ventas_cheques') }}">Cheques</a><a class="btn" href="{{ url_for('ventas_historial') }}">Ventas del día</a><a class="btn pri" href="{{ url_for('ventas') }}">+ Nueva venta</a></div></div>
   <div class="row" style="margin:12px 0">
     {% for k, n in (('dia', 'Día'), ('semana', 'Semana'), ('mes', 'Mes')) %}<a class="btn {{ 'pri' if modo == k }}" href="?p={{ k }}&f={{ hoy if modo != k else ref }}">{{ n }}</a>{% endfor %}
     <span style="flex:1"></span>

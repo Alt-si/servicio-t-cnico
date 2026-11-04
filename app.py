@@ -13,6 +13,7 @@ import core
 import stock
 import ventas
 import facturacion
+import cuentacorriente
 from core import (ESTADOS, ESTADOS_FINALES, E_NUEVO, E_PENDIENTE, E_LISTO, E_RETIRADO, E_SCRAP, E_COMPRADO,
                   fmt_fecha, fmt_monto, parse_monto, saldo_a_abonar, texto_equipo, telefono_whatsapp)
 
@@ -90,6 +91,7 @@ def antes():
                 stock.crear_tablas(_c)
                 ventas.crear_tablas(_c)
                 facturacion.crear_tablas(_c)
+                cuentacorriente.crear_tablas(_c)
             if core.ajustes(g.cuenta["id"])["modo_texto"] == "mayusculas":      # tipos y marcas ya cargados, en mayúsculas
                 with core.conectar(g.cuenta["id"]) as _c:
                     _c.execute("UPDATE equipos SET tipo=UPPER(tipo), marca=UPPER(marca) WHERE tipo<>UPPER(tipo) OR marca<>UPPER(marca)")
@@ -1369,6 +1371,7 @@ def admin_accion(cid, accion):
 
 
 stock.registrar(app, login_requerido, modulo_requerido, db, U, error)
+cuentacorriente.registrar(app, login_requerido, modulo_requerido, db, U, error)
 ventas.registrar(app, login_requerido, modulo_requerido, db, error)
 facturacion.registrar(app, login_requerido, modulo_requerido, db, U, error)
 

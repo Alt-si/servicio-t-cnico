@@ -1,4 +1,5 @@
 """Sistema de servicio técnico — versión web (Flask). Una cuenta (mail + clave) por comercio, una base por cuenta."""
+from datetime import timedelta
 import base64
 import io
 import os
@@ -655,7 +656,15 @@ def api_orden_crear():
         cliente = con.execute("SELECT id FROM clientes WHERE id=?", (d.get("cliente_id"),)).fetchone()
         if not cliente:
             return error("Elegí el cliente.")
+        con.execute("BEGIN IMMEDIATE")      # bloquea la base: dos altas simultáneas se procesan una detrás de otra
         ahora = core.ahora()
+        # Si la misma orden llega dos veces seguidas (doble toque o reintento por conexión lenta), no se vuelve a crear.
+        desde = (core.ahora_dt() - timedelta(minutes=3)).strftime("%Y-%m-%d %H:%M:%S")
+        rep = con.execute("SELECT o.id, o.estado, o.presupuesto_monto FROM ordenes o JOIN equipos e ON e.id=o.equipo_id WHERE o.cliente_id=? AND o.fecha_ingreso>=? AND o.falla=? "
+                          "AND e.tipo=? AND IFNULL(e.marca,'')=? AND IFNULL(e.modelo,'')=? ORDER BY o.id LIMIT 1",
+                          (cliente["id"], desde, falla, U(d.get("tipo")), U(d.get("marca")), U(d.get("modelo")))).fetchone()
+        if rep:
+            return jsonify(ok=True, id=rep["id"], estado=rep["estado"], ofrecer_presupuesto=False, repetida=True)
         equipo_id = d.get("equipo_id") or None
         campos = [U(d.get("tipo")), U(d.get("marca")), U(d.get("modelo")), U(d.get("serie")), U(d.get("descripcion")), (d.get("clave_acceso") or "").strip()]
         if equipo_id:
@@ -691,6 +700,37 @@ def api_orden_crear():
         if d.get("espera_repuesto"):
             core.registrar_evento(con, oid, estado, "Esperando repuesto")
     return jsonify(ok=True, id=oid, estado=estado, ofrecer_presupuesto=bool(tiene_pres))
+
+
+@app.route("/api/orden/<int:oid>/eliminar", methods=["POST"])
+@login_requerido
+@modulo_requerido("ordenes")
+def api_orden_eliminar(oid):
+    """Elimina una orden cargada por error (p. ej. duplicada). Pide el código de validación; no se puede si ya tiene cobros."""
+    d = request.get_json(force=True, silent=True) or {}
+    if not core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
+        return jsonify(ok=False, necesita_codigo=True, error="Código de validación incorrecto." if d.get("codigo") else "Eliminar una orden requiere el código de validación."), 403
+    with db() as con:
+        o = cargar_orden(con, oid)
+        if "ventas" in g.modulos and con.execute("SELECT 1 FROM cobros WHERE orden_id=?", (oid,)).fetchone():
+            return error("La orden tiene cobros registrados: eliminá primero esos cobros (o dejala como está).")
+        if "stock" in g.modulos:      # los repuestos usados vuelven al stock
+            ahora = core.ahora()
+            for r in con.execute("SELECT * FROM orden_repuestos WHERE orden_id=?", (oid,)).fetchall():
+                p = con.execute("SELECT id, stock_actual FROM stock_productos WHERE id=?", (r["producto_id"],)).fetchone()
+                if p:
+                    nuevo = round(p["stock_actual"] + r["cantidad"], 6)
+                    con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, p["id"]))
+                    con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
+                                (p["id"], ahora, "ingreso", r["cantidad"], nuevo, "Orden N° %04d eliminada" % oid))
+            con.execute("DELETE FROM orden_repuestos WHERE orden_id=?", (oid,))
+        for tabla in ("historial_ordenes", "presupuesto_opciones"):
+            con.execute(f"DELETE FROM {tabla} WHERE orden_id=?", (oid,))
+        con.execute("DELETE FROM ordenes WHERE id=?", (oid,))
+        eq = o["equipo_id"]
+        if eq and not con.execute("SELECT 1 FROM ordenes WHERE equipo_id=?", (eq,)).fetchone():      # el equipo cargado solo para esta orden también se va
+            con.execute("DELETE FROM equipos WHERE id=?", (eq,))
+    return jsonify(ok=True)
 
 
 @app.route("/api/orden/<int:oid>", methods=["POST"])

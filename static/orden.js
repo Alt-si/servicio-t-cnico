@@ -184,7 +184,9 @@ function textoListo(equipo) {
   return `Hola, ${ORDEN.nombre}. ${ORDEN.empresa} le informa que su equipo (${equipo}) está listo para ser retirado. Gracias.`;
 }
 
+let guardando = false;      // evita que un doble toque cree la misma orden dos o tres veces
 $('#guardar').onclick = async () => {
+  if (guardando) return;
   mostrarError('');
   const d = datos();
   let j;
@@ -194,8 +196,9 @@ $('#guardar').onclick = async () => {
   if (!ORDEN.id) {
     if (!ORDEN.cliente_id) return mostrarError('Elegí el cliente.');
     d.cliente_id = ORDEN.cliente_id; d.equipo_id = $('#prev-equipo')?.value || null;
+    guardando = true; $('#guardar').disabled = true; $('#guardar').textContent = 'Guardando…';
     j = await api('/api/orden', d);
-    if (!j.ok) return mostrarError(j.error);
+    if (!j.ok) { guardando = false; $('#guardar').disabled = false; $('#guardar').textContent = 'Crear orden'; return mostrarError(j.error); }
     const tk = await api(`/api/orden/${j.id}/ticket`);
     if (tk.ok) {
       ORDEN.nombre = tk.nombre;
@@ -393,3 +396,11 @@ if (ORDEN.id) { botones(); cargarHistorial(); }
 
 // recordar si el historial quedó desplegado
 try { const d = $('#hist-det'); if (d) { d.open = localStorage.getItem('hist_abierto') === '1'; d.addEventListener('toggle', () => localStorage.setItem('hist_abierto', d.open ? '1' : '0')); } } catch (e) {}
+
+if ($('#eliminar-orden')) $('#eliminar-orden').onclick = async () => {
+  if (!await confirmar('¿Eliminar esta orden? Se borra con todo su historial. Usalo solo si se cargó por error (por ejemplo, repetida).')) return;
+  const r = await apiCodigo('/api/orden/' + ORDEN.id + '/eliminar', {});
+  if (r.cancelado) return;
+  if (!r.ok) return aviso(r.error || 'No se pudo eliminar.');
+  location = '/ordenes';
+};

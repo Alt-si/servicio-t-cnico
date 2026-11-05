@@ -57,6 +57,7 @@
 
   <div class="row" style="margin-top:16px">
     <button class="btn pri" id="guardar">{{ 'Guardar cambios' if o else 'Crear orden' }}</button>
+    {% if o %}<button class="btn bad" id="eliminar-orden" style="margin-left:auto">Eliminar orden (cargada por error)</button>{% endif %}
   </div>
 </div>
 

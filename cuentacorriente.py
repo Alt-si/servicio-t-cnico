@@ -4,7 +4,7 @@ import datetime
 import io
 import re
 
-from flask import Response, g, jsonify, render_template, request
+from flask import Response, flash, g, jsonify, redirect, render_template, request, url_for
 
 import core
 import ventas
@@ -34,6 +34,11 @@ def crear_tablas(con):
 
 
 def _migrar(con):
+    if "forma" not in [r[1] for r in con.execute("PRAGMA table_info(cc_entregas)")]:
+        con.execute("ALTER TABLE cc_entregas ADD COLUMN forma TEXT")      # de qué modo ingresó el dinero (forma de pago)
+        con.execute("ALTER TABLE cc_entregas ADD COLUMN forma_id INTEGER")
+        if con.execute("SELECT 1 FROM sqlite_master WHERE name='cobros'").fetchone() and "cc_entrega_id" in [r[1] for r in con.execute("PRAGMA table_info(cobros)")]:
+            con.execute("UPDATE cc_entregas SET forma=(SELECT forma FROM cobros WHERE cc_entrega_id=cc_entregas.id), forma_id=(SELECT forma_id FROM cobros WHERE cc_entrega_id=cc_entregas.id)")
     if "entrega_id" not in [r[1] for r in con.execute("PRAGMA table_info(cc_pagos)")]:
         con.execute("ALTER TABLE cc_pagos ADD COLUMN entrega_id INTEGER")      # pago que salió de una entrega de dinero a cuenta
     if "sin_factura" not in [r[1] for r in con.execute("PRAGMA table_info(cc_docs)")]:
@@ -114,6 +119,10 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             out.append(d)
         return out
 
+    def nombres_de(con, tipo):
+        return sorted({r[0] for r in con.execute("SELECT persona FROM cc_docs WHERE tipo=?", (tipo,))} |
+                      ({core.nombre_natural(c) for c in con.execute("SELECT * FROM clientes")} if tipo == "cliente" else set()))
+
     def listar(con, tipo, estado, q):
         hoy = core.ahora()[:10]
         sql, par = SQL_DOCS + " WHERE d.tipo=?", [tipo]
@@ -140,33 +149,37 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         tipo = request.args.get("t") if request.args.get("t") in TIPOS else "cliente"
         estado = request.args.get("e") if request.args.get("e") in ("deuda", "pendiente", "vencido", "pagado", "todos") else "deuda"
         q = (request.args.get("q") or "").strip()
-        vista = request.args.get("v") if request.args.get("v") in ("personas", "entregas") else "docs"
         with db() as con:
             todos = enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo=?", (tipo,)).fetchall(), core.ahora()[:10])
             filas = listar(con, tipo, estado, q)
-            nombres = sorted({r[0] for r in con.execute("SELECT persona FROM cc_docs WHERE tipo=?", (tipo,))} |
-                             ({core.nombre_natural(c) for c in con.execute("SELECT * FROM clientes")} if tipo == "cliente" else set()))
+            nombres = nombres_de(con, tipo)
         resumen = dict(cantidad=len(todos), sinfacturar=sum(1 for f in todos if f["estado"] == "sinfacturar"), total=sum(f["total"] for f in todos if f["estado"] != "sinfacturar"), pagado=sum(f["pagado"] for f in todos if f["estado"] != "sinfacturar"),
                        pendiente=sum(f["saldo"] for f in todos if f["estado"] == "pendiente"), vencido=sum(f["saldo"] for f in todos if f["estado"] == "vencido"))
-        personas = {}
-        for f in filas if q else todos:
-            p = personas.setdefault(f["persona"].strip().lower(), dict(nombre=f["persona"], docs=0, saldo=0, vencido=0))
-            p["docs"] += 1
-            p["saldo"] += f["saldo"]
-            if f["estado"] == "vencido":
-                p["vencido"] += f["saldo"]
+        return render_template("cuentacorriente.html", tipo=tipo, T=TIPOS[tipo], estado=estado, q=q, filas=filas, resumen=resumen,
+                               nombres=nombres, con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
+
+    @app.route("/cuenta-corriente/ficha")
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def cuenta_corriente_ficha():
+        """Ficha de la cuenta corriente de una persona: sus retiros, entregas de dinero y la diferencia a abonar."""
+        tipo = request.args.get("t") if request.args.get("t") in TIPOS else "cliente"
+        nombre = " ".join(U(request.args.get("n")).split())
         with db() as con:
-            entregas = [dict(r) for r in con.execute("SELECT * FROM cc_entregas WHERE tipo=? ORDER BY fecha DESC, id DESC", (tipo,))]
-        for e in entregas:
-            if not q:
-                p = personas.setdefault(e["persona"].strip().lower(), dict(nombre=e["persona"], docs=0, saldo=0, vencido=0))
-            else:
-                p = personas.get(e["persona"].strip().lower())
-            if p is not None:
-                p["a_favor"] = round(p.get("a_favor", 0) + e["restante"], 2)
-        personas = sorted([p for p in personas.values() if p["saldo"] > 0 or p.get("a_favor", 0) > 0], key=lambda p: -p["saldo"])
-        return render_template("cuentacorriente.html", tipo=tipo, T=TIPOS[tipo], estado=estado, q=q, vista=vista, filas=filas, resumen=resumen,
-                               personas=personas, entregas=entregas, con_ventas="ventas" in g.modulos, nombres=nombres, con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
+            filas = enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo=? AND lower(d.persona)=lower(?) ORDER BY d.emision DESC, d.id DESC", (tipo, nombre)).fetchall(), core.ahora()[:10])
+            entregas = [dict(r) for r in con.execute("SELECT * FROM cc_entregas WHERE tipo=? AND lower(persona)=lower(?) ORDER BY fecha DESC, id DESC", (tipo, nombre))]
+            nombres = nombres_de(con, tipo)
+        if not filas and not entregas:
+            flash("No hay registros de cuenta corriente para esa persona.", "error")
+            return redirect(url_for("cuenta_corriente", t=tipo))
+        if filas:
+            nombre = filas[0]["persona"]
+        fact = [f for f in filas if f["estado"] != "sinfacturar"]
+        resumen = dict(total=sum(f["total"] for f in fact), pagado=sum(f["pagado"] for f in fact), saldo=sum(f["saldo"] for f in filas),
+                       vencido=sum(f["saldo"] for f in filas if f["estado"] == "vencido"), a_favor=round(sum(e["restante"] for e in entregas), 2),
+                       sinfacturar=sum(1 for f in filas if f["estado"] == "sinfacturar"))
+        return render_template("cc_ficha.html", tipo=tipo, T=TIPOS[tipo], nombre=nombre, filas=filas, entregas=entregas, resumen=resumen, nombres=nombres,
+                               con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
 
     @app.route("/cuenta-corriente/exportar.csv")
     @login_requerido
@@ -414,8 +427,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     cheque, msg = ventas.validar_cheque(d.get("cheque"))
                     if msg:
                         return error(msg)
-            eid = con.execute("INSERT INTO cc_entregas (tipo, persona, fecha, monto, restante, nota, creado) VALUES (?,?,?,?,?,?,?)",
-                              (tipo, persona, fecha, m, m, U(d.get("nota"))[:200] or None, core.ahora())).lastrowid
+            eid = con.execute("INSERT INTO cc_entregas (tipo, persona, fecha, monto, restante, nota, creado, forma, forma_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                              (tipo, persona, fecha, m, m, U(d.get("nota"))[:200] or None, core.ahora(), forma["nombre"] if forma else None, forma["id"] if forma else None)).lastrowid
             if forma:      # la plata entró: va al Historial de cobros
                 cobro_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_entrega_id) VALUES (?,?,?,?,?,?,?)",
                                        (fecha + core.ahora()[10:], None, m, forma["id"], forma["nombre"], persona, eid)).lastrowid
@@ -424,6 +437,68 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             aplicado = aplicar_creditos(con, tipo, persona)
             saldo, a_favor, sin_fact = saldo_persona(con, tipo, persona)
         return jsonify(ok=True, aplicado=round(aplicado, 2), diferencia=saldo, a_favor=a_favor, sin_facturar=sin_fact)
+
+    @app.route("/api/cc/entrega/<int:eid>")
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_entrega_ver(eid):
+        with db() as con:
+            e = con.execute("SELECT * FROM cc_entregas WHERE id=?", (eid,)).fetchone()
+            if not e:
+                return error("No existe la entrega.", 404)
+            cob = con.execute("SELECT id FROM cobros WHERE cc_entrega_id=?", (eid,)).fetchone() if "ventas" in g.modulos else None
+            ch = con.execute("SELECT * FROM cheques WHERE cobro_id=?", (cob["id"],)).fetchone() if cob else None
+            formas = []
+            if "ventas" in g.modulos and e["tipo"] == "cliente":
+                formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
+        return jsonify(ok=True, entrega=dict(e), cheque=dict(ch) if ch else None, formas=formas)
+
+    @app.route("/api/cc/entrega/<int:eid>/editar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    def api_cc_entrega_editar(eid):
+        d = request.get_json(force=True, silent=True) or {}
+        r = sin_codigo(d, "Modificar una entrega requiere el código de validación.")
+        if r:
+            return r
+        fecha = _fecha_ok(d.get("fecha")) or core.ahora()[:10]
+        try:
+            m = core.parse_monto(d.get("monto"))
+        except ValueError:
+            m = None
+        if not m or m <= 0:
+            return error("Escribí el importe de la entrega.")
+        with db() as con:
+            e = con.execute("SELECT * FROM cc_entregas WHERE id=?", (eid,)).fetchone()
+            if not e:
+                return error("No existe la entrega.", 404)
+            forma = cheque = None
+            if "ventas" in g.modulos and e["tipo"] == "cliente":
+                forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
+                if not forma:
+                    return error("Elegí la forma de pago.")
+                if forma["pide_cheque"]:
+                    cheque, msg = ventas.validar_cheque(d.get("cheque"))
+                    if msg:
+                        return error(msg)
+            con.execute("DELETE FROM cc_pagos WHERE entrega_id=?", (eid,))      # se vuelve a repartir entre las facturas con deuda
+            con.execute("UPDATE cc_entregas SET fecha=?, monto=?, restante=?, nota=?, forma=?, forma_id=? WHERE id=?",
+                        (fecha, m, m, U(d.get("nota"))[:200] or None, forma["nombre"] if forma else e["forma"], forma["id"] if forma else e["forma_id"], eid))
+            if forma:
+                cob = con.execute("SELECT id FROM cobros WHERE cc_entrega_id=?", (eid,)).fetchone()
+                hora = core.ahora()[10:]
+                if cob:
+                    con.execute("DELETE FROM cheques WHERE cobro_id=?", (cob["id"],))
+                    con.execute("UPDATE cobros SET fecha=?, monto=?, forma_id=?, forma=? WHERE id=?", (fecha + hora, m, forma["id"], forma["nombre"], cob["id"]))
+                    cid_ = cob["id"]
+                else:
+                    cid_ = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_entrega_id) VALUES (?,?,?,?,?,?,?)",
+                                       (fecha + hora, None, m, forma["id"], forma["nombre"], e["persona"], eid)).lastrowid
+                if cheque:
+                    ventas.guardar_cheque(con, cheque, forma["nombre"], m, "cuenta corriente", cobro_id=cid_)
+            aplicado = aplicar_creditos(con, e["tipo"], e["persona"])
+            saldo, a_favor, sin_fact = saldo_persona(con, e["tipo"], e["persona"])
+        return jsonify(ok=True, aplicado=round(aplicado, 2), diferencia=saldo, a_favor=a_favor)
 
     @app.route("/api/cc/entrega/<int:eid>/eliminar", methods=["POST"])
     @login_requerido

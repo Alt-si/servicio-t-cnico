@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row"><div><a href="{{ url_for('cuenta_corriente', t=tipo) }}" class="mut">← Cuenta corriente</a><h1 style="margin:4px 0 0">{{ nombre }}</h1></div>
+    <div class="der row"><button class="btn ok" onclick="ccEntrega('{{ tipo }}', this.dataset.n)" data-n="{{ nombre }}">{{ 'Entrega de dinero' if tipo == 'cliente' else 'Pago a cuenta' }}</button>
+    <button class="btn pri" onclick="ccNuevo('{{ tipo }}', this.dataset.n)" data-n="{{ nombre }}">+ Otro retiro</button>
+    {% if tipo == 'cliente' and resumen.saldo > 0 %}<button class="btn wa" onclick="ccAvisar(this.dataset.n)" data-n="{{ nombre }}">Avisar deuda</button>{% endif %}</div></div>
+  <div class="resumen-stock" style="margin-top:12px">
+    <div><span class="mut">Total</span><b>$ {{ resumen.total|monto_input or '0' }}</b></div>
+    <div><span class="mut">{{ T[2] }}</span><b>$ {{ resumen.pagado|monto_input or '0' }}</b></div>
+    <div><span class="mut">Diferencia a {{ 'abonar' if tipo == 'cliente' else 'pagar' }}</span><b>$ {{ resumen.saldo|monto_input or '0' }}</b></div>
+    <div><span class="mut" style="color:#b91c1c">Vencido</span><b style="color:#b91c1c">$ {{ resumen.vencido|monto_input or '0' }}</b></div>
+    <div><span class="mut">Entrega a favor</span><b>$ {{ resumen.a_favor|monto_input or '0' }}</b></div>
+    {% if resumen.sinfacturar %}<div><span class="mut">Sin facturar</span><b>{{ resumen.sinfacturar }}</b></div>{% endif %}
+  </div>
+  <h2 style="margin:18px 0 6px">{{ 'Entregas de dinero' if tipo == 'cliente' else 'Pagos a cuenta' }}</h2>
+  <div class="tabla-wrap cc-tabla"><table><thead><tr><th>Fecha</th><th>Modo de ingreso</th><th style="text-align:right">Importe</th><th style="text-align:right">Aplicado</th><th style="text-align:right">A favor</th><th>Nota</th><th></th></tr></thead><tbody class="clientes">
+  {% for e in entregas %}<tr><td>{{ fmt_fecha(e.fecha) }}</td><td>{{ e.forma or '—' }}</td><td style="text-align:right"><b>$ {{ e.monto|monto_input }}</b></td><td style="text-align:right">$ {{ (e.monto - e.restante)|round(2)|monto_input or '0' }}</td><td style="text-align:right">$ {{ e.restante|monto_input or '0' }}</td><td class="obs">{{ e.nota or '' }}</td>
+    <td class="acc"><button class="btn" onclick="ccEntregaEditar({{ e.id }})">Modificar</button><button class="btn" onclick="ccEntregaEliminar({{ e.id }})">Eliminar</button></td></tr>
+  {% else %}<tr><td colspan="7" class="mut">Todavía no hay entregas de dinero.</td></tr>{% endfor %}</tbody></table></div>
+  <h2 style="margin:18px 0 6px">Retiros y facturas</h2>
+  {% include "_cc_docs.html" %}
+</div>
+<datalist id="cc-nombres">{% for n in nombres %}<option value="{{ n }}">{% endfor %}</datalist>
+{% endblock %}
+{% block js %}<script>window.CC_HOY = "{{ hoy }}"; window.CC_STOCK = {{ "true" if con_stock else "false" }};</script><script src="{{ url_for('static', filename='cuentacorriente.js') }}"></script>{% endblock %}

@@ -131,7 +131,9 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             par += [f"%{w}%"] * 3
         sql += " ORDER BY d.vence, d.id"
         filas = enriquecer(con.execute(sql, par).fetchall(), hoy)
-        if estado in ("pendiente", "vencido", "pagado", "sinfacturar"):
+        if estado == "pendiente":          # «A cobrar / A pagar» incluye los vencidos: todavía no se cobraron
+            filas = [f for f in filas if f["estado"] in ("pendiente", "vencido")]
+        elif estado in ("vencido", "pagado", "sinfacturar"):
             filas = [f for f in filas if f["estado"] == estado]
         elif estado == "deuda":
             filas = [f for f in filas if f["estado"] != "pagado"]
@@ -147,14 +149,14 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     @modulo_requerido("cuentacorriente")
     def cuenta_corriente():
         tipo = request.args.get("t") if request.args.get("t") in TIPOS else "cliente"
-        estado = request.args.get("e") if request.args.get("e") in ("deuda", "pendiente", "vencido", "pagado", "todos") else "deuda"
+        estado = request.args.get("e") if request.args.get("e") in ("deuda", "pendiente", "vencido", "pagado", "sinfacturar", "todos") else "deuda"
         q = (request.args.get("q") or "").strip()
         with db() as con:
             todos = enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo=?", (tipo,)).fetchall(), core.ahora()[:10])
             filas = listar(con, tipo, estado, q)
             nombres = nombres_de(con, tipo)
         resumen = dict(cantidad=len(todos), sinfacturar=sum(1 for f in todos if f["estado"] == "sinfacturar"), total=sum(f["total"] for f in todos if f["estado"] != "sinfacturar"), pagado=sum(f["pagado"] for f in todos if f["estado"] != "sinfacturar"),
-                       pendiente=sum(f["saldo"] for f in todos if f["estado"] == "pendiente"), vencido=sum(f["saldo"] for f in todos if f["estado"] == "vencido"))
+                       pendiente=sum(f["saldo"] for f in todos if f["estado"] in ("pendiente", "vencido")), vencido=sum(f["saldo"] for f in todos if f["estado"] == "vencido"))
         return render_template("cuentacorriente.html", tipo=tipo, T=TIPOS[tipo], estado=estado, q=q, filas=filas, resumen=resumen,
                                nombres=nombres, con_stock="stock" in g.modulos, hoy=core.ahora()[:10], fmt_fecha=core.fmt_fecha)
 

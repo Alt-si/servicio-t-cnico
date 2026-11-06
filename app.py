@@ -678,7 +678,7 @@ def api_orden_crear():
                 "INSERT INTO equipos (cliente_id, tipo, marca, modelo, serie, descripcion, clave_acceso, en_garantia, creado) "
                 "VALUES (?,?,?,?,?,?,?,?,?)", [cliente["id"]] + campos + [int(bool(d.get("en_garantia"))), ahora]).lastrowid
         detalle = U(d.get("detalle"))
-        tiene_pres = bool((monto and monto > 0) or detalle or extra)
+        tiene_pres = bool((monto is not None) or detalle or extra)
         estado = E_PENDIENTE if tiene_pres else E_NUEVO
         tec_p = asegurar_tecnico(con, d.get("tecnico_presupuesto")) if usa_tecnicos() else None
         if usa_tecnicos() and tiene_pres and not tec_p:
@@ -783,7 +783,7 @@ def api_orden_guardar(oid):
             r = pide_codigo(d, f"Cambiar el estado de «{o['estado']}» a «{estado}» requiere el código de validación.")
             if r:
                 return r
-        if estado == E_NUEVO and o["estado"] == E_NUEVO and ((monto and monto > 0) or detalle or extra):
+        if estado == E_NUEVO and o["estado"] == E_NUEVO and ((monto is not None) or detalle or extra):
             estado = E_PENDIENTE
         ahora = core.ahora()
         repuesto = int(bool(d.get("espera_repuesto")))
@@ -800,7 +800,7 @@ def api_orden_guardar(oid):
         con_tec = usa_tecnicos()
         tec_p = asegurar_tecnico(con, d.get("tecnico_presupuesto")) if (con_tec and "tecnico_presupuesto" in d) else o["tecnico_presupuesto"]
         tec_r = asegurar_tecnico(con, d.get("tecnico_reparacion")) if (con_tec and "tecnico_reparacion" in d) else o["tecnico_reparacion"]
-        if con_tec and ((monto and monto > 0) or detalle or extra) and not tec_p:
+        if con_tec and ((monto is not None) or detalle or extra) and not tec_p:
             return error("Elegí el técnico que presupuesta.")
         if con_tec and estado == E_LISTO and o["estado"] != E_LISTO and not tec_r:
             return error("Elegí el técnico que reparó el equipo.")

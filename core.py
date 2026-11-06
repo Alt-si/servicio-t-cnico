@@ -184,7 +184,7 @@ def texto_evento_presupuesto(monto, detalle, nuevo):
         return "Presupuesto quitado"
     partes = []
     if monto is not None:
-        partes.append(f"{'Presupuesto cargado' if nuevo else 'Presupuesto'}: {fmt_monto(monto)}")
+        partes.append(f"{'Presupuesto cargado' if nuevo else 'Presupuesto'}: {'SIN COSTO' if monto == 0 else fmt_monto(monto)}")
     else:
         partes.append("Detalle del presupuesto")
     if detalle:

@@ -128,7 +128,7 @@ if (ORDEN.id) {
 
 // opciones = [{monto: número|null, detalle}]; con una sola opción el texto es el de siempre
 function textoPresupuestoOpciones(id, equipo, opciones) {
-  const valor = o => o.monto !== null ? `VALOR DEL PRESUPUESTO ${fmt(o.monto)}` : '';
+  const valor = o => (o.monto === null || o.monto === undefined) ? '' : o.monto === 0 ? 'VALOR DEL PRESUPUESTO: SIN COSTO' : `VALOR DEL PRESUPUESTO ${fmt(o.monto)}`;
   const bloque = (o, i) => {
     const det = (o.detalle || '').replace(/\s+/g, ' ').trim();
     const lineas = opciones.length === 1 ? [det ? `Presupuesto: ${det}` : '', valor(o)] : [`Opción ${i + 1}: ${det}`.trim(), valor(o)];
@@ -176,6 +176,16 @@ function renumerar() {
   if (!bs.length) $('#acepta-1').checked = false;
   saldo();
 }
+// Tilde «Sin costo»: el presupuesto vale $ 0 (queda cargado, no vacío)
+(() => {
+  const t = $('#sin-costo'), m = $('#monto'); if (!t) return;
+  const aplicar = () => { m.readOnly = t.checked; if (t.checked) m.value = '0'; saldo(); };
+  t.onchange = () => { if (!t.checked) m.value = ''; aplicar(); };
+  if (ORDEN.monto === 0) t.checked = true;
+  if (t.checked) aplicar();
+  m.addEventListener('input', () => { t.checked = num(m.value) === 0; });
+  if (ORDEN.resp) t.disabled = true;
+})();
 $('#mas-opcion').onclick = () => nuevaOpcion('', '').querySelector('.ex-detalle').focus();
 (ORDEN.extra || []).forEach(o => nuevaOpcion(num_ar(o.monto), o.detalle));
 function num_ar(v) { v = Math.round(Number(v) * 100) / 100; return v.toLocaleString('es-AR', {minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2}); }
@@ -190,7 +200,7 @@ $('#guardar').onclick = async () => {
   mostrarError('');
   const d = datos();
   let j;
-  const hayPres = (num(d.monto) || 0) > 0 || (d.detalle || '').trim() || d.opciones.some(o => (o.detalle || '').trim() || (num(o.monto) || 0) > 0);
+  const hayPres = num(d.monto) !== null || (d.detalle || '').trim() || d.opciones.some(o => (o.detalle || '').trim() || num(o.monto) !== null);
   if ($('#tecnico_presupuesto') && hayPres && !d.tecnico_presupuesto) return mostrarError('Elegí el técnico que presupuesta.');
   if ($('#tecnico_presupuesto') && ORDEN.id && ['Listo para retirar'].includes(d.estado) && ORDEN.estado !== 'Listo para retirar' && !d.tecnico_reparacion) return mostrarError('Elegí el técnico que reparó el equipo.');
   if (!ORDEN.id) {
@@ -329,10 +339,11 @@ function botones() {
   if (ORDEN.imposible && ORDEN.imposible_motivo) add('Enviar aviso: imposible reparar', 'wa', async () => {
     await ofrecerWhatsApp('Avisar por WhatsApp que no se puede reparar', ORDEN.wa, textoImposible(ORDEN.id, ORDEN.equipo_txt, ORDEN.imposible_motivo));
   });
-  if (est === 'Pendiente' || ORDEN.monto > 0 || (ORDEN.extra || []).some(o => o.monto > 0)) add('Enviar presupuesto', 'wa', async () => {
-    if (!(ORDEN.monto > 0 || (ORDEN.extra || []).some(o => o.monto > 0))) return aviso('Esta orden todavía no tiene un monto de presupuesto guardado. Cargalo en la ficha, guardá la orden y volvé a intentar.');
+  const hayMonto = ORDEN.monto !== null || (ORDEN.extra || []).some(o => o.monto !== null);
+  if (est === 'Pendiente' || hayMonto) add('Enviar presupuesto', 'wa', async () => {
+    if (!hayMonto) return aviso('Esta orden todavía no tiene un monto de presupuesto guardado. Cargalo en la ficha, guardá la orden y volvé a intentar.');
     const texto = textoPresupuestoOpciones(ORDEN.id, ORDEN.equipo_txt,
-      [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat((ORDEN.extra || []).map(o => ({monto: o.monto, detalle: o.detalle}))).filter(o => o.monto > 0));
+      [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat((ORDEN.extra || []).map(o => ({monto: o.monto, detalle: o.detalle}))).filter(o => o.monto !== null));
     await ofrecerWhatsApp('Enviar presupuesto por WhatsApp', ORDEN.wa, texto);
   });
   if (!ORDEN.resp && !final && !ret) {

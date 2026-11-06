@@ -25,7 +25,7 @@
     <div><label>Modelo</label><input id="modelo" class="mayus" value="{{ eq.modelo or '' }}"></div>
     <div><label>N° de serie</label><input id="serie" class="mayus" value="{{ eq.serie or '' }}"></div>
     <div><label>Clave de acceso del equipo</label><input data-nomayus id="clave_acceso" value="{{ eq.clave_acceso or '' }}"></div>
-    <div><label>Descripción / estado físico</label><input id="descripcion" class="mayus" value="{{ eq.descripcion or '' }}"></div>
+    <div style="grid-column:1/-1"><label>Descripción / estado físico</label><input id="descripcion" class="mayus" value="{{ eq.descripcion or '' }}"></div>
   </div>
   <label><input type="checkbox" id="en_garantia" {{ 'checked' if eq.en_garantia }}>En garantía</label>
 

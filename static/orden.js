@@ -355,6 +355,9 @@ function botones() {
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
     location = '/ordenes';
   });
+  if (est === 'Listo para retirar') add('Enviar aviso: listo para retirar', 'wa', async () => {
+    await ofrecerWhatsApp('Avisar por WhatsApp que el equipo está listo', ORDEN.wa, textoListo(ORDEN.equipo_txt));
+  });
   if (est === 'Listo para retirar') add('Retira equipo', 'ok', async () => {
     const quien = await preguntarQuienRetira(); if (!quien) return;
     let cobro = {};

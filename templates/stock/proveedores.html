@@ -8,7 +8,7 @@
   {% for p in filas %}<tr><td><b>{{ p.nombre }}</b>{% if p.direccion %}<div class="mut" style="font-size:12px">{{ p.direccion }}</div>{% endif %}{% if p.nota %}<div class="mut" style="font-size:12px">{{ p.nota }}</div>{% endif %}</td>
     <td>{{ p.contacto or '' }}</td><td style="white-space:nowrap">{{ p.telefono or '' }}</td><td>{{ p.email or '' }}</td><td style="white-space:nowrap">{{ p.cuit or '' }}</td>
     <td style="text-align:right"><a href="{{ url_for('stock', prov=p.id, orden='proveedor') }}">{{ p.productos }}</a></td>
-    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='provForm({{ p|tojson }})'>Editar</button> <button class="btn bad" onclick="provEliminar({{ p.id }}, {{ p.nombre|tojson }})">Eliminar</button></td></tr>
+    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='provForm({{ p|tojson }})'>Editar</button> <button class="btn bad" onclick='provEliminar({{ p.id }}, {{ p.nombre|tojson }})'>Eliminar</button></td></tr>
   {% else %}<tr><td colspan="7" class="mut">{{ 'No se encontraron proveedores.' if q else 'Todavía no cargaste proveedores. Usá «+ Nuevo proveedor».' }}</td></tr>{% endfor %}</tbody></table></div>
 </div>
 {% endblock %}

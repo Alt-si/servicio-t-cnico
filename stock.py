@@ -6,7 +6,7 @@ y los nombres de las etiquetas. Es código nuevo e independiente: no modifica la
 import csv
 import io
 
-from flask import Response, abort, g, jsonify, redirect, render_template, request, url_for
+from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 import re
 
@@ -53,6 +53,8 @@ def crear_tablas(con):
     agregar("stock_productos", "descuento", "REAL")             # % de descuento propio del producto (vacío = el del rubro / marca)
     con.execute("CREATE TABLE IF NOT EXISTS stock_proveedores (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, telefono TEXT)")
     agregar("stock_productos", "proveedor_id", "INTEGER")
+    for col in ("email", "cuit", "direccion", "contacto", "nota"):
+        agregar("stock_proveedores", col, "TEXT")
     con.execute("CREATE TABLE IF NOT EXISTS stock_barras (id INTEGER PRIMARY KEY AUTOINCREMENT, producto_id INTEGER NOT NULL, codigo TEXT NOT NULL)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_barras_prod ON stock_barras(producto_id)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_barras_cod ON stock_barras(codigo)")
@@ -188,6 +190,21 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         return [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], proveedor=r["proveedor"], actual=r["stock_actual"], minimo=r["stock_minimo"], abrev=r["abrev"], decimales=r["decimales"],
                      faltan=round(r["stock_minimo"] - r["stock_actual"], 6))
                 for r in con.execute(SQL_PROD + " WHERE p.activo=1 AND p.stock_minimo>0 AND p.stock_actual<=p.stock_minimo ORDER BY " + ("IFNULL(v.nombre,'zzz') COLLATE NOCASE, " if prov_activo() else "") + "(p.stock_minimo-p.stock_actual) DESC, p.nombre COLLATE NOCASE")]
+
+    @app.route("/stock/proveedores")
+    @login_requerido
+    @modulo_requerido("stock")
+    def stock_proveedores():
+        if not prov_activo():
+            flash("Activá «Usar proveedores en Stock» en Configuración para cargar proveedores.", "error")
+            return redirect(url_for("stock"))
+        q = core.sin_acentos((request.args.get("q") or "").strip())
+        with db() as con:
+            filas = [dict(r) for r in con.execute("SELECT v.*, (SELECT COUNT(*) FROM stock_productos p WHERE p.proveedor_id=v.id AND p.activo=1) AS productos, "
+                                                  "(SELECT COUNT(*) FROM stock_faltantes f WHERE f.proveedor_id=v.id) AS faltantes FROM stock_proveedores v ORDER BY v.nombre COLLATE NOCASE")]
+        if q:
+            filas = [f for f in filas if q.lower() in core.sin_acentos(" ".join(str(f.get(k) or "") for k in ("nombre", "telefono", "email", "cuit", "direccion", "contacto", "nota")))]
+        return render_template("stock/proveedores.html", filas=filas, q=request.args.get("q", ""))
 
     @app.route("/stock/faltantes")
     @login_requerido
@@ -618,11 +635,13 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 else:
                     rid = con.execute("INSERT INTO stock_unidades (nombre, abrev, decimales) VALUES (?,?,?)", (nombre, abrev, dec)).lastrowid
             elif tabla == "proveedores":
-                tel = solo(d.get("telefono"))[:40] or None
+                campos = {"telefono": 40, "email": 80, "cuit": 20, "direccion": 120, "contacto": 80, "nota": 300}
+                vals = {k: (U(solo(d.get(k)))[:n] if k not in ("email",) else solo(d.get(k)).lower()[:n]) or None for k, n in campos.items() if k in d}
                 if rid:
-                    con.execute("UPDATE stock_proveedores SET nombre=?, telefono=? WHERE id=?", (nombre, tel, rid))
+                    con.execute("UPDATE stock_proveedores SET nombre=?" + "".join(f", {k}=?" for k in vals) + " WHERE id=?", [nombre] + list(vals.values()) + [rid])
                 else:
-                    rid = con.execute("INSERT INTO stock_proveedores (nombre, telefono) VALUES (?,?)", (nombre, tel)).lastrowid
+                    cols = ["nombre"] + list(vals)
+                    rid = con.execute(f"INSERT INTO stock_proveedores ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", [nombre] + list(vals.values())).lastrowid
             elif tabla == "formas_pago":
                 aplica = 1 if d.get("aplica_descuento") else 0
                 if rid:
@@ -659,6 +678,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             usos = con.execute(f"SELECT COUNT(*) FROM stock_productos WHERE {col}=?", (rid,)).fetchone()[0] if col else 0
             if usos:
                 return error(f"Está en uso en {usos} producto(s). Cambialo en esos productos antes de eliminarlo.")
+            if tabla == "proveedores" and con.execute("SELECT COUNT(*) FROM stock_faltantes WHERE proveedor_id=?", (rid,)).fetchone()[0]:
+                return error("Tiene faltantes cargados. Sacalos o cambiales el proveedor antes de eliminarlo.")
             con.execute(f"DELETE FROM {nombre_tabla} WHERE id=?", (rid,))
         return jsonify(ok=True)
 

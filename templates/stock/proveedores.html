@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row"><div><a href="{{ url_for('stock') }}" class="mut">← Control de stock</a><h1 style="margin:4px 0 0">Proveedores <span class="mut" style="font-size:14px">({{ filas|length }})</span></h1></div>
+    <div class="der row"><a class="btn" href="{{ url_for('stock_faltantes') }}">Faltantes</a><button class="btn pri" onclick="provForm()">+ Nuevo proveedor</button></div></div>
+  <form method="get" class="row" style="margin:12px 0"><input name="q" value="{{ q }}" placeholder="Buscar por nombre, contacto, teléfono, CUIT…" style="flex:1;min-width:200px"><button class="btn">Buscar</button></form>
+  <div class="tabla-wrap"><table><thead><tr><th>Proveedor</th><th>Contacto</th><th>Teléfono</th><th>Email</th><th>CUIT</th><th style="text-align:right">Productos</th><th></th></tr></thead><tbody class="clientes">
+  {% for p in filas %}<tr><td><b>{{ p.nombre }}</b>{% if p.direccion %}<div class="mut" style="font-size:12px">{{ p.direccion }}</div>{% endif %}{% if p.nota %}<div class="mut" style="font-size:12px">{{ p.nota }}</div>{% endif %}</td>
+    <td>{{ p.contacto or '' }}</td><td style="white-space:nowrap">{{ p.telefono or '' }}</td><td>{{ p.email or '' }}</td><td style="white-space:nowrap">{{ p.cuit or '' }}</td>
+    <td style="text-align:right"><a href="{{ url_for('stock', prov=p.id, orden='proveedor') }}">{{ p.productos }}</a></td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='provForm({{ p|tojson }})'>Editar</button> <button class="btn bad" onclick="provEliminar({{ p.id }}, {{ p.nombre|tojson }})">Eliminar</button></td></tr>
+  {% else %}<tr><td colspan="7" class="mut">{{ 'No se encontraron proveedores.' if q else 'Todavía no cargaste proveedores. Usá «+ Nuevo proveedor».' }}</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='proveedores.js') }}"></script>{% endblock %}

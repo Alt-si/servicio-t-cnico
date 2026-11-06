@@ -2,7 +2,7 @@
 {% block cuerpo %}
 <div class="card">
   <div class="row"><div><a href="{{ url_for('stock') }}" class="mut">← Control de stock</a><h1 style="margin:4px 0 0">Faltantes</h1></div>
-    <div class="der row"><button class="btn" onclick="falCopiar()">Copiar todo</button><button class="btn pri" onclick="falForm()">+ Agregar faltante</button></div></div>
+    <div class="der row">{% if prov_activo() %}<a class="btn" href="{{ url_for('stock_proveedores') }}">Proveedores</a>{% endif %}<button class="btn" onclick="falCopiar()">Copiar todo</button><button class="btn pri" onclick="falForm()">+ Agregar faltante</button></div></div>
 
   <h2 style="margin:16px 0 6px">Por debajo del stock mínimo</h2>
   {% if not auto_activo %}<p class="mut">Esta lista automática está desactivada. Podés activarla en <a href="{{ url_for('configuracion') }}#faltantes">Configuración</a>.</p>

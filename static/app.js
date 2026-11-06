@@ -132,7 +132,7 @@ if (window.HAY_SESION && window.HAY_REC) {
 }
 
 // cerrar el submenú de Órdenes al hacer clic afuera
-document.addEventListener('click', e => { const d = document.querySelector('.menu-ord'); if (d && !d.contains(e.target)) d.open = false; });
+document.addEventListener('click', e => { document.querySelectorAll('.menu-ord').forEach(d => { if (!d.contains(e.target)) d.open = false; }); });
 
 // ----- Montos: miles con punto (1.000 / 1.000.000) y centavos con coma, mientras se escribe
 function formatearMonto(txt) {

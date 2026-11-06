@@ -19,10 +19,15 @@
       </div></details>
     {% endif %}
     {% if 'clientes' in modulos %}<a href="{{ url_for('clientes') }}" class="{{ 'act' if request.endpoint=='clientes' }}">Clientes</a>{% endif %}
-    {% if 'ventas' in modulos %}<a href="{{ url_for('ventas') }}" class="{{ 'act' if request.endpoint in ('ventas','ventas_historial') }}">🛒 Ventas</a>{% endif %}
-    {% if 'facturacion' in modulos %}<a href="{{ url_for('facturacion') }}" class="{{ 'act' if request.endpoint in ('facturacion','factura_ver','factura_nueva','presupuesto_nuevo','presupuesto_ver') }}">Facturación</a>{% endif %}
-    {% if 'cuentacorriente' in modulos %}<a href="{{ url_for('cuenta_corriente') }}" class="{{ 'act' if request.endpoint=='cuenta_corriente' }}">Cuenta corriente</a>{% endif %}
-    {% if 'stock' in modulos %}<a href="{{ url_for('stock') }}" class="{{ 'act' if request.endpoint in ('stock','stock_producto','stock_listas') }}">Stock</a>{% endif %}
+    {% if 'ventas' in modulos or 'facturacion' in modulos or 'cuentacorriente' in modulos or 'stock' in modulos %}
+    <details class="menu-ord menu-vta"><summary class="{{ 'act' if request.endpoint in ('ventas','ventas_historial','facturacion','factura_ver','factura_nueva','presupuesto_nuevo','presupuesto_ver','cuenta_corriente','stock','stock_producto','stock_listas') or (request.endpoint or '').startswith(('stock_','cc_')) }}">🛒 Ventas ▾</summary>
+      <div class="desplegable">
+        {% if 'ventas' in modulos %}<a href="{{ url_for('ventas') }}">🛒 Ventas</a>{% endif %}
+        {% if 'facturacion' in modulos %}<a href="{{ url_for('facturacion') }}">Facturación</a>{% endif %}
+        {% if 'cuentacorriente' in modulos %}<a href="{{ url_for('cuenta_corriente') }}">Cuenta corriente</a>{% endif %}
+        {% if 'stock' in modulos %}<a href="{{ url_for('stock') }}">Stock</a>{% endif %}
+      </div></details>
+    {% endif %}
     {% if 'recordatorios' in modulos %}<a href="{{ url_for('recordatorios') }}" id="nav-rec" class="{{ 'act' if request.endpoint=='recordatorios' }}">Recordatorios</a>{% endif %}
     <a href="{{ url_for('configuracion') }}" class="{{ 'act' if request.endpoint=='configuracion' }}">Configuración</a>
     {% if cuenta.es_admin %}<a href="{{ url_for('admin') }}" class="{{ 'act' if request.endpoint=='admin' }}">Cuentas</a>{% endif %}

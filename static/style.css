@@ -70,7 +70,7 @@ tr.rec-vencido{background:#dc2626;color:#fff}tr.rec-hoy{background:#f97316;color
 .menu-ord summary::-webkit-details-marker{display:none}
 .menu-ord summary.act{background:rgba(255,255,255,.35);font-weight:600}
 .menu-ord .desplegable{position:absolute;top:100%;left:0;margin-top:4px;min-width:230px;background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:6px;z-index:40}
-header.top nav .menu-ord .desplegable a{display:block;background:none;color:var(--tx);border-radius:4px;padding:8px 10px}
+header.top nav .menu-ord .desplegable a{display:block;white-space:nowrap;background:none;color:var(--tx);border-radius:4px;padding:8px 10px}
 header.top nav .menu-ord .desplegable a:hover{background:var(--bg)}
 .menu-ord hr{border:0;border-top:1px solid var(--bd);margin:4px 0}
 
@@ -154,3 +154,4 @@ a.info-cli:hover{transform:scale(1.12)}
 .btn.wapp{background:#25d366;border-color:#25d366;color:#fff}
 
 tr.grupo td{background:var(--bg);padding-top:8px}
+.menu-vta .desplegable{min-width:100%!important}

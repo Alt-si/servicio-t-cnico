@@ -19,17 +19,20 @@
       {% for c in cats %}<option value="{{ c.id }}" {{ 'selected' if cat==c.id }}>{{ c.nombre }}</option>{% endfor %}</select>
     <select name="mar" onchange="this.form.requestSubmit()" style="width:auto"><option value="">{{ lbl.marca }}: todas</option>
       {% for m in mars %}<option value="{{ m.id }}" {{ 'selected' if mar==m.id }}>{{ m.nombre }}</option>{% endfor %}</select>
+    {% if prov_activo() %}<select name="prov" onchange="this.form.requestSubmit()" style="width:auto"><option value="">Proveedor: todos</option>
+      {% for v in provs %}<option value="{{ v.id }}" {{ 'selected' if prov==v.id }}>{{ v.nombre }}</option>{% endfor %}</select>
+    <select name="orden" onchange="this.form.requestSubmit()" style="width:auto"><option value="nombre" {{ 'selected' if orden=='nombre' }}>Ordenar por nombre</option><option value="proveedor" {{ 'selected' if orden=='proveedor' }}>Ordenar por proveedor</option></select>{% endif %}
     <select name="ver" onchange="this.form.requestSubmit()" style="width:auto">
       {% for k, t in (('activos','Activos'),('bajo','Stock bajo'),('sin','Sin stock'),('inactivos','Desactivados'),('todos','Todos')) %}<option value="{{ k }}" {{ 'selected' if ver==k }}>{{ t }}</option>{% endfor %}</select>
     <button class="btn">Buscar</button>
   </form>
   <div class="tabla-wrap"><table>
-    <thead><tr><th>Código</th><th>Producto</th><th class="ocu">{{ lbl.categoria }}</th><th class="ocu">{{ lbl.marca }}</th><th style="text-align:right">Stock</th><th class="ocu" style="text-align:right">Lista{{ " (c/IVA)" if iva.activo }}</th><th class="ocu" style="text-align:right">Con descuento</th><th></th></tr></thead>
+    <thead><tr><th>Código</th><th>Producto</th><th class="ocu">{{ lbl.categoria }}</th><th class="ocu">{{ lbl.marca }}</th>{% if prov_activo() %}<th class="ocu">Proveedor</th>{% endif %}<th style="text-align:right">Stock</th><th class="ocu" style="text-align:right">Lista{{ " (c/IVA)" if iva.activo }}</th><th class="ocu" style="text-align:right">Con descuento</th><th></th></tr></thead>
     <tbody class="clientes">
     {% for p in filas %}{% set e = estado_stock(p.stock_actual, p.stock_minimo) %}
     <tr class="st-{{ e }}{{ ' st-inactivo' if not p.activo }}">
       <td>{{ p.codigo or '' }}</td><td><a href="{{ url_for('stock_producto', pid=p.id) }}"><b>{{ p.nombre }}</b></a></td>
-      <td class="ocu">{{ p.categoria or '' }}</td><td class="ocu">{{ p.marca or '' }}</td>
+      <td class="ocu">{{ p.categoria or '' }}</td><td class="ocu">{{ p.marca or '' }}</td>{% if prov_activo() %}<td class="ocu">{{ p.proveedor or '' }}</td>{% endif %}
       <td style="text-align:right;white-space:nowrap"><b>{{ fmt_cant(p.stock_actual, p.decimales) }}</b> {{ p.abrev }}
         {% if e=='sin' %}<span class="pill" style="background:#dc2626;color:#fff">Sin stock</span>{% elif e=='bajo' %}<span class="pill" style="background:#f97316;color:#fff">Bajo</span>{% endif %}</td>
       {% set pl = pfin(p.precio, p.iva) %}{% set pc = pfin(p.precio * (1 - p.desc_pct / 100), p.iva) if p.desc_pct and p.precio is not none else None %}

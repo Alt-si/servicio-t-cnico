@@ -22,6 +22,14 @@
   {% else %}<tr><td class="mut">Todavía no cargaste ninguno.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endfor %}
 
+{% if prov_activo() %}<div class="card"><div class="row"><h2 style="margin:0;border:0;padding:0">Proveedores ({{ provs|length }})</h2><button class="btn pri der" onclick="listaForm('proveedores')">+ Agregar</button></div>
+  <p class="mut">En cada producto podés elegir su proveedor, y en el listado de Stock filtrar y ordenar por proveedor.</p>
+  <div class="tabla-wrap"><table><tbody class="clientes">
+  {% for r in provs %}<tr><td><b>{{ r.nombre }}</b></td><td class="mut">{{ r.telefono or '' }}</td><td class="mut">{{ r.usos }} producto(s)</td><td style="text-align:right;white-space:nowrap">
+    <button class="btn" onclick='listaForm("proveedores", {{ {"id": r.id, "nombre": r.nombre, "telefono": r.telefono}|tojson }})'>Editar</button>
+    <button class="btn" onclick="listaEliminar('proveedores', {{ r.id }})">Eliminar</button></td></tr>
+  {% else %}<tr><td class="mut">Todavía no cargaste ninguno.</td></tr>{% endfor %}</tbody></table></div></div>{% endif %}
+
 <div class="card"><div class="row"><h2 style="margin:0;border:0;padding:0">Unidades de medida ({{ unis|length }})</h2><button class="btn pri der" onclick="listaForm('unidades')">+ Agregar</button></div>
   <p class="mut">«Decimales» indica cuántos decimales admite la cantidad: 0 para unidades enteras, 3 para kilos o litros.</p>
   <div class="tabla-wrap"><table><thead><tr><th>Nombre</th><th>Abreviatura</th><th>Decimales</th><th></th><th></th></tr></thead><tbody class="clientes">

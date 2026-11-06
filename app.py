@@ -1273,7 +1273,8 @@ def configuracion_recordatorios():
 @modulo_requerido("stock")
 def configuracion_faltantes():
     core.guardar_config(g.cuenta["id"], "stock_faltantes_auto", "1" if request.form.get("auto") else "0")
-    flash("Configuración de faltantes guardada.", "ok")
+    core.guardar_config(g.cuenta["id"], "stock_proveedores", "1" if request.form.get("proveedores") else "0")
+    flash("Configuración de stock guardada.", "ok")
     return redirect(url_for("configuracion") + "#faltantes")
 
 

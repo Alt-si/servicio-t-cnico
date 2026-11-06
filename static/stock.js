@@ -14,6 +14,7 @@ async function productoForm(id) {
       <div><label>Producto *</label><input id="p-nombre" class="mayus" value="${esc(p.nombre || '')}"></div>
       <div><label>${esc(L.categoria)} <a href="#" id="p-mas-cat">+ nuevo</a></label><select id="p-cat"><option value="">—</option>${optHtml(f.categorias, p.categoria_id)}</select></div>
       <div><label>${esc(L.marca)} <a href="#" id="p-mas-mar">+ nueva</a></label><select id="p-mar"><option value="">—</option>${optHtml(f.marcas, p.marca_id)}</select></div>
+      ${f.usa_proveedores ? `<div><label>Proveedor <a href="#" id="p-mas-prov">+ nuevo</a></label><select id="p-prov"><option value="">—</option>${optHtml(f.proveedores, p.proveedor_id)}</select></div>` : ''}
       <div><label>Unidad de medida * <a href="/stock/listas">editar unidades</a></label><select id="p-uni">${optHtml(f.unidades, p.unidad_id)}</select></div>
       <div><label>Ubicación</label><input id="p-ubi" class="mayus" value="${esc(p.ubicacion || '')}" placeholder="Estante, depósito…"></div>
       <div><label>Costo ($)${f.iva.activo ? ' sin IVA' : ''}</label><input id="p-costo" class="moneda" inputmode="decimal" value="${num(p.costo)}"></div>
@@ -59,13 +60,13 @@ async function productoForm(id) {
     if (prev) prev.remove();
     const caja = document.createElement('div');
     caja.className = 'alta-rapida row'; caja.style.margin = '6px 0';
-    caja.innerHTML = `<input class="mayus" placeholder="${tabla === 'categorias' ? 'Nuevo rubro' : 'Nueva marca'}" autocomplete="off" style="flex:1"><button type="button" class="btn pri">Agregar</button><button type="button" class="btn">✕</button><span class="alta-err" style="color:#b91c1c;width:100%"></span>`;
+    caja.innerHTML = `<input class="mayus" placeholder="${tabla === 'categorias' ? 'Nuevo rubro' : tabla === 'proveedores' ? 'Nuevo proveedor' : 'Nueva marca'}" autocomplete="off" style="flex:1"><button type="button" class="btn pri">Agregar</button><button type="button" class="btn">✕</button><span class="alta-err" style="color:#b91c1c;width:100%"></span>`;
     sel.after(caja);
     const inp = caja.querySelector('input'), err = caja.querySelector('.alta-err'); inp.focus();
     const ok = async () => {
       const j = await api('/api/stock/lista/' + tabla, {nombre: inp.value});
       if (!j.ok) { err.textContent = j.error; return; }
-      (tabla === 'categorias' ? f.categorias : f.marcas).push({id: j.id, nombre: j.nombre, margen_lista: null, margen_contado: null, descuento: null});
+      (tabla === 'categorias' ? f.categorias : tabla === 'proveedores' ? f.proveedores : f.marcas).push({id: j.id, nombre: j.nombre, margen_lista: null, margen_contado: null, descuento: null});
       sel.insertAdjacentHTML('beforeend', `<option value="${j.id}">${esc(j.nombre)}</option>`); sel.value = j.id;
       sel.dispatchEvent(new Event('change')); caja.remove();
     };
@@ -75,9 +76,10 @@ async function productoForm(id) {
   };
   $('#p-mas-cat', c).onclick = e => { e.preventDefault(); nuevo('categorias', '#p-cat'); };
   $('#p-mas-mar', c).onclick = e => { e.preventDefault(); nuevo('marcas', '#p-mar'); };
+  if ($('#p-mas-prov', c)) $('#p-mas-prov', c).onclick = e => { e.preventDefault(); nuevo('proveedores', '#p-prov'); };
   $('#p-no', c).onclick = cerrar;
   $('#p-ok', c).onclick = async () => {
-    const d = {id, nombre: $('#p-nombre', c).value, codigo: $('#p-codigo', c).value, codigo_barras: $('#p-barras', c).value, categoria_id: $('#p-cat', c).value, marca_id: $('#p-mar', c).value,
+    const d = {id, nombre: $('#p-nombre', c).value, codigo: $('#p-codigo', c).value, codigo_barras: $('#p-barras', c).value, categoria_id: $('#p-cat', c).value, marca_id: $('#p-mar', c).value, ...(f.usa_proveedores ? {proveedor_id: $('#p-prov', c).value} : {}),
       unidad_id: $('#p-uni', c).value, ubicacion: $('#p-ubi', c).value, costo: $('#p-costo', c).value, precio: $('#p-precio', c).value, precio_contado: $('#p-contado', c).value, descuento: $('#p-desc-pct', c).value, precio_auto: $('#p-auto', c).checked,
       iva: $('#p-iva', c)?.value || '',
       stock_minimo: $('#p-min', c).value, descripcion: $('#p-desc', c).value, stock_inicial: $('#p-ini', c)?.value || ''};
@@ -106,11 +108,12 @@ async function movimientoForm(pid, tipo, recargar) {
 // Pantalla de rubros, marcas y unidades
 function listaForm(tabla, r) {
   r = r || {};
-  const u = tabla === 'unidades', fp = tabla === 'formas_pago';
+  const u = tabla === 'unidades', fp = tabla === 'formas_pago', pv = tabla === 'proveedores';
   const c = modal(`<h2>${r.id ? 'Editar' : 'Agregar'}</h2><div id="l-err" class="msg error" style="display:none"></div>
     <label>Nombre</label><input id="l-nombre" class="mayus" value="${esc(r.nombre || '')}" autocomplete="off">
     ${fp ? `<label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="l-ad" style="width:auto" ${r.aplica_descuento ? 'checked' : ''}> Aplicar el descuento en esta forma de pago</label>` : ''}
-    ${!u && !fp ? `<div class="grid"><div><label>Ganancia precio lista (%)</label><input id="l-ml" inputmode="decimal" value="${nz(r.margen_lista)}"></div>
+    ${pv ? `<label>Teléfono (opcional)</label><input id="l-tel" value="${esc(r.telefono || '')}" inputmode="tel">` : ''}
+    ${!u && !fp && !pv ? `<div class="grid"><div><label>Ganancia precio lista (%)</label><input id="l-ml" inputmode="decimal" value="${nz(r.margen_lista)}"></div>
            <div><label>Ganancia precio contado (%)</label><input id="l-mc" inputmode="decimal" value="${nz(r.margen_contado)}"></div>
            <div><label>Descuento por pago en efectivo, transferencia, etc. (%)</label><input id="l-ds" inputmode="decimal" value="${nz(r.descuento)}"></div></div>
            <p class="mut">Vacío = sin regla. Las ganancias se aplican al costo (precio automático); el descuento se aplica al precio de lista solo en las formas de pago que marques.</p>` : ''}
@@ -121,7 +124,8 @@ function listaForm(tabla, r) {
   $('#l-ok', c).onclick = async () => {
     const d = {id: r.id, nombre: $('#l-nombre', c).value};
     if (fp) d.aplica_descuento = $('#l-ad', c).checked;
-    if (!u && !fp) { d.margen_lista = $('#l-ml', c).value; d.margen_contado = $('#l-mc', c).value; d.descuento = $('#l-ds', c).value; }
+    if (pv) d.telefono = $('#l-tel', c).value;
+    if (!u && !fp && !pv) { d.margen_lista = $('#l-ml', c).value; d.margen_contado = $('#l-mc', c).value; d.descuento = $('#l-ds', c).value; }
     if (u) { d.abrev = $('#l-abrev', c).value; d.decimales = $('#l-dec', c).value; }
     const j = await api('/api/stock/lista/' + tabla, d);
     if (j.ok) location.reload(); else { const e = $('#l-err', c); e.textContent = j.error; e.style.display = 'block'; }

@@ -210,7 +210,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ?)"
             par += [f"%{w}%"] * 2
         with db() as con:
-            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"], proveedor_id=r["proveedor_id"]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT " + ("20" if par else "1000"), par)]
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"], proveedor_id=r["proveedor_id"],
+                          barras=[b[0] for b in con.execute("SELECT codigo FROM stock_barras WHERE producto_id=?", (r["id"],))]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT " + ("20" if par else "1000"), par).fetchall()]
         return jsonify(ok=True, items=items)
 
     @app.route("/api/stock/faltantes", methods=["POST"])

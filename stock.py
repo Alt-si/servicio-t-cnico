@@ -210,7 +210,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ?)"
             par += [f"%{w}%"] * 2
         with db() as con:
-            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"], proveedor_id=r["proveedor_id"]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT 20", par)]
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"], proveedor_id=r["proveedor_id"]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT " + ("20" if par else "1000"), par)]
         return jsonify(ok=True, items=items)
 
     @app.route("/api/stock/faltantes", methods=["POST"])
@@ -234,7 +234,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if d.get("id"):
                 if not con.execute("SELECT 1 FROM stock_faltantes WHERE id=?", (d.get("id"),)).fetchone():
                     return error("No existe ese faltante.", 404)
-                con.execute("UPDATE stock_faltantes SET nombre=?, cantidad=?, nota=?, proveedor_id=? WHERE id=?", (nombre, cant, U(d.get("nota"))[:200] or None, prov, d.get("id")))
+                pid_e = d.get("producto_id") if d.get("producto_id") and con.execute("SELECT 1 FROM stock_productos WHERE id=?", (d.get("producto_id"),)).fetchone() else None
+                con.execute("UPDATE stock_faltantes SET producto_id=?, nombre=?, cantidad=?, nota=?, proveedor_id=? WHERE id=?", (pid_e, nombre, cant, U(d.get("nota"))[:200] or None, prov, d.get("id")))
             else:
                 pid = d.get("producto_id") if d.get("producto_id") and con.execute("SELECT 1 FROM stock_productos WHERE id=?", (d.get("producto_id"),)).fetchone() else None
                 con.execute("INSERT INTO stock_faltantes (producto_id, nombre, cantidad, nota, creado, proveedor_id) VALUES (?,?,?,?,?,?)", (pid, nombre, cant, U(d.get("nota"))[:200] or None, core.ahora(), prov))

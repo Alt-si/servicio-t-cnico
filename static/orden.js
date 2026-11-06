@@ -329,9 +329,9 @@ function botones() {
   if (ORDEN.imposible && ORDEN.imposible_motivo) add('Enviar aviso: imposible reparar', 'wa', async () => {
     await ofrecerWhatsApp('Avisar por WhatsApp que no se puede reparar', ORDEN.wa, textoImposible(ORDEN.id, ORDEN.equipo_txt, ORDEN.imposible_motivo));
   });
-  if (ORDEN.monto !== null && ORDEN.monto > 0 && !final && !ret) add('Enviar presupuesto', 'wa', async () => {
+  if ((ORDEN.monto > 0 || (ORDEN.extra || []).some(o => o.monto > 0))) add('Enviar presupuesto', 'wa', async () => {
     const texto = textoPresupuestoOpciones(ORDEN.id, ORDEN.equipo_txt,
-      [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat((ORDEN.extra || []).map(o => ({monto: o.monto, detalle: o.detalle}))));
+      [{monto: ORDEN.monto, detalle: ORDEN.detalle}].concat((ORDEN.extra || []).map(o => ({monto: o.monto, detalle: o.detalle}))).filter(o => o.monto > 0));
     await ofrecerWhatsApp('Enviar presupuesto por WhatsApp', ORDEN.wa, texto);
   });
   if (!ORDEN.resp && !final && !ret) {

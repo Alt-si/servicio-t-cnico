@@ -26,6 +26,9 @@ def crear_tablas(con):
         CREATE TABLE IF NOT EXISTS cc_entregas (
             id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, persona TEXT NOT NULL, fecha TEXT NOT NULL,
             monto REAL NOT NULL, restante REAL NOT NULL, nota TEXT, creado TEXT);
+        CREATE TABLE IF NOT EXISTS cc_cargos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, doc_id INTEGER NOT NULL, concepto TEXT NOT NULL, monto REAL NOT NULL, mostrar INTEGER NOT NULL DEFAULT 1);
+        CREATE INDEX IF NOT EXISTS ix_cc_cargos_doc ON cc_cargos(doc_id);
         CREATE INDEX IF NOT EXISTS ix_cc_items_doc ON cc_items(doc_id);
         CREATE INDEX IF NOT EXISTS ix_cc_docs_tipo ON cc_docs(tipo);
         CREATE INDEX IF NOT EXISTS ix_cc_pagos_doc ON cc_pagos(doc_id);
@@ -198,6 +201,25 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                         str(f["total"]).replace(".", ","), str(f["pagado"]).replace(".", ","), str(f["saldo"]).replace(".", ","), f["atraso"], f["obs"] or ""])
         return Response("﻿" + sal.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename=cuenta_corriente_{tipo}.csv"})
 
+    def cargos_de(con, did):
+        return [dict(r) for r in con.execute("SELECT * FROM cc_cargos WHERE doc_id=? ORDER BY id", (did,))]
+
+    def guardar_cargos(con, did, cargos):
+        """Cargos extra del registro (instalación, flete…): cada uno con su importe y si se le muestra o no al cliente en el detalle. Devuelve un error o None."""
+        nuevos = []
+        for c in cargos[:30]:
+            concepto = " ".join(U((c or {}).get("concepto")).split())[:80]
+            try:
+                monto = core.parse_monto((c or {}).get("monto"))
+            except ValueError:
+                monto = None
+            if not concepto or not monto or monto <= 0:
+                return "Cada cargo extra necesita un concepto y un importe mayor a cero."
+            nuevos.append((did, concepto, monto, 1 if (c or {}).get("mostrar") else 0))
+        con.execute("DELETE FROM cc_cargos WHERE doc_id=?", (did,))
+        con.executemany("INSERT INTO cc_cargos (doc_id, concepto, monto, mostrar) VALUES (?,?,?,?)", nuevos)
+        return None
+
     def items_de(con, did):
         return [dict(r) for r in con.execute("SELECT * FROM cc_items WHERE doc_id=? ORDER BY id", (did,))]
 
@@ -211,11 +233,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 return error("No existe el registro.", 404)
             pagos = [dict(p) for p in con.execute("SELECT * FROM cc_pagos WHERE doc_id=? ORDER BY fecha, id", (did,))]
             items = items_de(con, did)
+            cargos = cargos_de(con, did)
             formas = []
             if "ventas" in g.modulos and r["tipo"] == "cliente":      # los cobros de clientes también van al Historial de cobros
                 formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
         d = enriquecer([r], core.ahora()[:10])[0]
-        return jsonify(ok=True, doc=d, pagos=pagos, items=items, formas=formas)
+        return jsonify(ok=True, doc=d, pagos=pagos, items=items, cargos=cargos, formas=formas)
 
     @app.route("/api/cc/productos")
     @login_requerido
@@ -308,6 +331,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         elif not obs and not d.get("items"):
             return error("Anotá en observaciones qué retiró o qué servicio se le hizo, o cargá el número de factura.")
         items = d.get("items") if "stock" in g.modulos and isinstance(d.get("items"), list) else None
+        cargos = d.get("cargos") if isinstance(d.get("cargos"), list) else None
         with db() as con:
             if d.get("id"):
                 r = con.execute(SQL_DOCS + " WHERE d.id=?", (d.get("id"),)).fetchone()
@@ -321,6 +345,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 con.execute("UPDATE cc_docs SET persona=?, emision=?, vence=?, numero=?, total=?, obs=?, sin_factura=? WHERE id=?", (persona, emision, vence, numero, total, obs, sin_factura, did))
                 if items is not None:
                     e = aplicar_items(con, did, items, items_de(con, did))
+                    if e:
+                        con.rollback()
+                        return error(e)
+                if cargos is not None:
+                    e = guardar_cargos(con, did, cargos)
                     if e:
                         con.rollback()
                         return error(e)
@@ -338,6 +367,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                               (tipo, persona, emision, vence, numero, total, obs, core.ahora(), sin_factura)).lastrowid
             if items:
                 e = aplicar_items(con, did, items, [])
+                if e:
+                    con.rollback()
+                    return error(e)
+            if cargos:
+                e = guardar_cargos(con, did, cargos)
                 if e:
                     con.rollback()
                     return error(e)
@@ -375,6 +409,9 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         with db() as con:
             docs = [d for d in enriquecer(con.execute(SQL_DOCS + " WHERE d.tipo='cliente' AND lower(d.persona)=lower(?) ORDER BY d.emision, d.id", (nombre,)).fetchall(), core.ahora()[:10])
                     if d["saldo"] > 0]
+            cargos_vis = {}
+            for c in con.execute("SELECT * FROM cc_cargos WHERE mostrar=1 AND doc_id IN (%s) ORDER BY id" % (",".join(str(int(x["id"])) for x in docs) or "0")):
+                cargos_vis.setdefault(c["doc_id"], []).append(c)
             cli = None
             for r in con.execute("SELECT * FROM clientes"):
                 if nombre.lower() in (core.nombre_natural(r).lower(), " ".join(((r["nombre"] or ""), (r["apellido"] or ""))).strip().lower(), (r["razon_social"] or "").strip().lower()):
@@ -395,6 +432,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             for d in con_fact:
                 venc = f", vence el {core.fmt_fecha(d['vence'])}" if d["vence"] else ""
                 lineas.append(f"• Factura {d['numero']} del {core.fmt_fecha(d['emision'])}{venc}: {core.fmt_monto(d['saldo'])}")
+                for c in cargos_vis.get(d["id"], []):      # cargos extra que se le muestran al cliente
+                    lineas.append(f"   – {c['concepto'].capitalize()}: {core.fmt_monto(c['monto'])}")
             otros = round(sum(d["saldo"] for d in docs if not d["numero"]), 2)
             if otros > 0:
                 lineas.append(f"• Otros retiros sin factura: {core.fmt_monto(otros)}")
@@ -587,6 +626,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             _liberar_entregas(con, "doc_id=?", (did,))
             doc = con.execute("SELECT tipo, persona FROM cc_docs WHERE id=?", (did,)).fetchone()
             con.execute("DELETE FROM cc_pagos WHERE doc_id=?", (did,))
+            con.execute("DELETE FROM cc_cargos WHERE doc_id=?", (did,))
             con.execute("DELETE FROM cc_docs WHERE id=?", (did,))
             if doc:
                 aplicar_creditos(con, doc["tipo"], doc["persona"])

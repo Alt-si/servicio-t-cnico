@@ -400,6 +400,26 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 formas = [dict(id=f["id"], nombre=f["nombre"], cheque=bool(f["pide_cheque"])) for f in con.execute("SELECT id, nombre, pide_cheque FROM stock_formas_pago ORDER BY id")]
         return jsonify(ok=True, saldo=saldo, a_favor=a_favor, sin_facturar=sin_fact, formas=formas)
 
+    @app.route("/cuenta-corriente/facturar/<int:did>")
+    @login_requerido
+    @modulo_requerido("cuentacorriente")
+    @modulo_requerido("facturacion")
+    def cc_facturar(did):
+        """Botón «Facturar»: lleva directo a armar la factura del cliente de este registro."""
+        with db() as con:
+            r = con.execute("SELECT tipo, persona FROM cc_docs WHERE id=?", (did,)).fetchone()
+            cli = None
+            if r and r["tipo"] == "cliente":
+                nombre = r["persona"].strip().lower()
+                for c in con.execute("SELECT * FROM clientes"):
+                    if nombre in (core.nombre_natural(c).lower(), " ".join(((c["nombre"] or ""), (c["apellido"] or ""))).strip().lower(), (c["razon_social"] or "").strip().lower()):
+                        cli = c
+                        break
+        if not cli:
+            flash("No encontré a ese cliente en Clientes: cargalo ahí para poder facturarle.", "error")
+            return redirect(url_for("cuenta_corriente"))
+        return redirect(url_for("factura_nueva", cliente=cli["id"]))
+
     @app.route("/api/cc/aviso")
     @login_requerido
     @modulo_requerido("cuentacorriente")

@@ -52,6 +52,8 @@ def crear_tablas(con):
     con.execute("""CREATE TABLE IF NOT EXISTS orden_repuestos (id INTEGER PRIMARY KEY AUTOINCREMENT, orden_id INTEGER NOT NULL, producto_id INTEGER,
                    nombre TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, abrev TEXT, fecha TEXT)""")
     con.execute("CREATE INDEX IF NOT EXISTS ix_orep_orden ON orden_repuestos(orden_id)")
+    con.execute("""CREATE TABLE IF NOT EXISTS stock_faltantes (id INTEGER PRIMARY KEY AUTOINCREMENT, producto_id INTEGER, nombre TEXT NOT NULL,
+                   cantidad REAL NOT NULL DEFAULT 1, nota TEXT, creado TEXT)""")
     con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
     agregar("stock_formas_pago", "pide_cheque", "INTEGER NOT NULL DEFAULT 0")      # cheque / e-cheq: al cobrar se piden sus datos
     if con.execute("SELECT COUNT(*) FROM stock_formas_pago").fetchone()[0] == 0:
@@ -161,6 +163,71 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 "LEFT JOIN stock_marcas m ON m.id=p.marca_id JOIN stock_unidades u ON u.id=p.unidad_id")
 
     # ---------------- listado
+    # ---------------- faltantes: productos por debajo del stock mínimo (automático, configurable) + lista manual
+    def faltantes_auto_activo():
+        return core.leer_config(g.cuenta["id"], "stock_faltantes_auto", "1") == "1"
+
+    def faltantes_automaticos(con):
+        if not faltantes_auto_activo():
+            return []
+        return [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], actual=r["stock_actual"], minimo=r["stock_minimo"], abrev=r["abrev"], decimales=r["decimales"],
+                     faltan=round(r["stock_minimo"] - r["stock_actual"], 6))
+                for r in con.execute(SQL_PROD + " WHERE p.activo=1 AND p.stock_minimo>0 AND p.stock_actual<=p.stock_minimo ORDER BY (p.stock_minimo-p.stock_actual) DESC, p.nombre COLLATE NOCASE")]
+
+    @app.route("/stock/faltantes")
+    @login_requerido
+    @modulo_requerido("stock")
+    def stock_faltantes():
+        with db() as con:
+            auto = faltantes_automaticos(con)
+            manual = [dict(r) for r in con.execute("SELECT f.*, u.abrev, u.decimales FROM stock_faltantes f LEFT JOIN stock_productos p ON p.id=f.producto_id "
+                                                   "LEFT JOIN stock_unidades u ON u.id=p.unidad_id ORDER BY f.id DESC")]
+        return render_template("stock/faltantes.html", auto=auto, manual=manual, auto_activo=faltantes_auto_activo(), fmt_cant=fmt_cant)
+
+    @app.route("/api/stock/faltantes/buscar")
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_stock_faltantes_buscar():
+        sql, par = SQL_PROD + " WHERE p.activo=1", []
+        for w in (request.args.get("q") or "").split()[:4]:
+            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ?)"
+            par += [f"%{w}%"] * 2
+        with db() as con:
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT 20", par)]
+        return jsonify(ok=True, items=items)
+
+    @app.route("/api/stock/faltantes", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_stock_faltante_guardar():
+        d = request.get_json(force=True, silent=True) or {}
+        nombre = U(d.get("nombre"))
+        try:
+            cant = float(str(d.get("cantidad") or "").replace(".", "").replace(",", ".")) if d.get("cantidad") not in (None, "") else 1.0
+        except ValueError:
+            cant = 0
+        if not nombre:
+            return error("Escribí el producto que falta.")
+        if cant <= 0:
+            return error("La cantidad tiene que ser mayor a cero.")
+        with db() as con:
+            if d.get("id"):
+                if not con.execute("SELECT 1 FROM stock_faltantes WHERE id=?", (d.get("id"),)).fetchone():
+                    return error("No existe ese faltante.", 404)
+                con.execute("UPDATE stock_faltantes SET nombre=?, cantidad=?, nota=? WHERE id=?", (nombre, cant, U(d.get("nota"))[:200] or None, d.get("id")))
+            else:
+                pid = d.get("producto_id") if d.get("producto_id") and con.execute("SELECT 1 FROM stock_productos WHERE id=?", (d.get("producto_id"),)).fetchone() else None
+                con.execute("INSERT INTO stock_faltantes (producto_id, nombre, cantidad, nota, creado) VALUES (?,?,?,?,?)", (pid, nombre, cant, U(d.get("nota"))[:200] or None, core.ahora()))
+        return jsonify(ok=True)
+
+    @app.route("/api/stock/faltantes/<int:fid>/eliminar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_stock_faltante_eliminar(fid):
+        with db() as con:
+            con.execute("DELETE FROM stock_faltantes WHERE id=?", (fid,))
+        return jsonify(ok=True)
+
     # ---------------- repuestos y accesorios usados en una orden (descuentan stock y suman al total a cobrar)
     def _orden_abierta(con, oid):
         o = con.execute("SELECT id, estado FROM ordenes WHERE id=?", (oid,)).fetchone()
@@ -281,7 +348,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 "SELECT COUNT(*), SUM(CASE WHEN stock_actual<=0 THEN 1 ELSE 0 END), "
                 "SUM(CASE WHEN stock_actual>0 AND stock_minimo>0 AND stock_actual<=stock_minimo THEN 1 ELSE 0 END), "
                 "SUM(stock_actual*IFNULL(costo,0)), SUM(stock_actual*IFNULL(precio,0)) FROM stock_productos WHERE activo=1").fetchone()
-        return render_template("stock/lista.html", filas=filas, cats=cats, mars=mars, q=request.args.get("q", ""), cat=cat, mar=mar,
+            n_falt = len(faltantes_automaticos(con)) + con.execute("SELECT COUNT(*) FROM stock_faltantes").fetchone()[0]
+        return render_template("stock/lista.html", n_falt=n_falt, filas=filas, cats=cats, mars=mars, q=request.args.get("q", ""), cat=cat, mar=mar,
                                ver=ver, res=res, lbl=etiquetas(g.cuenta["id"]), fmt_cant=fmt_cant, estado_stock=estado_stock,
                                iva=iva_cfg(g.cuenta["id"]), pfin=lambda v, i: pfin(v, i, iva_cfg(g.cuenta["id"])))
 

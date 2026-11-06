@@ -532,6 +532,7 @@ def formas_pago_lista():
     with db() as con:
         return [dict(r) for r in con.execute("SELECT id, nombre, aplica_descuento, pide_cheque FROM stock_formas_pago ORDER BY id")]
 app.jinja_env.globals["formas_pago_lista"] = formas_pago_lista
+app.jinja_env.globals["faltantes_auto"] = lambda: core.leer_config(g.cuenta["id"], "stock_faltantes_auto", "1") == "1"
 app.jinja_env.globals["rec_repetir"] = lambda: core.repetir_recordatorios(g.cuenta["id"])
 
 
@@ -1265,6 +1266,15 @@ def configuracion_recordatorios():
     core.guardar_config(g.cuenta["id"], "rec_repetir_min", m)
     flash("Configuración de recordatorios guardada.", "ok")
     return redirect(url_for("configuracion") + "#recordatorios")
+
+
+@app.route("/configuracion/faltantes", methods=["POST"])
+@login_requerido
+@modulo_requerido("stock")
+def configuracion_faltantes():
+    core.guardar_config(g.cuenta["id"], "stock_faltantes_auto", "1" if request.form.get("auto") else "0")
+    flash("Configuración de faltantes guardada.", "ok")
+    return redirect(url_for("configuracion") + "#faltantes")
 
 
 @app.route("/configuracion/listas", methods=["POST"])

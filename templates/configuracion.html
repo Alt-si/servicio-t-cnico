@@ -52,6 +52,14 @@
   {% else %}<tr><td class="mut">Todavía no hay formas de pago.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endif %}
 
+{% if 'stock' in modulos %}
+<div class="card" id="faltantes"><h1>Faltantes de stock</h1>
+  <form method="post" action="{{ url_for('configuracion_faltantes') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input type="checkbox" name="auto" value="1" {{ 'checked' if faltantes_auto() }}> Mostrar automáticamente en «Faltantes» los productos que están por debajo del stock mínimo</label>
+    <p class="mut">El stock mínimo se define en cada producto. Si lo desactivás, «Faltantes» solo muestra lo que cargues a mano.</p>
+    <button class="btn pri">Guardar</button></form></div>
+{% endif %}
+
 {% if 'recordatorios' in modulos %}
 <div class="card" id="recordatorios"><h1>Recordatorios</h1>
 <form method="post" action="{{ url_for('configuracion_recordatorios') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">

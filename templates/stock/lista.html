@@ -2,7 +2,7 @@
 {% block cuerpo %}
 <div class="card">
   <div class="row" style="margin-bottom:10px"><h1 style="margin:0">Control de stock <span id="cuenta" class="mut" style="font-size:14px">({{ filas|length }})</span></h1>
-    <div class="der row"><a class="btn" href="{{ url_for('stock_listas') }}">Rubros, marcas y unidades</a>
+    <div class="der row"><a class="btn" href="{{ url_for('stock_faltantes') }}">Faltantes{% if n_falt %} <b style="color:#c2410c">({{ n_falt }})</b>{% endif %}</a><a class="btn" href="{{ url_for('stock_listas') }}">Rubros, marcas y unidades</a>
       <a class="btn" href="{{ url_for('stock_exportar') }}">Exportar</a>
       {% if 'ventas' in modulos %}<a class="btn ok" href="{{ url_for('ventas') }}">🛒 Vender</a>{% endif %}
       <button class="btn pri" onclick="productoForm()">+ Nuevo producto</button></div></div>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row"><div><a href="{{ url_for('stock') }}" class="mut">← Control de stock</a><h1 style="margin:4px 0 0">Faltantes</h1></div>
+    <div class="der row"><button class="btn" onclick="falCopiar()">Copiar lista</button><button class="btn pri" onclick="falForm()">+ Agregar faltante</button></div></div>
+
+  <h2 style="margin:16px 0 6px">Por debajo del stock mínimo</h2>
+  {% if not auto_activo %}<p class="mut">Esta lista automática está desactivada. Podés activarla en <a href="{{ url_for('configuracion') }}#faltantes">Configuración</a>.</p>
+  {% else %}
+  <div class="tabla-wrap"><table><thead><tr><th>Producto</th><th style="text-align:right">Stock actual</th><th style="text-align:right">Mínimo</th><th style="text-align:right">Faltan</th></tr></thead><tbody class="clientes">
+  {% for p in auto %}<tr data-copiar="{{ p.nombre }} x{{ fmt_cant(p.faltan, p.decimales) }}"><td><a href="{{ url_for('stock_producto', pid=p.id) }}">{{ p.nombre }}</a>{% if p.codigo %} <span class="mut">· {{ p.codigo }}</span>{% endif %}</td>
+    <td style="text-align:right">{{ fmt_cant(p.actual, p.decimales) }} {{ p.abrev }}</td><td style="text-align:right">{{ fmt_cant(p.minimo, p.decimales) }}</td><td style="text-align:right"><b style="color:#c2410c">{{ fmt_cant(p.faltan, p.decimales) }} {{ p.abrev }}</b></td></tr>
+  {% else %}<tr><td colspan="4" class="mut">Ningún producto está por debajo de su stock mínimo.</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+
+  <h2 style="margin:18px 0 6px">Faltantes cargados a mano</h2>
+  <div class="tabla-wrap"><table><thead><tr><th>Producto</th><th style="text-align:right">Cantidad</th><th>Nota</th><th></th></tr></thead><tbody class="clientes">
+  {% for f in manual %}<tr data-copiar="{{ f.nombre }} x{{ fmt_cant(f.cantidad, 3) }}"><td>{{ f.nombre }}</td><td style="text-align:right"><b>{{ fmt_cant(f.cantidad, 3) }} {{ f.abrev or '' }}</b></td><td>{{ f.nota or '' }}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='falForm({{ f|tojson }})'>Editar</button> <button class="btn ok" onclick="falQuitar({{ f.id }})">Ya lo repuse</button></td></tr>
+  {% else %}<tr><td colspan="4" class="mut">No cargaste ningún faltante. Usá «+ Agregar faltante» para anotar lo que necesitás comprar.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='faltantes.js') }}"></script>{% endblock %}

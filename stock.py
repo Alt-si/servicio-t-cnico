@@ -8,6 +8,8 @@ import io
 
 from flask import Response, abort, g, jsonify, redirect, render_template, request, url_for
 
+import re
+
 import core
 
 TABLAS_STOCK = ("stock_categorias", "stock_marcas", "stock_unidades", "stock_productos", "stock_movimientos", "stock_proveedores")
@@ -51,11 +53,17 @@ def crear_tablas(con):
     agregar("stock_productos", "descuento", "REAL")             # % de descuento propio del producto (vacío = el del rubro / marca)
     con.execute("CREATE TABLE IF NOT EXISTS stock_proveedores (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, telefono TEXT)")
     agregar("stock_productos", "proveedor_id", "INTEGER")
+    con.execute("CREATE TABLE IF NOT EXISTS stock_barras (id INTEGER PRIMARY KEY AUTOINCREMENT, producto_id INTEGER NOT NULL, codigo TEXT NOT NULL)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_barras_prod ON stock_barras(producto_id)")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_barras_cod ON stock_barras(codigo)")
+    con.execute("INSERT INTO stock_barras (producto_id, codigo) SELECT id, codigo_barras FROM stock_productos WHERE IFNULL(codigo_barras,'')<>'' "
+                "AND NOT EXISTS (SELECT 1 FROM stock_barras b WHERE b.producto_id=stock_productos.id)")      # el código único anterior pasa a la lista
     con.execute("""CREATE TABLE IF NOT EXISTS orden_repuestos (id INTEGER PRIMARY KEY AUTOINCREMENT, orden_id INTEGER NOT NULL, producto_id INTEGER,
                    nombre TEXT NOT NULL, cantidad REAL NOT NULL, precio REAL NOT NULL, abrev TEXT, fecha TEXT)""")
     con.execute("CREATE INDEX IF NOT EXISTS ix_orep_orden ON orden_repuestos(orden_id)")
     con.execute("""CREATE TABLE IF NOT EXISTS stock_faltantes (id INTEGER PRIMARY KEY AUTOINCREMENT, producto_id INTEGER, nombre TEXT NOT NULL,
                    cantidad REAL NOT NULL DEFAULT 1, nota TEXT, creado TEXT)""")
+    agregar("stock_faltantes", "proveedor_id", "INTEGER")
     con.execute("CREATE TABLE IF NOT EXISTS stock_formas_pago (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL, aplica_descuento INTEGER NOT NULL DEFAULT 0)")
     agregar("stock_formas_pago", "pide_cheque", "INTEGER NOT NULL DEFAULT 0")      # cheque / e-cheq: al cobrar se piden sus datos
     if con.execute("SELECT COUNT(*) FROM stock_formas_pago").fetchone()[0] == 0:
@@ -187,9 +195,11 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     def stock_faltantes():
         with db() as con:
             auto = faltantes_automaticos(con)
-            manual = [dict(r) for r in con.execute("SELECT f.*, u.abrev, u.decimales FROM stock_faltantes f LEFT JOIN stock_productos p ON p.id=f.producto_id "
-                                                   "LEFT JOIN stock_unidades u ON u.id=p.unidad_id ORDER BY f.id DESC")]
-        return render_template("stock/faltantes.html", auto=auto, manual=manual, auto_activo=faltantes_auto_activo(), fmt_cant=fmt_cant)
+            manual = [dict(r) for r in con.execute("SELECT f.*, u.abrev, u.decimales, v.nombre AS proveedor FROM stock_faltantes f LEFT JOIN stock_productos p ON p.id=f.producto_id "
+                                                   "LEFT JOIN stock_unidades u ON u.id=p.unidad_id LEFT JOIN stock_proveedores v ON v.id=f.proveedor_id "
+                                                   "ORDER BY " + ("IFNULL(v.nombre,'zzz') COLLATE NOCASE, " if prov_activo() else "") + "f.id DESC")]
+            provs = [dict(r) for r in con.execute("SELECT id, nombre FROM stock_proveedores ORDER BY nombre COLLATE NOCASE")] if prov_activo() else []
+        return render_template("stock/faltantes.html", provs=provs, auto=auto, manual=manual, auto_activo=faltantes_auto_activo(), fmt_cant=fmt_cant)
 
     @app.route("/api/stock/faltantes/buscar")
     @login_requerido
@@ -200,7 +210,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ?)"
             par += [f"%{w}%"] * 2
         with db() as con:
-            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT 20", par)]
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], stock=r["stock_actual"], abrev=r["abrev"], proveedor_id=r["proveedor_id"]) for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT 20", par)]
         return jsonify(ok=True, items=items)
 
     @app.route("/api/stock/faltantes", methods=["POST"])
@@ -218,13 +228,16 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         if cant <= 0:
             return error("La cantidad tiene que ser mayor a cero.")
         with db() as con:
+            prov = d.get("proveedor_id") or None
+            if prov and not con.execute("SELECT 1 FROM stock_proveedores WHERE id=?", (prov,)).fetchone():
+                prov = None
             if d.get("id"):
                 if not con.execute("SELECT 1 FROM stock_faltantes WHERE id=?", (d.get("id"),)).fetchone():
                     return error("No existe ese faltante.", 404)
-                con.execute("UPDATE stock_faltantes SET nombre=?, cantidad=?, nota=? WHERE id=?", (nombre, cant, U(d.get("nota"))[:200] or None, d.get("id")))
+                con.execute("UPDATE stock_faltantes SET nombre=?, cantidad=?, nota=?, proveedor_id=? WHERE id=?", (nombre, cant, U(d.get("nota"))[:200] or None, prov, d.get("id")))
             else:
                 pid = d.get("producto_id") if d.get("producto_id") and con.execute("SELECT 1 FROM stock_productos WHERE id=?", (d.get("producto_id"),)).fetchone() else None
-                con.execute("INSERT INTO stock_faltantes (producto_id, nombre, cantidad, nota, creado) VALUES (?,?,?,?,?)", (pid, nombre, cant, U(d.get("nota"))[:200] or None, core.ahora()))
+                con.execute("INSERT INTO stock_faltantes (producto_id, nombre, cantidad, nota, creado, proveedor_id) VALUES (?,?,?,?,?,?)", (pid, nombre, cant, U(d.get("nota"))[:200] or None, core.ahora(), prov))
         return jsonify(ok=True)
 
     @app.route("/api/stock/faltantes/<int:fid>/eliminar", methods=["POST"])
@@ -252,7 +265,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         sql = SQL_PROD + " WHERE p.activo=1"
         par = []
         for w in q.split()[:4]:
-            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR IFNULL(p.codigo_barras,'') LIKE ?)"
+            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR p.id IN (SELECT producto_id FROM stock_barras WHERE codigo LIKE ?))"
             par += [f"%{w}%"] * 3
         sql += " ORDER BY p.nombre COLLATE NOCASE LIMIT 30"
         with db() as con:
@@ -332,7 +345,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         where, params = [], []
         if q:
             where.append("(" + " OR ".join(f"lower_u({c}) LIKE ?" for c in
-                         ("p.nombre", "p.codigo", "p.codigo_barras", "p.descripcion", "p.ubicacion", "c.nombre", "m.nombre")) + ")")
+                         ("p.nombre", "p.codigo", "p.descripcion", "p.ubicacion", "c.nombre", "m.nombre")) +
+                         " OR p.id IN (SELECT producto_id FROM stock_barras WHERE lower_u(codigo) LIKE ?))")
             params += [f"%{q}%"] * 7
         if cat:
             where.append("p.categoria_id=?"); params.append(cat)
@@ -380,7 +394,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             mars = con.execute("SELECT * FROM stock_marcas ORDER BY nombre COLLATE NOCASE").fetchall()
             unis = con.execute("SELECT * FROM stock_unidades ORDER BY nombre COLLATE NOCASE").fetchall()
             fpagos = formas(con)
-        return render_template("stock/producto.html", fpagos=fpagos, p=p, movs=movs, cats=cats, mars=mars, unis=unis, MOTIVOS=MOTIVOS,
+            barras = [r[0] for r in con.execute("SELECT codigo FROM stock_barras WHERE producto_id=? ORDER BY id", (pid,))]
+        return render_template("stock/producto.html", barras=barras, fpagos=fpagos, p=p, movs=movs, cats=cats, mars=mars, unis=unis, MOTIVOS=MOTIVOS,
                                iva=iva_cfg(g.cuenta["id"]), pfin=lambda v, i: pfin(v, i, iva_cfg(g.cuenta["id"])),
                                lbl=etiquetas(g.cuenta["id"]), fmt_cant=fmt_cant, estado_stock=estado_stock, fmt_fecha=core.fmt_fecha)
 
@@ -401,6 +416,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if pid:
                 p = con.execute("SELECT * FROM stock_productos WHERE id=?", (pid,)).fetchone()
                 out["producto"] = dict(p) if p else None
+                if p:
+                    out["producto"]["barras"] = [r[0] for r in con.execute("SELECT codigo FROM stock_barras WHERE producto_id=? ORDER BY id", (pid,))]
         return jsonify(out)
 
     # ---------------- alta / edición de producto
@@ -427,12 +444,20 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             except ValueError:
                 return error("Revisá los números (costo, precios, IVA, stock mínimo y stock inicial).")
             codigo = solo(d.get("codigo"))
-            if codigo and con.execute("SELECT 1 FROM stock_productos WHERE (lower(codigo)=lower(?) OR lower(codigo_barras)=lower(?)) AND id<>?", (codigo, codigo, pid or 0)).fetchone():
+            if codigo and con.execute("SELECT 1 FROM stock_productos WHERE lower(codigo)=lower(?) AND id<>?", (codigo, pid or 0)).fetchone():
                 return error("Ya existe otro producto con ese código.")
-            barras = solo(d.get("codigo_barras"))
-            if barras and con.execute("SELECT 1 FROM stock_productos WHERE id<>? AND (lower(codigo)=lower(?) OR lower(codigo_barras)=lower(?))",
-                                      (pid or 0, barras, barras)).fetchone():
-                return error("Ese código de barras ya lo usa otro producto.")
+            if codigo and con.execute("SELECT 1 FROM stock_barras WHERE lower(codigo)=lower(?) AND producto_id<>?", (codigo, pid or 0)).fetchone():
+                return error("Ya existe otro producto con ese código.")
+            crudo = d.get("codigos_barras") if isinstance(d.get("codigos_barras"), list) else re.split(r"[\n,;]+", str(d.get("codigo_barras") or ""))
+            barras_lista = []
+            for b in crudo:
+                b = solo(b)
+                if b and b.lower() not in [x.lower() for x in barras_lista]:
+                    barras_lista.append(b)
+            for b in barras_lista:
+                if con.execute("SELECT 1 FROM stock_productos WHERE id<>? AND lower(codigo)=lower(?)", (pid or 0, b)).fetchone() or \
+                   con.execute("SELECT 1 FROM stock_barras WHERE producto_id<>? AND lower(codigo)=lower(?)", (pid or 0, b)).fetchone():
+                    return error(f"El código de barras {b} ya lo usa otro producto.")
             cat = d.get("categoria_id") or None
             mar = d.get("marca_id") or None
             ahora = core.ahora()
@@ -460,7 +485,10 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 if inicial:
                     con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
                                 (pid, ahora, "ingreso", inicial, inicial, "Stock inicial"))
-            con.execute("UPDATE stock_productos SET codigo_barras=? WHERE id=?", (barras or None, pid))
+            if "codigo_barras" in d or "codigos_barras" in d:
+                con.execute("DELETE FROM stock_barras WHERE producto_id=?", (pid,))
+                con.executemany("INSERT INTO stock_barras (producto_id, codigo) VALUES (?,?)", [(pid, b) for b in barras_lista])
+                con.execute("UPDATE stock_productos SET codigo_barras=? WHERE id=?", (barras_lista[0] if barras_lista else None, pid))
         return jsonify(ok=True, id=pid)
 
     @app.route("/api/stock/producto/<int:pid>/<accion>", methods=["POST"])

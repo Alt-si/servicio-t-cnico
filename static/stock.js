@@ -10,7 +10,7 @@ async function productoForm(id) {
   const c = modal(`<h2>${id ? 'Editar producto' : 'Nuevo producto'}</h2><div id="p-err" class="msg error" style="display:none"></div>
     <div class="grid">
       <div><label>Código (opcional)</label><input id="p-codigo" value="${esc(p.codigo || '')}"></div>
-      <div><label>Código de barras (lector)</label><input id="p-barras" value="${esc(p.codigo_barras || '')}" autocomplete="off"></div>
+      <div><label>Códigos de barras (lector) — podés cargar varios</label><textarea id="p-barras" rows="2" autocomplete="off" placeholder="Uno por línea: escaneá o escribí varios">${esc((p.barras && p.barras.length ? p.barras : (p.codigo_barras ? [p.codigo_barras] : [])).join('\n'))}</textarea></div>
       <div><label>Producto *</label><input id="p-nombre" class="mayus" value="${esc(p.nombre || '')}"></div>
       <div><label>${esc(L.categoria)} <a href="#" id="p-mas-cat">+ nuevo</a></label><select id="p-cat"><option value="">—</option>${optHtml(f.categorias, p.categoria_id)}</select></div>
       <div><label>${esc(L.marca)} <a href="#" id="p-mas-mar">+ nueva</a></label><select id="p-mar"><option value="">—</option>${optHtml(f.marcas, p.marca_id)}</select></div>
@@ -79,7 +79,7 @@ async function productoForm(id) {
   if ($('#p-mas-prov', c)) $('#p-mas-prov', c).onclick = e => { e.preventDefault(); nuevo('proveedores', '#p-prov'); };
   $('#p-no', c).onclick = cerrar;
   $('#p-ok', c).onclick = async () => {
-    const d = {id, nombre: $('#p-nombre', c).value, codigo: $('#p-codigo', c).value, codigo_barras: $('#p-barras', c).value, categoria_id: $('#p-cat', c).value, marca_id: $('#p-mar', c).value, ...(f.usa_proveedores ? {proveedor_id: $('#p-prov', c).value} : {}),
+    const d = {id, nombre: $('#p-nombre', c).value, codigo: $('#p-codigo', c).value, codigos_barras: $('#p-barras', c).value.split(/[\n,;]+/).map(x => x.trim()).filter(Boolean), categoria_id: $('#p-cat', c).value, marca_id: $('#p-mar', c).value, ...(f.usa_proveedores ? {proveedor_id: $('#p-prov', c).value} : {}),
       unidad_id: $('#p-uni', c).value, ubicacion: $('#p-ubi', c).value, costo: $('#p-costo', c).value, precio: $('#p-precio', c).value, precio_contado: $('#p-contado', c).value, descuento: $('#p-desc-pct', c).value, precio_auto: $('#p-auto', c).checked,
       iva: $('#p-iva', c)?.value || '',
       stock_minimo: $('#p-min', c).value, descripcion: $('#p-desc', c).value, stock_inicial: $('#p-ini', c)?.value || ''};

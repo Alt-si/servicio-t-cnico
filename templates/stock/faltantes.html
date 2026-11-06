@@ -13,10 +13,10 @@
   {% else %}<tr><td colspan="5" class="mut">Ningún producto está por debajo de su stock mínimo.</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 
   <h2 style="margin:18px 0 6px">Faltantes cargados a mano</h2>
-  <div class="tabla-wrap"><table><thead><tr><th>Producto</th><th style="text-align:right">Cantidad</th><th>Nota</th><th></th></tr></thead><tbody class="clientes">
-  {% for f in manual %}<tr data-copiar="{{ f.nombre }} x{{ fmt_cant(f.cantidad, 3) }}"><td>{{ f.nombre }}</td><td style="text-align:right"><b>{{ fmt_cant(f.cantidad, 3) }} {{ f.abrev or '' }}</b></td><td>{{ f.nota or '' }}</td>
+  <div class="tabla-wrap"><table><thead><tr><th>Producto</th>{% if prov_activo() %}<th>Proveedor</th>{% endif %}<th style="text-align:right">Cantidad</th><th>Nota</th><th></th></tr></thead><tbody class="clientes">
+  {% for f in manual %}<tr data-copiar="{{ f.nombre }} x{{ fmt_cant(f.cantidad, 3) }}"><td>{{ f.nombre }}</td>{% if prov_activo() %}<td>{{ f.proveedor or '' }}</td>{% endif %}<td style="text-align:right"><b>{{ fmt_cant(f.cantidad, 3) }} {{ f.abrev or '' }}</b></td><td>{{ f.nota or '' }}</td>
     <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='falForm({{ f|tojson }})'>Editar</button> <button class="btn ok" onclick="falQuitar({{ f.id }})">Ya lo repuse</button></td></tr>
-  {% else %}<tr><td colspan="4" class="mut">No cargaste ningún faltante. Usá «+ Agregar faltante» para anotar lo que necesitás comprar.</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<tr><td colspan="5" class="mut">No cargaste ningún faltante. Usá «+ Agregar faltante» para anotar lo que necesitás comprar.</td></tr>{% endfor %}</tbody></table></div>
 </div>
 {% endblock %}
-{% block js %}<script src="{{ url_for('static', filename='faltantes.js') }}"></script>{% endblock %}
+{% block js %}<script>window.PROVS = {{ provs|tojson }}; window.PROV_ON = {{ 'true' if prov_activo() else 'false' }};</script><script src="{{ url_for('static', filename='faltantes.js') }}"></script>{% endblock %}

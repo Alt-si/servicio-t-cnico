@@ -109,11 +109,11 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             return jsonify(ok=True, exacto=None, resultados=[])
         ia, idef = _iva(g.cuenta["id"])
         with db() as con:
-            p = con.execute(SQL + " WHERE p.activo=1 AND (lower(p.codigo)=lower(?) OR lower(p.codigo_barras)=lower(?)) LIMIT 1", (q, q)).fetchone()
+            p = con.execute(SQL + " WHERE p.activo=1 AND (lower(p.codigo)=lower(?) OR p.id IN (SELECT producto_id FROM stock_barras WHERE lower(codigo)=lower(?))) LIMIT 1", (q, q)).fetchone()
             if p:
                 return jsonify(ok=True, exacto=item(p, ia, idef), resultados=[])
             like = f"%{core.sin_acentos(q)}%"
-            filas = con.execute(SQL + " WHERE p.activo=1 AND (lower_u(p.nombre) LIKE ? OR lower_u(p.codigo) LIKE ? OR lower_u(p.codigo_barras) LIKE ? "
+            filas = con.execute(SQL + " WHERE p.activo=1 AND (lower_u(p.nombre) LIKE ? OR lower_u(p.codigo) LIKE ? OR p.id IN (SELECT producto_id FROM stock_barras WHERE lower_u(codigo) LIKE ?) "
                                 "OR lower_u(c.nombre) LIKE ? OR lower_u(m.nombre) LIKE ?) ORDER BY p.nombre COLLATE NOCASE LIMIT 25", (like,) * 5).fetchall()
         return jsonify(ok=True, exacto=None, resultados=[item(r, ia, idef) for r in filas])
 

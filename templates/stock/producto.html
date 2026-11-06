@@ -11,7 +11,7 @@
     <button class="btn bad" onclick="movimientoForm({{ p.id }}, 'egreso', true)">− Egreso</button>
     <button class="btn" onclick="movimientoForm({{ p.id }}, 'ajuste', true)">Ajustar (conteo)</button></div>
   <div class="ficha">
-    {% for t, v in ((lbl.categoria, p.categoria), (lbl.marca, p.marca), ('Proveedor', p.proveedor if prov_activo() else None), ('Unidad', p.unidad ~ ' (' ~ p.abrev ~ ')'), ('Stock mínimo', fmt_cant(p.stock_minimo, p.decimales) ~ ' ' ~ p.abrev if p.stock_minimo else None),
+    {% for t, v in ((lbl.categoria, p.categoria), (lbl.marca, p.marca), ('Códigos de barras', barras|join(', ') if barras else None), ('Proveedor', p.proveedor if prov_activo() else None), ('Unidad', p.unidad ~ ' (' ~ p.abrev ~ ')'), ('Stock mínimo', fmt_cant(p.stock_minimo, p.decimales) ~ ' ' ~ p.abrev if p.stock_minimo else None),
                     ('Costo', ('$ ' ~ (p.costo|monto_input)) if p.costo is not none else None),
                     ('Precio de lista' ~ (' (sin IVA)' if iva.activo else ''), ('$ ' ~ (p.precio|monto_input)) if p.precio is not none else None),
                     ('Precio contado' ~ (' (sin IVA)' if iva.activo else ''), ('$ ' ~ (p.precio_contado|monto_input)) if p.precio_contado is not none else None),

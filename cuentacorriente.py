@@ -226,7 +226,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         sql = "SELECT p.*, u.abrev, u.decimales FROM stock_productos p JOIN stock_unidades u ON u.id=p.unidad_id WHERE p.activo=1"
         par = []
         for w in (request.args.get("q") or "").split()[:4]:
-            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR IFNULL(p.codigo_barras,'') LIKE ?)"
+            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR p.id IN (SELECT producto_id FROM stock_barras WHERE codigo LIKE ?))"
             par += [f"%{w}%"] * 3
         with db() as con:
             items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], precio=r["precio"], stock=r["stock_actual"], abrev=r["abrev"], decimales=r["decimales"])

@@ -155,3 +155,5 @@ a.info-cli:hover{transform:scale(1.12)}
 
 tr.grupo td{background:var(--bg);padding-top:8px}
 .menu-vta .desplegable{min-width:100%!important}
+a.btn{display:inline-flex;align-items:center;justify-content:center;text-align:center;line-height:normal;box-sizing:border-box;vertical-align:middle}
+td.acc .btn{vertical-align:middle;min-height:38px}

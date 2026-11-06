@@ -88,3 +88,11 @@ async function falCopiar(btn) {
   try { await navigator.clipboard.writeText(txt); await aviso('Lista copiada. Podés pegarla en WhatsApp o donde quieras.'); }
   catch (e) { aviso(txt); }
 }
+
+async function falEliminar(id) {
+  if (!await confirmar('¿Eliminar este faltante? Usalo si se cargó por error. Se pide el código de validación.')) return;
+  const r = await apiCodigo('/api/stock/faltantes/' + id + '/borrar', {});
+  if (r.cancelado) return;
+  if (!r.ok) return aviso(r.error || 'No se pudo eliminar.');
+  location.reload();
+}

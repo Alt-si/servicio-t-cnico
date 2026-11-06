@@ -252,6 +252,18 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 con.execute("INSERT INTO stock_faltantes (producto_id, nombre, cantidad, nota, creado, proveedor_id) VALUES (?,?,?,?,?,?)", (pid, nombre, cant, U(d.get("nota"))[:200] or None, core.ahora(), prov))
         return jsonify(ok=True)
 
+    @app.route("/api/stock/faltantes/<int:fid>/borrar", methods=["POST"])
+    @login_requerido
+    @modulo_requerido("stock")
+    def api_stock_faltante_borrar(fid):
+        """Elimina un faltante cargado por error: pide el código de validación."""
+        d = request.get_json(force=True, silent=True) or {}
+        if not core.codigo_es_valido(g.cuenta["id"], d.get("codigo")):
+            return jsonify(ok=False, necesita_codigo=True, error="Código de validación incorrecto." if d.get("codigo") else "Eliminar un faltante requiere el código de validación."), 403
+        with db() as con:
+            con.execute("DELETE FROM stock_faltantes WHERE id=?", (fid,))
+        return jsonify(ok=True)
+
     @app.route("/api/stock/faltantes/<int:fid>/eliminar", methods=["POST"])
     @login_requerido
     @modulo_requerido("stock")

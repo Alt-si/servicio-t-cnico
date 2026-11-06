@@ -19,7 +19,7 @@
   {% for nombre, items in manual_g %}<tbody class="clientes">
   {% if nombre %}<tr class="grupo"><td colspan="4"><b>{{ nombre }}</b> <span class="mut">({{ items|length }})</span> <button class="btn" style="padding:1px 8px;font-size:12px" onclick="falCopiar(this)">Copiar</button></td></tr>{% endif %}
   {% for f in items %}<tr data-copiar="{{ f.nombre }} x{{ fmt_cant(f.cantidad, 3) }}"><td>{{ f.nombre }}</td><td style="text-align:right"><b>{{ fmt_cant(f.cantidad, 3) }} {{ f.abrev or '' }}</b></td><td>{{ f.nota or '' }}</td>
-    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='falForm({{ f|tojson }})'>Editar</button> <button class="btn ok" onclick="falQuitar({{ f.id }})">Ya lo repuse</button></td></tr>{% endfor %}</tbody>
+    <td style="text-align:right;white-space:nowrap"><button class="btn" onclick='falForm({{ f|tojson }})'>Editar</button> <button class="btn ok" onclick="falQuitar({{ f.id }})">Ya lo repuse</button> <button class="btn bad" onclick="falEliminar({{ f.id }})">Eliminar</button></td></tr>{% endfor %}</tbody>
   {% else %}<tbody><tr><td colspan="4" class="mut">No cargaste ningún faltante. Usá «+ Agregar faltante» para anotar lo que necesitás comprar.</td></tr></tbody>{% endfor %}</table></div>
 </div>
 {% endblock %}

@@ -284,7 +284,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         persona = " ".join(U(d.get("persona")).split())
         emision = _fecha_ok(d.get("emision"))
         sin_factura = 1 if d.get("sin_factura") else 0
-        numero = None if sin_factura else (" ".join(str(d.get("numero") or "").split())[:40] or None)
+        numero = None if sin_factura else (" ".join(U(d.get("numero")).split())[:40] or None)
         obs = U(d.get("obs"))[:500] or None
         if tipo not in TIPOS:
             return error("Tipo inválido.")

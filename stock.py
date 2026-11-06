@@ -484,7 +484,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 inicial = cant_o_error(d.get("stock_inicial") or "0", uni["decimales"]) if not pid else 0
             except ValueError:
                 return error("Revisá los números (costo, precios, IVA, stock mínimo y stock inicial).")
-            codigo = solo(d.get("codigo"))
+            codigo = U(solo(d.get("codigo")))
             if codigo and con.execute("SELECT 1 FROM stock_productos WHERE lower(codigo)=lower(?) AND id<>?", (codigo, pid or 0)).fetchone():
                 return error("Ya existe otro producto con ese código.")
             if codigo and con.execute("SELECT 1 FROM stock_barras WHERE lower(codigo)=lower(?) AND producto_id<>?", (codigo, pid or 0)).fetchone():
@@ -582,7 +582,7 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 nuevo, delta = round(actual - cant, 6), -cant
             else:                                   # ajuste: la cantidad es el stock real contado
                 nuevo, delta = cant, round(cant - actual, 6)
-            motivo = solo(d.get("motivo")) or {"ingreso": "Ingreso", "egreso": "Egreso", "ajuste": "Ajuste de inventario"}[tipo]
+            motivo = U(solo(d.get("motivo"))) or {"ingreso": "Ingreso", "egreso": "Egreso", "ajuste": "Ajuste de inventario"}[tipo]
             ahora = core.ahora()
             con.execute("UPDATE stock_productos SET stock_actual=?, actualizado=? WHERE id=?", (nuevo, ahora, p["id"]))
             con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo, nota) VALUES (?,?,?,?,?,?,?)",

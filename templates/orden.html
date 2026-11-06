@@ -24,7 +24,7 @@
     <div><label>Marca</label><input id="marca" class="mayus" list="lista-marcas" autocomplete="off" value="{{ eq.marca or '' }}"><datalist id="lista-marcas">{% for m in marcas_equipo %}<option value="{{ m }}">{% endfor %}</datalist></div>
     <div><label>Modelo</label><input id="modelo" class="mayus" value="{{ eq.modelo or '' }}"></div>
     <div><label>N° de serie</label><input id="serie" class="mayus" value="{{ eq.serie or '' }}"></div>
-    <div><label>Clave de acceso del equipo</label><input id="clave_acceso" value="{{ eq.clave_acceso or '' }}"></div>
+    <div><label>Clave de acceso del equipo</label><input data-nomayus id="clave_acceso" value="{{ eq.clave_acceso or '' }}"></div>
     <div><label>Descripción / estado físico</label><input id="descripcion" class="mayus" value="{{ eq.descripcion or '' }}"></div>
   </div>
   <label><input type="checkbox" id="en_garantia" {{ 'checked' if eq.en_garantia }}>En garantía</label>

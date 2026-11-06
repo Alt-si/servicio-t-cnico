@@ -43,7 +43,7 @@ function afipCert(c) {
       <p class="mut" style="font-size:13px">En AFIP (con clave fiscal): <b>Administración de Certificados Digitales</b> → agregar alias → pegá el pedido → descargá el .crt. Después, en <b>Administrador de Relaciones de Clave Fiscal</b>, asociá a ese certificado el servicio <b>Facturación Electrónica (wsfe)</b>. Y en <b>ABM de Puntos de Venta</b>, creá un punto de venta tipo <b>RECE para aplicativo y web services</b>.</p></div>
     <p><b>Paso 2.</b> Cargá el certificado (.crt) que te dio AFIP:</p>
     <input type="file" id="c-archivo" accept=".crt,.pem,.cer,.txt"><textarea id="c-cert" rows="4" placeholder="-----BEGIN CERTIFICATE-----" style="font-family:monospace;font-size:11px;margin-top:6px"></textarea>
-    <details style="margin-top:6px"><summary class="mut">Ya tengo mi propia clave privada (opcional)</summary><textarea id="c-clave" rows="4" placeholder="-----BEGIN PRIVATE KEY-----" style="font-family:monospace;font-size:11px"></textarea></details>
+    <details style="margin-top:6px"><summary class="mut">Ya tengo mi propia clave privada (opcional)</summary><textarea data-nomayus id="c-clave" rows="4" placeholder="-----BEGIN PRIVATE KEY-----" style="font-family:monospace;font-size:11px"></textarea></details>
     <div class="row" style="margin-top:12px"><button class="btn pri" id="c-ok">Guardar certificado</button><button class="btn" id="c-no">Cerrar</button></div>`);
   const q = s => m.querySelector(s), err = t => { const e = q('#c-err'); e.textContent = t; e.style.display = t ? 'block' : 'none'; };
   q('#c-no').onclick = () => { cerrar(); location.reload(); };
@@ -79,10 +79,10 @@ function mailConfig() {
     </div>
     <p class="mut" style="font-size:13px" id="ml-ayuda"></p>
     <div id="ml-srv" style="display:none"><div class="grid">
-      <div><label>Servidor (SMTP) *</label><input id="ml-host" value="${esc(c0.mail_host)}" placeholder="smtp.tudominio.com"></div>
+      <div><label>Servidor (SMTP) *</label><input data-nomayus id="ml-host" value="${esc(c0.mail_host)}" placeholder="smtp.tudominio.com"></div>
       <div><label>Puerto *</label><input id="ml-port" inputmode="numeric" value="${esc(c0.mail_port || '465')}"></div>
       <div><label>Seguridad</label><select id="ml-seg"><option value="ssl" ${c0.mail_seg === 'ssl' ? 'selected' : ''}>SSL (puerto 465)</option><option value="starttls" ${c0.mail_seg === 'starttls' ? 'selected' : ''}>STARTTLS (puerto 587)</option><option value="ninguna" ${c0.mail_seg === 'ninguna' ? 'selected' : ''}>Ninguna</option></select></div>
-      <div><label>Usuario</label><input id="ml-user" value="${esc(c0.mail_user)}" autocomplete="off" placeholder="si es distinto del mail"></div>
+      <div><label>Usuario</label><input data-nomayus id="ml-user" value="${esc(c0.mail_user)}" autocomplete="off" placeholder="si es distinto del mail"></div>
     </div></div>
     <div class="row" style="margin-top:12px"><button class="btn pri" id="ml-ok">Guardar</button><button class="btn" id="ml-no">Cancelar</button></div>`);
   const q = s => m.querySelector(s);

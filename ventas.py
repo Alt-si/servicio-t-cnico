@@ -50,7 +50,7 @@ def validar_cheque(d):
     """(datos limpios, mensaje de error). Los cinco datos son obligatorios."""
     import re
     d = d or {}
-    limpio = {"emision": (d.get("emision") or "").strip()[:10], "cobro": (d.get("cobro") or "").strip()[:10], "numero": " ".join(str(d.get("numero") or "").split())[:40],
+    limpio = {"emision": (d.get("emision") or "").strip()[:10], "cobro": (d.get("cobro") or "").strip()[:10], "numero": " ".join(str(d.get("numero") or "").upper().split())[:40],
               "banco": " ".join(str(d.get("banco") or "").split()).upper()[:60], "entrega": " ".join(str(d.get("entrega") or "").split()).upper()[:80]}
     for k in ("emision", "cobro"):
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", limpio[k]):

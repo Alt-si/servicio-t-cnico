@@ -99,7 +99,7 @@ header.top{box-shadow:0 2px 6px rgba(0,0,0,.3)}
 details[open]>.resumen-hist::before{transform:rotate(90deg)}
 details[open]>.resumen-hist{padding-bottom:8px;border-bottom:1.5px solid var(--bd)}
 
-html[data-texto=mayusculas] .mayus{text-transform:uppercase}
+html[data-texto=mayusculas] .mayus,html[data-texto=mayusculas] input:not([type]):not([data-nomayus]):not([inputmode]),html[data-texto=mayusculas] input[type=text]:not([data-nomayus]):not([inputmode]),html[data-texto=mayusculas] textarea:not([data-nomayus]){text-transform:uppercase}
 html[data-texto=minusculas] .mayus{text-transform:lowercase}
 
 /* etiquetas y encabezados más legibles (sin superar a los títulos) */

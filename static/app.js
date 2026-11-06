@@ -163,10 +163,19 @@ document.addEventListener('paste', e => {        // al pegar "1500.50" (punto de
   if (/^\d+\.\d{1,2}$/.test(t)) { e.preventDefault(); el.setRangeText(t.replace('.', ','), el.selectionStart, el.selectionEnd, 'end'); aplicarMoneda(el); el.dispatchEvent(new Event('input', {bubbles: true})); }
 });
 
-// ----- Escritura automática de los datos según Configuración (campos con clase "mayus")
+// ----- Escritura automática de los datos según Configuración: vale para TODOS los campos de texto del sistema
+//       (salvo mail, clave, teléfono, números, fechas, solo-lectura y los marcados data-nomayus)
+function campoDeTexto(el) {
+  if (!el || !el.matches) return false;
+  if (el.classList.contains('mayus')) return true;
+  if (!el.matches('input,textarea') || el.readOnly || el.disabled || el.closest('[data-nomayus]')) return false;
+  if (el.tagName === 'INPUT' && !['text', 'search', ''].includes((el.getAttribute('type') || '').toLowerCase())) return false;
+  if (el.classList.contains('moneda') || ['numeric', 'decimal', 'tel', 'email', 'url'].includes(el.inputMode)) return false;
+  return true;
+}
 document.addEventListener('input', e => {
   const el = e.target, modo = window.MODO_TEXTO;
-  if (!el.classList?.contains('mayus') || e.isComposing || (modo !== 'mayusculas' && modo !== 'minusculas')) return;
+  if (e.isComposing || (modo !== 'mayusculas' && modo !== 'minusculas') || !campoDeTexto(el)) return;
   const a = el.selectionStart, b = el.selectionEnd, nuevo = modo === 'mayusculas' ? el.value.toUpperCase() : el.value.toLowerCase();
   if (nuevo !== el.value) { el.value = nuevo; try { el.setSelectionRange(a, b); } catch (x) {} }
 });

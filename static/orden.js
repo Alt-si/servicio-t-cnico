@@ -296,9 +296,11 @@ function preguntarCobro() {
       ${(ORDEN.monto || ORDEN.rep_total) ? `<div class="mut" style="margin:4px 0 8px;line-height:1.6">${ORDEN.monto ? `Total del trabajo: <b>${esc(fmt(ORDEN.monto))}</b>` : ''}${ORDEN.rep_total ? `<br>Repuestos y accesorios: <b>+ ${esc(fmt(ORDEN.rep_total))}</b>` : ''}${ORDEN.sena ? `<br>Seña entregada: <b>− ${esc(fmt(ORDEN.sena))}</b>` : ''}<br>Saldo a cobrar: <b>${esc(fmt(saldo))}</b></div>` : ''}
       <label>Forma de pago</label>
       <select id="c-forma">${formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>
+      ${f2Html(formas)}
       <p class="mut" style="font-size:13px;margin:4px 0">Las formas de pago y cuentas se editan en <a href="/configuracion#formas-pago" target="_blank">Configuración → Formas de pago</a>.</p>
       <div class="row" style="margin-top:12px"><button class="btn pri" id="c-ok">Registrar cobro</button><button class="btn" id="c-sin">No abona nada</button><button class="btn" id="c-no">Cancelar</button></div>`);
     if ($('#c-monto', c).value) aplicarMoneda($('#c-monto', c));
+    f2Bind(c, () => num($('#c-monto', c).value), $('#c-monto', c));
     $('#c-no', c).onclick = () => { cerrar(); res(null); };
     $('#c-sin', c).onclick = () => { cerrar(); res({}); };
     $('#c-ok', c).onclick = () => {
@@ -306,9 +308,15 @@ function preguntarCobro() {
       if (!m || !num(m)) { const e = $('#c-err', c); e.textContent = 'Escribí el importe, o tocá «No abona nada».'; e.style.display = 'block'; return; }
       if (!formas.length) { const e = $('#c-err', c); e.textContent = 'Primero cargá una forma de pago en Configuración → Formas de pago.'; e.style.display = 'block'; return; }
       const fid = parseInt($('#c-forma', c).value), f = formas.find(x => x.id === fid) || {};
+      const datos = {monto: m, forma_id: fid};
+      const e2 = f2Aplicar(c, datos, num(m), fid);
+      if (e2) { const e = $('#c-err', c); e.textContent = e2; e.style.display = 'block'; return; }
       cerrar();
-      if (f.cheque) pedirCheque(fmt(num(m)), ORDEN.cliente_nombre).then(ch => res(ch ? {monto: m, forma_id: fid, cheque: ch} : null));
-      else res({monto: m, forma_id: fid});
+      (async () => {
+        if (f.cheque) { datos.cheque = await pedirCheque(fmt(num(datos.monto)), ORDEN.cliente_nombre); if (!datos.cheque) return res(null); }
+        if (!await f2Cheque(datos, formas, ORDEN.cliente_nombre)) return res(null);
+        res(datos);
+      })();
     };
   });
 }

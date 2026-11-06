@@ -70,8 +70,9 @@ tr.rec-vencido{background:#dc2626;color:#fff}tr.rec-hoy{background:#f97316;color
 .menu-ord summary::-webkit-details-marker{display:none}
 .menu-ord summary.act{background:rgba(255,255,255,.35);font-weight:600}
 .menu-ord .desplegable{position:absolute;top:100%;left:0;margin-top:4px;min-width:230px;background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.25);padding:6px;z-index:40}
-header.top nav .menu-ord .desplegable a{display:block;white-space:nowrap;background:none;color:var(--tx);border-radius:4px;padding:8px 10px}
-header.top nav .menu-ord .desplegable a:hover{background:var(--bg)}
+header.top nav .menu-ord .desplegable a{display:block;white-space:nowrap;background:rgba(128,128,128,.18);border:1px solid rgba(128,128,128,.28);box-shadow:0 1px 2px rgba(0,0,0,.18);color:var(--tx);border-radius:6px;padding:8px 10px;margin-bottom:4px}
+header.top nav .menu-ord .desplegable a:hover{background:rgba(128,128,128,.32)}
+header.top nav .menu-ord .desplegable a:last-child{margin-bottom:0}
 .menu-ord hr{border:0;border-top:1px solid var(--bd);margin:4px 0}
 
 /* divisiones más marcadas y botones con sombra */

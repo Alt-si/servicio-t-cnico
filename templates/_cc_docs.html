@@ -5,12 +5,38 @@
 .cc-tabla td.obs{max-width:170px;white-space:normal;word-break:break-word}
 .cc-tabla td.acc{white-space:normal;min-width:84px;text-align:right}
 .cc-tabla td.acc .btn{display:block;width:100%;margin:0 0 4px;padding:3px 8px;font-size:12px}
+.cc-menu{position:relative}
+.cc-menu summary{list-style:none;cursor:pointer;display:inline-block;white-space:nowrap}
+.cc-menu summary::-webkit-details-marker{display:none}
+.cc-menu .cc-car{font-size:11px;color:var(--mut)}
+.cc-op{display:none;position:fixed;z-index:60;min-width:150px;background:var(--card);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.28);padding:6px}
+.cc-menu[open] .cc-op{display:block}
+.cc-op a,.cc-op button{display:block;width:100%;box-sizing:border-box;text-align:left;margin:0 0 4px;padding:8px 12px;font:inherit;font-size:13px;color:var(--tx);text-decoration:none;cursor:pointer;
+  background:rgba(128,128,128,.18);border:1px solid rgba(128,128,128,.28);border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.cc-op a:last-child,.cc-op button:last-child{margin-bottom:0}
+.cc-op a:hover,.cc-op button:hover{background:rgba(128,128,128,.32)}
 </style>
-  <div class="tabla-wrap cc-tabla"><table><thead><tr><th>Estado</th><th>Emisión</th><th>Vencimiento</th><th>{{ T[4] }}</th><th>N° de factura</th><th style="text-align:right">Total</th><th style="text-align:right">{{ T[2] }}</th><th style="text-align:right">Saldo</th><th>Atraso</th><th>Qué retiró / servicio</th><th></th></tr></thead><tbody class="clientes">
+  <div class="tabla-wrap cc-tabla"><table><thead><tr><th>Estado</th><th>Emisión</th><th>Vencimiento</th><th>{{ T[4] }}</th><th>N° de factura</th><th style="text-align:right">Total</th><th style="text-align:right">{{ T[2] }}</th><th style="text-align:right">Saldo</th><th>Atraso</th><th>Qué retiró / servicio</th></tr></thead><tbody class="clientes">
   {% for f in filas %}<tr class="{{ 'st-inactivo' if f.estado == 'pagado' }}">
-    <td>{% if f.estado == 'vencido' %}<span class="pill" style="background:#b91c1c;color:#fff">Vencido</span>{% elif f.estado == 'sinfacturar' %}<span class="pill" style="background:#6b7280;color:#fff">Sin facturar</span>{% elif f.estado == 'pagado' %}<span class="pill" style="background:#15803d;color:#fff">{{ T[3] }}</span>{% else %}<span class="pill" style="background:#b45309;color:#fff">{{ T[1] }}</span>{% endif %}</td>
+    <td class="est"><details class="cc-menu"><summary title="Tocá para ver las opciones">{% if f.estado == 'vencido' %}<span class="pill"  style="background:#b91c1c;color:#fff">Vencido</span>{% elif f.estado == 'sinfacturar' %}<span class="pill"  style="background:#6b7280;color:#fff">Sin facturar</span>{% elif f.estado == 'pagado' %}<span class="pill"  style="background:#15803d;color:#fff">{{ T[3] }}</span>{% else %}<span class="pill"  style="background:#b45309;color:#fff">{{ T[1] }}</span>{% endif %} <span class="cc-car">▾</span></summary><div class="cc-op">{% if f.estado == 'sinfacturar' %}<button type="button" onclick="ccFactura({{ f.id }}, '{{ tipo }}')">Cargar factura</button> {% elif f.estado != 'pagado' %}{% if f.sin_factura %}{% if tipo == 'cliente' and 'facturacion' in g.modulos %}<a href="{{ url_for('cc_facturar', did=f.id) }}" title="El cliente pidió la factura">Facturar</a> {% else %}<button type="button" onclick="ccFactura({{ f.id }}, '{{ tipo }}')" title="El cliente pidió la factura">Poner factura</button> {% endif %}{% endif %}<button type="button" onclick="ccPago({{ f.id }}, '{{ tipo }}')">{{ 'Cobrar' if tipo == 'cliente' else 'Pagar' }}</button> {% endif %}<button type="button" onclick="ccVer({{ f.id }}, '{{ tipo }}')">Detalle</button></div></details></td>
     <td>{{ fmt_fecha(f.emision) }}</td><td>{{ fmt_fecha(f.vence) }}</td><td>{% if enlace_ficha %}<a href="{{ url_for('cuenta_corriente_ficha', t=tipo, n=f.persona) }}">{{ f.persona }}</a>{% else %}{{ f.persona }}{% endif %}</td><td>{% if f.numero %}{{ f.numero }}{% elif f.sin_factura %}<span class="mut">SIN FACTURA</span>{% endif %}</td>
     <td style="text-align:right">$ {{ f.total|monto_input }}</td><td style="text-align:right">$ {{ f.pagado|monto_input or '0' }}</td><td style="text-align:right"><b>$ {{ f.saldo|monto_input or '0' }}</b></td>
-    <td>{{ (f.atraso ~ ' días') if f.atraso else '' }}</td><td class="obs">{{ f.obs or '' }}</td>
-    <td class="acc">{% if f.estado == 'sinfacturar' %}<button class="btn ok" onclick="ccFactura({{ f.id }}, '{{ tipo }}')">Cargar factura</button> {% elif f.estado != 'pagado' %}{% if f.sin_factura %}{% if tipo == 'cliente' and 'facturacion' in g.modulos %}<a class="btn ok" href="{{ url_for('cc_facturar', did=f.id) }}" title="El cliente pidió la factura">Facturar</a> {% else %}<button class="btn" onclick="ccFactura({{ f.id }}, '{{ tipo }}')" title="El cliente pidió la factura">Poner factura</button> {% endif %}{% endif %}<button class="btn ok" onclick="ccPago({{ f.id }}, '{{ tipo }}')">{{ 'Cobrar' if tipo == 'cliente' else 'Pagar' }}</button> {% endif %}<button class="btn" onclick="ccVer({{ f.id }}, '{{ tipo }}')">Detalle</button></td></tr>
-  {% else %}<tr><td colspan="11" class="mut">No hay registros para mostrar.</td></tr>{% endfor %}</tbody></table></div>
+    <td>{{ (f.atraso ~ ' días') if f.atraso else '' }}</td><td class="obs">{{ f.obs or '' }}</td></tr>
+  {% else %}<tr><td colspan="10" class="mut">No hay registros para mostrar.</td></tr>{% endfor %}</tbody></table></div>
+
+<script>
+(function () {
+  if (window.__ccMenu) return; window.__ccMenu = true;
+  // El menú del estado se muestra flotando (la tabla tiene scroll y lo recortaría)
+  document.addEventListener('toggle', e => {
+    const d = e.target; if (!d.classList || !d.classList.contains('cc-menu') || !d.open) return;
+    document.querySelectorAll('.cc-menu[open]').forEach(o => { if (o !== d) o.open = false; });
+    const r = d.querySelector('summary').getBoundingClientRect(), op = d.querySelector('.cc-op');
+    op.style.left = Math.max(8, Math.min(r.left, innerWidth - 190)) + 'px';
+    const alto = op.offsetHeight || 140;
+    op.style.top = (r.bottom + alto + 8 > innerHeight ? Math.max(8, r.top - alto - 4) : r.bottom + 4) + 'px';
+  }, true);
+  document.addEventListener('click', e => { document.querySelectorAll('.cc-menu[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.cc-op a, .cc-op button')) d.open = false; }); });
+  addEventListener('scroll', () => document.querySelectorAll('.cc-menu[open]').forEach(d => d.open = false), true);
+})();
+</script>

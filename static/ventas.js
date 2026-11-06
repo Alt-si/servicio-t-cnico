@@ -2,7 +2,7 @@
 const $v = s => document.querySelector(s);
 const money = v => '$ ' + Number(v || 0).toLocaleString('es-AR', {maximumFractionDigits: 2});
 const numAr = s => { s = String(s ?? '').trim(); if (!s) return null; const v = parseFloat(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s.replace(/\./g, '')); return isNaN(v) ? null : v; };
-let carrito = [], forma = null;
+let carrito = [], forma = null, FORMAS_V = [];
 
 function precioItem(it) {
   if (it.manual) return it.precioManual;
@@ -29,6 +29,7 @@ function dibujar() {
   $v('#v-total').textContent = money(t);
   $v('#v-desc').textContent = ahorro > 0 ? `Incluye descuento por ${forma.nombre.toLowerCase()}: −${money(ahorro)}` : '';
   $v('#v-ok').disabled = !carrito.length || !forma || sinPrecio;
+  const mo2 = document.querySelector('.f2-monto'); if (mo2) mo2.dispatchEvent(new Event('input'));
   vuelto();
 }
 function vuelto() {
@@ -72,13 +73,18 @@ if ($v('#v-scan')) {
     $v('#v-efectivo').style.display = forma.nombre.toLowerCase().startsWith('efectivo') ? 'block' : 'none';
     dibujar();
   });
+  FORMAS_V = [...document.querySelectorAll('.v-forma')].map(b => ({id: +b.dataset.id, nombre: b.dataset.nombre, cheque: b.dataset.cheque === '1'}));
+  $v('#v-f2').innerHTML = f2Html(FORMAS_V); f2Bind($v('#v-f2'), () => totales().t);
   $v('#v-recibido').addEventListener('input', vuelto);
   $v('#v-limpiar').onclick = () => { carrito = []; dibujar(); $v('#v-scan').focus(); };
   $v('#v-ok').onclick = async () => {
     const err = $v('#v-err'); err.style.display = 'none';
     let cheque = null;
-    if (forma.cheque) { cheque = await pedirCheque(document.querySelector('#v-total')?.textContent || '', ''); if (!cheque) return; }
-    const j = await api('/api/ventas/confirmar', {forma_id: forma.id, cheque, recibido: $v('#v-efectivo').style.display === 'block' ? $v('#v-recibido').value : '',
+    const extra = {}, e2 = f2Aplicar($v('#v-f2'), extra, totales().t, forma.id);
+    if (e2) { err.textContent = e2; err.style.display = 'block'; return; }
+    if (forma.cheque) { cheque = await pedirCheque(extra.monto ? money(extra.monto) : (document.querySelector('#v-total')?.textContent || ''), ''); if (!cheque) return; }
+    if (!await f2Cheque(extra, FORMAS_V, '')) return;
+    const j = await api('/api/ventas/confirmar', {forma_id: forma.id, cheque, extra: extra.extra, recibido: ($v('#v-efectivo').style.display === 'block' && !extra.extra) ? $v('#v-recibido').value : '',
       items: carrito.map(it => ({id: it.id, cantidad: String(it.cant).replace('.', ','), manual: it.manual, precio: it.manual ? String(it.precioManual).replace('.', ',') : ''}))});
     if (!j.ok) { err.textContent = j.error; err.style.display = 'block'; return; }
     carrito = []; $v('#v-recibido').value = ''; dibujar();
@@ -93,7 +99,7 @@ async function ventaDetalle(id) {
   const j = await api('/api/ventas/' + id);
   if (!j.ok) return aviso(j.error);
   const v = j.venta;
-  const c = modal(`<h2>Venta N° ${v.id}${v.anulada ? ' (ANULADA)' : ''}</h2><div class="mut">${esc(j.fecha_txt)} · ${esc(v.forma || '')}</div>
+  const c = modal(`<h2>Venta N° ${v.id}${v.anulada ? ' (ANULADA)' : ''}</h2><div class="mut">${esc(j.fecha_txt)} · ${(j.pagos || []).length ? j.pagos.map(p => esc(p.forma) + ' ' + money(p.monto)).join(' + ') : esc(v.forma || '')}</div>
     <table style="margin-top:8px"><tbody>${j.items.map(i => `<tr><td>${esc(i.nombre)}${i.descuento_pct ? ` <span class="mut">(−${i.descuento_pct}%)</span>` : ''}</td><td>${esc(i.cant_txt)} ${esc(i.abrev || '')}</td><td style="text-align:right">${money(i.precio_unit)}</td><td style="text-align:right"><b>${money(i.subtotal)}</b></td></tr>`).join('')}</tbody></table>
     <p style="text-align:right;font-size:18px"><b>Total ${money(v.total)}</b>${v.recibido ? `<br><span class="mut" style="font-size:13px">Recibido ${money(v.recibido)} · Vuelto ${money(v.vuelto)}</span>` : ''}</p>
     <div class="row">${v.anulada ? '' : '<button class="btn bad" id="vd-anular">Anular venta</button>'}<button class="btn der" id="vd-cerrar">Cerrar</button></div>`);

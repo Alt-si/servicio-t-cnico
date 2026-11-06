@@ -488,6 +488,17 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     cheque, msg = ventas.validar_cheque(d.get("cheque"))
                     if msg:
                         return error(msg)
+            m2, forma2, cheque2, msg = ventas.leer_extra(con, d, forma) if forma else (None, None, None, None)
+            if msg:
+                return error(msg)
+            if forma2:      # dos formas de pago: se registran como dos entregas, cada una con su modo de ingreso
+                m = round(m, 2)
+                eid2 = con.execute("INSERT INTO cc_entregas (tipo, persona, fecha, monto, restante, nota, creado, forma, forma_id) VALUES (?,?,?,?,?,?,?,?,?)",
+                                   (tipo, persona, fecha, m2, m2, U(d.get("nota"))[:200] or None, core.ahora(), forma2["nombre"], forma2["id"])).lastrowid
+                cobro2_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_entrega_id) VALUES (?,?,?,?,?,?,?)",
+                                        (fecha + core.ahora()[10:], None, m2, forma2["id"], forma2["nombre"], persona, eid2)).lastrowid
+                if cheque2:
+                    ventas.guardar_cheque(con, cheque2, forma2["nombre"], m2, "cuenta corriente", cobro_id=cobro2_id)
             eid = con.execute("INSERT INTO cc_entregas (tipo, persona, fecha, monto, restante, nota, creado, forma, forma_id) VALUES (?,?,?,?,?,?,?,?,?)",
                               (tipo, persona, fecha, m, m, U(d.get("nota"))[:200] or None, core.ahora(), forma["nombre"] if forma else None, forma["id"] if forma else None)).lastrowid
             if forma:      # la plata entró: va al Historial de cobros
@@ -598,8 +609,6 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if not (r["numero"] or r["sin_factura"]) or not (r["total"] or 0) > 0:
                 return error("Primero cargá el número de factura (o tildá «sin factura») y el importe.")
             saldo = round(r["total"] - r["pagado"], 2)
-            if m > saldo + 0.004:
-                return error(f"El importe supera el saldo pendiente ({core.fmt_monto(saldo)}).")
             forma = cheque = None
             if "ventas" in g.modulos and r["tipo"] == "cliente":
                 forma = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (d.get("forma_id"),)).fetchone()
@@ -609,6 +618,17 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                     cheque, msg = ventas.validar_cheque(d.get("cheque"))
                     if msg:
                         return error(msg)
+            m2, forma2, cheque2, msg = ventas.leer_extra(con, d, forma) if forma else (None, None, None, None)
+            if msg:
+                return error(msg)
+            if m + (m2 or 0) > saldo + 0.004:
+                return error(f"El importe supera el saldo pendiente ({core.fmt_monto(saldo)}).")
+            if forma2:      # dos formas de pago: dos pagos, cada uno con su cobro
+                pid2 = con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota) VALUES (?,?,?,?)", (did, fecha, m2, U(d.get("nota"))[:200] or None)).lastrowid
+                cobro2_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_pago_id) VALUES (?,?,?,?,?,?,?)",
+                                        (fecha + core.ahora()[10:], None, m2, forma2["id"], forma2["nombre"], r["persona"], pid2)).lastrowid
+                if cheque2:
+                    ventas.guardar_cheque(con, cheque2, forma2["nombre"], m2, "cuenta corriente", cobro_id=cobro2_id)
             pid = con.execute("INSERT INTO cc_pagos (doc_id, fecha, monto, nota) VALUES (?,?,?,?)", (did, fecha, m, U(d.get("nota"))[:200] or None)).lastrowid
             if forma:      # recién ahora, que el cobro se realizó, entra al Historial de cobros
                 cobro_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma, nota, cc_pago_id) VALUES (?,?,?,?,?,?,?)",

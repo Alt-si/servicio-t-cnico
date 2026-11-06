@@ -17,6 +17,9 @@ def crear_tablas(con):
             descuento_pct REAL, subtotal REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS cobros (
             id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, orden_id INTEGER, monto REAL NOT NULL, forma_id INTEGER, forma TEXT, nota TEXT);
+        CREATE TABLE IF NOT EXISTS venta_pagos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, venta_id INTEGER NOT NULL, forma_id INTEGER, forma TEXT, monto REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS ix_venta_pagos_venta ON venta_pagos(venta_id);
         CREATE TABLE IF NOT EXISTS cheques (
             id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, origen TEXT, orden_id INTEGER, venta_id INTEGER, forma TEXT, monto REAL NOT NULL,
             emision TEXT, cobro TEXT, numero TEXT, banco TEXT, entrega TEXT, cobrado INTEGER NOT NULL DEFAULT 0, cobrado_fecha TEXT);
@@ -60,6 +63,30 @@ def validar_cheque(d):
     if not limpio["numero"] or not limpio["banco"] or not limpio["entrega"]:
         return None, "Completá el número, el banco y quién entrega el cheque."
     return limpio, None
+
+
+def leer_extra(con, d, forma1):
+    """Segunda forma de pago para unir dos métodos en un mismo pago: (monto, forma, cheque, error). Sin extra devuelve (None, None, None, None)."""
+    ex = d.get("extra")
+    if not ex:
+        return None, None, None, None
+    try:
+        m = core.parse_monto(ex.get("monto"))
+    except (ValueError, AttributeError):
+        m = None
+    if not m or m <= 0:
+        return None, None, None, "Escribí el importe de la segunda forma de pago."
+    f2 = con.execute("SELECT * FROM stock_formas_pago WHERE id=?", (ex.get("forma_id"),)).fetchone()
+    if not f2:
+        return None, None, None, "Elegí la segunda forma de pago."
+    if forma1 and f2["id"] == forma1["id"]:
+        return None, None, None, "Para unir dos pagos, elegí dos formas de pago distintas."
+    ch = None
+    if f2["pide_cheque"]:
+        ch, msg = validar_cheque(ex.get("cheque"))
+        if msg:
+            return None, None, None, msg
+    return m, f2, ch, None
 
 
 def guardar_cheque(con, datos, forma, monto, origen, orden_id=None, venta_id=None, cobro_id=None):
@@ -174,9 +201,22 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 cheque, msg = validar_cheque(d.get("cheque"))
                 if msg:
                     return error(msg)
+            m2, forma2, cheque2, msg = leer_extra(con, d, forma)
+            if msg:
+                return error(msg)
+            m1 = total
+            if forma2:      # dos formas de pago: la segunda cubre parte del total y la principal el resto
+                if m2 >= total - 0.004:
+                    return error("El importe de la segunda forma de pago tiene que ser menor al total.")
+                m1 = round(total - m2, 2)
+                recibido = vuelto = None
             ahora = core.ahora()
+            etiqueta = f"{forma['nombre']} + {forma2['nombre']}" if forma2 else forma["nombre"]
             vid = con.execute("INSERT INTO ventas (fecha, total, forma_id, forma, recibido, vuelto, nota) VALUES (?,?,?,?,?,?,?)",
-                              (ahora, total, forma["id"], forma["nombre"], recibido, vuelto, (d.get("nota") or "").strip() or None)).lastrowid
+                              (ahora, total, forma["id"], etiqueta, recibido, vuelto, (d.get("nota") or "").strip() or None)).lastrowid
+            if forma2:
+                con.execute("INSERT INTO venta_pagos (venta_id, forma_id, forma, monto) VALUES (?,?,?,?)", (vid, forma["id"], forma["nombre"], m1))
+                con.execute("INSERT INTO venta_pagos (venta_id, forma_id, forma, monto) VALUES (?,?,?,?)", (vid, forma2["id"], forma2["nombre"], m2))
             for p, cant, unit, desc, sub in lineas:
                 con.execute("INSERT INTO venta_items (venta_id, producto_id, codigo, nombre, abrev, decimales, cantidad, precio_unit, descuento_pct, subtotal) "
                             "VALUES (?,?,?,?,?,?,?,?,?,?)", (vid, p["id"], p["codigo"] or p["codigo_barras"], p["nombre"], p["abrev"], p["decimales"], cant, unit, desc, sub))
@@ -185,7 +225,9 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 con.execute("INSERT INTO stock_movimientos (producto_id, fecha, tipo, cantidad, stock_resultante, motivo) VALUES (?,?,?,?,?,?)",
                             (p["id"], ahora, "egreso", -cant, nuevo, f"Venta N° {vid}"))
             if cheque:
-                guardar_cheque(con, cheque, forma["nombre"], total, "venta", venta_id=vid)
+                guardar_cheque(con, cheque, forma["nombre"], m1, "venta", venta_id=vid)
+            if cheque2:
+                guardar_cheque(con, cheque2, forma2["nombre"], m2, "venta", venta_id=vid)
         return jsonify(ok=True, id=vid, total=total, vuelto=vuelto)
 
     @app.route("/ventas/historial")
@@ -199,9 +241,14 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             filas = con.execute("SELECT v.*, (SELECT COUNT(*) FROM venta_items i WHERE i.venta_id=v.id) AS n FROM ventas v "
                                 "WHERE substr(v.fecha,1,10) BETWEEN ? AND ? ORDER BY v.id DESC LIMIT 500", (desde, hasta)).fetchall()
         por_forma, total = {}, 0.0
+        with db() as con:
+            partes = {}
+            for p in con.execute("SELECT venta_id, forma, monto FROM venta_pagos WHERE venta_id IN (%s)" % (",".join(str(v["id"]) for v in filas) or "0")):
+                partes.setdefault(p["venta_id"], []).append((p["forma"] or "—", p["monto"]))
         for v in filas:
             if not v["anulada"]:
-                por_forma[v["forma"] or "—"] = por_forma.get(v["forma"] or "—", 0) + v["total"]
+                for f, m in partes.get(v["id"]) or [(v["forma"] or "—", v["total"])]:      # una venta con dos formas de pago reparte su total entre ambas
+                    por_forma[f] = por_forma.get(f, 0) + m
                 total += v["total"]
         return render_template("ventas/historial.html", filas=filas, desde=desde, hasta=hasta, por_forma=sorted(por_forma.items()),
                                total=total, cantidad=sum(1 for v in filas if not v["anulada"]), fmt_fecha=core.fmt_fecha)
@@ -346,14 +393,18 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
             ant = (d1 - timedelta(days=1)).replace(day=1)
         a, b = d1.isoformat(), d2.isoformat()
         with db() as con:
-            vts = con.execute("SELECT substr(fecha,1,10) AS dia, COALESCE(forma,'—') AS forma, SUM(total) AS t, COUNT(*) AS n FROM ventas "
-                              "WHERE anulada=0 AND substr(fecha,1,10) BETWEEN ? AND ? GROUP BY dia, forma", (a, b)).fetchall()
+            vts = con.execute("SELECT dia, forma, SUM(t) AS t, COUNT(*) AS n FROM ("
+                              "SELECT substr(fecha,1,10) AS dia, COALESCE(forma,'—') AS forma, total AS t FROM ventas WHERE anulada=0 AND substr(fecha,1,10) BETWEEN ? AND ? "
+                              "AND id NOT IN (SELECT venta_id FROM venta_pagos) "
+                              "UNION ALL SELECT substr(v.fecha,1,10), p.forma, p.monto FROM venta_pagos p JOIN ventas v ON v.id=p.venta_id "
+                              "WHERE v.anulada=0 AND substr(v.fecha,1,10) BETWEEN ? AND ?) GROUP BY dia, forma", (a, b, a, b)).fetchall()
             cbs = con.execute("SELECT substr(fecha,1,10) AS dia, COALESCE(forma,'—') AS forma, SUM(monto) AS t, COUNT(*) AS n FROM cobros "
                               "WHERE substr(fecha,1,10) BETWEEN ? AND ? GROUP BY dia, forma", (a, b)).fetchall()
             movs = []
             if modo == "dia":
-                movs = [dict(hora=r["fecha"][11:16], origen="Venta N° %d" % r["id"], forma=r["forma"] or "—", monto=r["total"]) for r in
-                        con.execute("SELECT id, fecha, forma, total FROM ventas WHERE anulada=0 AND substr(fecha,1,10)=? ORDER BY id", (a,))]
+                movs = [dict(hora=r["fecha"][11:16], origen="Venta N° %d" % r["id"], forma=r["forma"] or "—", monto=r["monto"]) for r in
+                        con.execute("SELECT v.id, v.fecha, COALESCE(p.forma, v.forma) AS forma, COALESCE(p.monto, v.total) AS monto FROM ventas v LEFT JOIN venta_pagos p ON p.venta_id=v.id "
+                                    "WHERE v.anulada=0 AND substr(v.fecha,1,10)=? ORDER BY v.id, p.id", (a,))]
                 movs += [dict(hora=r["fecha"][11:16], origen=("Cuenta corriente · %s" % (r["nota"] or "")) if (r["cc_pago_id"] or r["cc_entrega_id"]) else "Orden N° %04d · %s" % (r["orden_id"] or 0, r["cliente"] or ""), forma=r["forma"] or "—", monto=r["monto"], orden=r["orden_id"], cobro=None if r["cc_entrega_id"] else r["id"]) for r in
                          con.execute("SELECT c.id, c.fecha, c.orden_id, c.forma, c.monto, c.nota, c.cc_pago_id, c.cc_entrega_id, (SELECT cl.nombre || ' ' || cl.apellido FROM ordenes o JOIN clientes cl ON cl.id=o.cliente_id "
                                      "WHERE o.id=c.orden_id) AS cliente FROM cobros c WHERE substr(c.fecha,1,10)=? ORDER BY c.id", (a,))]
@@ -393,7 +444,8 @@ def registrar(app, login_requerido, modulo_requerido, db, error):
                 abort(404)
             its = [dict(r, cant_txt=fmt_cant(r["cantidad"], r["decimales"])) for r in
                    con.execute("SELECT * FROM venta_items WHERE venta_id=? ORDER BY id", (vid,))]
-        return jsonify(ok=True, venta=dict(v), items=its, fecha_txt=core.fmt_fecha(v["fecha"], True))
+            pagos = [dict(r) for r in con.execute("SELECT forma, monto FROM venta_pagos WHERE venta_id=? ORDER BY id", (vid,))]
+        return jsonify(ok=True, venta=dict(v), items=its, pagos=pagos, fecha_txt=core.fmt_fecha(v["fecha"], True))
 
     @app.route("/api/ventas/<int:vid>/anular", methods=["POST"])
     @login_requerido

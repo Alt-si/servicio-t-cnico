@@ -220,3 +220,50 @@ async function revisarRespaldo() {
   mostrar();
 }
 revisarRespaldo();
+
+// ----- Unir dos formas de pago en un mismo pago (cobro de orden, venta, cuenta corriente)
+// Se escribe el importe TOTAL; lo que se carga en la segunda forma se descuenta de la primera.
+const f2Num = t => { t = String(t ?? '').replace(/[$\s]/g, ''); if (!t) return null; t = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t.replace(/\./g, ''); const n = Number(t); return isNaN(n) ? null : n; };
+function f2Html(formas) {
+  if ((formas || []).length < 2) return '';
+  return `<div class="f2"><a href="#" class="f2-link">＋ Unir otra forma de pago</a>
+    <div class="f2-box" style="display:none;margin-top:6px;padding:8px 10px;border:1px dashed var(--bd);border-radius:6px">
+      <label style="margin-top:0">Segunda forma de pago</label>
+      <select class="f2-forma">${formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>
+      <label>Importe con esta forma ($)</label><input class="f2-monto moneda" inputmode="decimal" autocomplete="off">
+      <div class="mut f2-info" style="margin-top:4px;font-size:13px"></div>
+      <a href="#" class="f2-quitar" style="font-size:13px">Quitar la segunda forma</a>
+    </div></div>`;
+}
+// totalFn: devuelve el importe total (número) para mostrar cuánto queda en la primera forma; totalEl: campo del total (opcional)
+function f2Bind(c, totalFn, totalEl) {
+  const L = c.querySelector('.f2-link'); if (!L) return;
+  const box = c.querySelector('.f2-box'), mo = c.querySelector('.f2-monto'), info = c.querySelector('.f2-info');
+  const calc = () => {
+    const t = totalFn(), m2 = f2Num(mo.value);
+    info.textContent = (t && m2) ? `Con la primera forma queda: $ ${Math.max(t - m2, 0).toLocaleString('es-AR', {maximumFractionDigits: 2})}` : '';
+  };
+  L.onclick = e => { e.preventDefault(); box.style.display = 'block'; L.style.display = 'none'; mo.focus(); calc(); };
+  c.querySelector('.f2-quitar').onclick = e => { e.preventDefault(); box.style.display = 'none'; L.style.display = ''; mo.value = ''; info.textContent = ''; };
+  mo.addEventListener('input', () => { aplicarMoneda(mo); calc(); });
+  if (totalEl) totalEl.addEventListener('input', calc);
+}
+// Completa datos con la segunda forma; devuelve un texto de error o null. total = importe total (número).
+function f2Aplicar(c, datos, total, primeraId) {
+  const box = c.querySelector('.f2-box');
+  if (!box || box.style.display === 'none') return null;
+  const m2 = f2Num(c.querySelector('.f2-monto').value), fid = c.querySelector('.f2-forma').value;
+  if (!m2 || m2 <= 0) return 'Escribí el importe de la segunda forma de pago, o quitala.';
+  if (String(fid) === String(primeraId)) return 'Para unir dos pagos, elegí dos formas de pago distintas.';
+  if (total !== null && m2 >= total - 0.004) return 'El importe de la segunda forma tiene que ser menor al total.';
+  datos.extra = {monto: String(Math.round(m2 * 100) / 100), forma_id: fid};
+  if (total !== null) datos.monto = String(Math.round((total - m2) * 100) / 100);
+  return null;
+}
+// Pide los datos del cheque de la segunda forma si corresponde; false si se cancela
+async function f2Cheque(datos, formas, quien) {
+  if (!datos.extra) return true;
+  const f = (formas || []).find(x => x.id == datos.extra.forma_id);
+  if (f && f.cheque) { datos.extra.cheque = await pedirCheque(datos.extra.monto, quien); if (!datos.extra.cheque) return false; }
+  return true;
+}

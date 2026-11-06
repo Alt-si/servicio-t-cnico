@@ -18,6 +18,7 @@
     <div id="v-formas" class="v-formas">
       {% for f in formas %}<button type="button" class="btn v-forma" data-id="{{ f.id }}" data-nombre="{{ f.nombre }}" data-desc="{{ f.aplica_descuento }}" data-cheque="{{ f.pide_cheque }}">{{ f.nombre }}</button>{% endfor %}
     </div>
+    <div id="v-f2" style="margin-top:8px"></div>
     <div id="v-efectivo" style="display:none;margin-top:10px">
       <label>Recibido ($)</label><input id="v-recibido" class="moneda" inputmode="decimal" autocomplete="off">
       <div class="mut" style="margin-top:6px">Vuelto: <b id="v-vuelto" style="font-size:18px">$ 0</b></div>

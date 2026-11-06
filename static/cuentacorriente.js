@@ -132,21 +132,26 @@ async function ccPago(id, tipo) {
     <div class="grid"><div><label>Importe ($) *</label><input id="cp-m" class="moneda" inputmode="decimal" value="${ccNum(d.saldo)}"></div>
     <div><label>Fecha</label><input id="cp-f" type="date" value="${CC_HOY}"></div></div>
     ${(j.formas || []).length ? `<label>Forma de pago *</label><select id="cp-forma">${j.formas.map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('')}</select>` : ''}
+    ${f2Html(j.formas)}
     <label>Nota (opcional)</label><input id="cp-n" placeholder="Ej: número de operación…">
     <div class="row" style="margin-top:12px"><button class="btn pri" id="cp-ok">Registrar</button><button class="btn" id="cp-no">Cancelar</button></div>`);
   m.querySelector('#cp-f').addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} });
   m.querySelector('#cp-no').onclick = cerrar;
+  f2Bind(m, () => f2Num(m.querySelector('#cp-m').value), m.querySelector('#cp-m'));
   m.querySelector('#cp-ok').onclick = async () => {
     const monto = m.querySelector('#cp-m').value, fsel = m.querySelector('#cp-forma');
     const datos = {monto, fecha: m.querySelector('#cp-f').value, nota: m.querySelector('#cp-n').value};
     if (fsel) {
+      const e2 = f2Aplicar(m, datos, f2Num(monto), fsel.value);
+      if (e2) { const e = m.querySelector('#cp-err'); e.textContent = e2; e.style.display = 'block'; return; }
       datos.forma_id = fsel.value;
       const f = j.formas.find(x => x.id == fsel.value);
       if (f && f.cheque) {
         cerrar();
-        datos.cheque = await pedirCheque(monto, d.persona);
+        datos.cheque = await pedirCheque(datos.monto, d.persona);
         if (!datos.cheque) return;
       }
+      if (datos.extra && (j.formas.find(x => x.id == datos.extra.forma_id) || {}).cheque) { if (m.isConnected) cerrar(); if (!await f2Cheque(datos, j.formas, d.persona)) return; }
     }
     const r = await api('/api/cc/doc/' + id + '/pago', datos);
     if (!r.ok && !m.isConnected) return aviso(r.error || 'No se pudo registrar.');
@@ -196,7 +201,7 @@ async function ccEntrega(tipo, nombre, prev) {
     <div id="en-info" class="mut" style="margin:4px 0;min-height:20px"></div>
     <div class="grid"><div><label>Importe ($) *</label><input id="en-m" class="moneda" inputmode="decimal" value="${E ? ccNum(E.monto) : ''}"></div>
     <div><label>Fecha</label><input id="en-f" type="date" value="${E ? E.fecha : CC_HOY}"></div></div>
-    <div id="en-fp"></div>
+    <div id="en-fp"></div><div id="en-f2"></div>
     <label>Nota (opcional)</label><input id="en-n" placeholder="Ej: seña por los próximos retiros" value="${esc(E && E.nota || '')}">
     <div class="row" style="margin-top:12px"><button class="btn pri" id="en-ok">${prev ? 'Guardar cambios' : 'Registrar'}</button><button class="btn" id="en-no">Cancelar</button></div>`);
   const q = s => m.querySelector(s);
@@ -209,6 +214,7 @@ async function ccEntrega(tipo, nombre, prev) {
     formas = j.formas || [];
     const actual = q('#en-forma') ? q('#en-forma').value : (E ? E.forma_id : '');
     q('#en-fp').innerHTML = formas.length ? `<label>Modo de ingreso (forma de pago) *</label><select id="en-forma">${formas.map(f => `<option value="${f.id}" ${f.id == actual ? 'selected' : ''}>${esc(f.nombre)}</option>`).join('')}</select>` : '';
+    if (!prev && formas.length && !q('#en-f2').innerHTML) { q('#en-f2').innerHTML = f2Html(formas); f2Bind(m, () => f2Num(q('#en-m').value), q('#en-m')); }
   };
   q('#en-per').addEventListener('change', info); q('#en-f').addEventListener('click', e => { try { e.target.showPicker(); } catch (x) {} });
   q('#en-no').onclick = cerrar;
@@ -220,9 +226,11 @@ async function ccEntrega(tipo, nombre, prev) {
     if (!datos.monto.trim()) return err('Escribí el importe.');
     const fs = q('#en-forma');
     if (fs) {
+      if (!prev) { const e2 = f2Aplicar(m, datos, f2Num(datos.monto), fs.value); if (e2) return err(e2); }
       datos.forma_id = fs.value;
       const f = formas.find(x => x.id == fs.value);
       if (f && f.cheque) { cerrar(); datos.cheque = await pedirCheque(datos.monto, datos.persona, prev && prev.cheque ? prev.cheque : {}); if (!datos.cheque) return; }
+      if (datos.extra && (formas.find(x => x.id == datos.extra.forma_id) || {}).cheque) { if (m.isConnected) cerrar(); if (!await f2Cheque(datos, formas, datos.persona)) return; }
     }
     const r = prev ? await apiCodigo('/api/cc/entrega/' + E.id + '/editar', datos) : await api('/api/cc/entrega', datos);
     if (r.cancelado) return;

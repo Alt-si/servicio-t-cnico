@@ -950,6 +950,9 @@ def api_orden_accion(oid):
                         cheque, msg = ventas.validar_cheque(d.get("cheque"))
                         if msg:
                             return error(msg)
+            m2, forma2, cheque2, msg = ventas.leer_extra(con, d, forma) if cobro > 0 else (None, None, None, None)
+            if msg:
+                return error(msg)
             nombre_ret = quien or (core.nombre_natural(cli) if cli else "")
             cambiar(E_RETIRADO, ", espera_repuesto=0, fecha_retiro=?, retiro_nombre=?, retiro_otra=?", (ahora, nombre_ret or None, 1 if otra else 0))
             core.registrar_evento(con, oid, E_RETIRADO, core.texto_evento_estado(estado, E_RETIRADO, None, bool(dev), quien or None))
@@ -959,6 +962,12 @@ def api_orden_accion(oid):
                 if cheque:
                     ventas.guardar_cheque(con, cheque, forma["nombre"], cobro, "orden", orden_id=oid, cobro_id=cobro_id)
                     core.registrar_evento(con, oid, E_RETIRADO, f"Cheque N° {cheque['numero']} · {cheque['banco']} · lo entrega {cheque['entrega']} · cobro {core.fmt_fecha(cheque['cobro'])}")
+                if forma2:      # el pago se completa con una segunda forma de pago
+                    cobro2_id = con.execute("INSERT INTO cobros (fecha, orden_id, monto, forma_id, forma) VALUES (?,?,?,?,?)", (ahora, oid, m2, forma2["id"], forma2["nombre"])).lastrowid
+                    core.registrar_evento(con, oid, E_RETIRADO, f"Cobro al retirar: {core.fmt_monto(m2)} ({forma2['nombre']})")
+                    if cheque2:
+                        ventas.guardar_cheque(con, cheque2, forma2["nombre"], m2, "orden", orden_id=oid, cobro_id=cobro2_id)
+                        core.registrar_evento(con, oid, E_RETIRADO, f"Cheque N° {cheque2['numero']} · {cheque2['banco']} · lo entrega {cheque2['entrega']} · cobro {core.fmt_fecha(cheque2['cobro'])}")
         elif accion == "scrap":
             if core.requiere_codigo(estado, E_SCRAP):
                 r = pide_codigo(d, "Pasar la orden a Scrap desde ese estado requiere el código de validación.")

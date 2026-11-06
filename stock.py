@@ -199,7 +199,17 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                                                    "LEFT JOIN stock_unidades u ON u.id=p.unidad_id LEFT JOIN stock_proveedores v ON v.id=f.proveedor_id "
                                                    "ORDER BY " + ("IFNULL(v.nombre,'zzz') COLLATE NOCASE, " if prov_activo() else "") + "f.id DESC")]
             provs = [dict(r) for r in con.execute("SELECT id, nombre FROM stock_proveedores ORDER BY nombre COLLATE NOCASE")] if prov_activo() else []
-        return render_template("stock/faltantes.html", provs=provs, auto=auto, manual=manual, auto_activo=faltantes_auto_activo(), fmt_cant=fmt_cant)
+        def agrupar(filas):
+            """Agrupa por proveedor (si se usan): los sin proveedor al final. Sin proveedores activos, un único grupo sin título."""
+            if not prov_activo():
+                return [(None, filas)]
+            grupos = {}
+            for f in filas:
+                grupos.setdefault(f.get("proveedor") or "", []).append(f)
+            orden = sorted(grupos, key=lambda n: (n == "", n.lower()))
+            return [(n or "Sin proveedor", grupos[n]) for n in orden]
+        auto_g, manual_g = agrupar(auto), agrupar(manual)
+        return render_template("stock/faltantes.html", auto_g=auto_g, manual_g=manual_g, provs=provs, auto=auto, manual=manual, auto_activo=faltantes_auto_activo(), fmt_cant=fmt_cant)
 
     @app.route("/api/stock/faltantes/buscar")
     @login_requerido

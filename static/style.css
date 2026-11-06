@@ -152,3 +152,5 @@ a.info-cli:hover{transform:scale(1.12)}
 .hoja svg{width:100%;height:100%}
 @media print{header,.no-print,.msg:not([style*="fef3c7"]){display:none!important}body{background:#fff}.card{box-shadow:none;border:0}}
 .btn.wapp{background:#25d366;border-color:#25d366;color:#fff}
+
+tr.grupo td{background:var(--bg);padding-top:8px}

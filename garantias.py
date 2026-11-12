@@ -79,6 +79,22 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         return render_template("garantias.html", filas=filas, resumen=resumen, e=e, q=q, nombres=nombres, productos=productos, hoy=hoy,
                                UNIDADES=UNIDADES, fmt_fecha=core.fmt_fecha)
 
+    def leer_item(it, inicio_comun):
+        """Valida un producto/servicio: devuelve (fila, error)."""
+        tipo = "servicio" if (it or {}).get("tipo") == "servicio" else "producto"
+        desc = " ".join(U((it or {}).get("descripcion")).split())[:200]
+        serie = None if tipo == "servicio" else (" ".join(U((it or {}).get("serie")).split())[:80] or None)
+        if not desc:
+            return None, "Escribí el producto o el servicio en todas las líneas."
+        unidad = it.get("unidad") if it.get("unidad") in UNIDADES else "meses"
+        try:
+            cantidad = int(str(it.get("cantidad") or "0").strip() or 0)
+        except ValueError:
+            return None, "El tiempo de garantía tiene que ser un número."
+        if cantidad < 0 or cantidad > 600:
+            return None, "El tiempo de garantía no es válido."
+        return (tipo, desc, serie, inicio_comun, cantidad, unidad, sumar(inicio_comun, cantidad, unidad) if cantidad else None), None
+
     @app.route("/api/garantias", methods=["POST"])
     @login_requerido
     @modulo_requerido("garantias")
@@ -86,28 +102,22 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         d = request.get_json(force=True, silent=True) or {}
         gid = d.get("id")
         cliente = " ".join(U(d.get("cliente")).split())[:120]
-        tipo = "servicio" if d.get("tipo") == "servicio" else "producto"
-        desc = " ".join(U(d.get("descripcion")).split())[:200]
-        serie = " ".join(U(d.get("serie")).split())[:80] or None
-        if tipo == "servicio":
-            serie = None
         nota = U(d.get("nota"))[:300] or None
         if not cliente:
             return error("Escribí o elegí el cliente.")
-        if not desc:
-            return error("Escribí el producto o el servicio.")
         try:
-            inicio = datetime.date.fromisoformat(str(d.get("inicio") or ""))
+            inicio = datetime.date.fromisoformat(str(d.get("inicio") or "")).isoformat()
         except ValueError:
             return error("Poné la fecha desde la que corre la garantía.")
-        unidad = d.get("unidad") if d.get("unidad") in UNIDADES else "meses"
-        try:
-            cantidad = int(str(d.get("cantidad") or "0").strip() or 0)
-        except ValueError:
-            return error("El tiempo de garantía tiene que ser un número.")
-        if cantidad < 0 or cantidad > 600:
-            return error("El tiempo de garantía no es válido.")
-        vence = sumar(inicio.isoformat(), cantidad, unidad) if cantidad else None
+        items = d.get("items") if isinstance(d.get("items"), list) and d.get("items") else [d]
+        if gid:
+            items = items[:1]
+        filas = []
+        for it in items[:40]:
+            f, msg = leer_item(it if isinstance(it, dict) else {}, inicio)
+            if msg:
+                return error(msg)
+            filas.append(f)
         with db() as con:
             cid = None
             if "clientes" in g.modulos:      # si el nombre es de un cliente cargado, queda asociado a su ficha
@@ -118,12 +128,14 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if gid:
                 if not con.execute("SELECT 1 FROM garantias WHERE id=?", (gid,)).fetchone():
                     return error("No existe la garantía.", 404)
+                t, desc, serie, ini, cant, uni, vence = filas[0]
                 con.execute("UPDATE garantias SET cliente_id=?, cliente=?, tipo=?, descripcion=?, serie=?, inicio=?, cantidad=?, unidad=?, vence=?, nota=? WHERE id=?",
-                            (cid, cliente, tipo, desc, serie, inicio.isoformat(), cantidad, unidad, vence, nota, gid))
+                            (cid, cliente, t, desc, serie, ini, cant, uni, vence, nota, gid))
             else:
-                gid = con.execute("INSERT INTO garantias (cliente_id, cliente, tipo, descripcion, serie, inicio, cantidad, unidad, vence, nota, creado) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                                  (cid, cliente, tipo, desc, serie, inicio.isoformat(), cantidad, unidad, vence, nota, core.ahora())).lastrowid
-        return jsonify(ok=True, id=gid, vence=vence)
+                for t, desc, serie, ini, cant, uni, vence in filas:
+                    gid = con.execute("INSERT INTO garantias (cliente_id, cliente, tipo, descripcion, serie, inicio, cantidad, unidad, vence, nota, creado) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                      (cid, cliente, t, desc, serie, ini, cant, uni, vence, nota, core.ahora())).lastrowid
+        return jsonify(ok=True, id=gid, cantidad=len(filas))
 
     @app.route("/api/garantias/<int:gid>/eliminar", methods=["POST"])
     @login_requerido

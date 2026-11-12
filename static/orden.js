@@ -399,7 +399,7 @@ function botones() {
     const f = await formulario('Compra del equipo', [{k: 'compra_monto', t: 'Monto pagado', num: 1}, {k: 'compra_condiciones', t: 'Condiciones de la compra', area: 1}], 'Confirmar compra');
     if (f && await accion('comprar', f)) location = '/ordenes';
   });
-  if (est !== 'Scrap' && !ret) add('Pasar a Scrap', 'bad', async () => {
+  if (est !== 'Scrap') add('Pasar a Scrap', 'bad', async () => {
     if (await confirmar('¿Pasar la orden a Scrap?') && await accion('scrap')) location = '/ordenes';
   });
   cont.innerHTML = '';

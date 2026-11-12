@@ -76,7 +76,12 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             filas = [f for f in filas if f["estado"] == "porvencer"]
         elif e == "vencidas":
             filas = [f for f in filas if f["estado"] == "vencida"]
-        return render_template("garantias.html", filas=filas, resumen=resumen, e=e, q=q, nombres=nombres, productos=productos, hoy=hoy,
+        grupos = []      # un bloque por cliente con todos sus productos y servicios
+        for f in filas:
+            if not grupos or grupos[-1]["cliente"] != f["cliente"]:
+                grupos.append({"cliente": f["cliente"], "filas": []})
+            grupos[-1]["filas"].append(f)
+        return render_template("garantias.html", filas=filas, grupos=grupos, resumen=resumen, e=e, q=q, nombres=nombres, productos=productos, hoy=hoy,
                                UNIDADES=UNIDADES, fmt_fecha=core.fmt_fecha)
 
     def leer_item(it, inicio_comun):

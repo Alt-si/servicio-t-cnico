@@ -15,21 +15,27 @@
     </select>
     <input name="q" value="{{ q }}" placeholder="Buscar por cliente, producto, servicio o número de serie" style="flex:1;min-width:200px"><button class="btn">Buscar</button>
   </form>
-  <div class="tabla-wrap"><table><thead><tr><th>Cliente</th><th>Producto / servicio</th><th>N° de serie</th><th>Desde</th><th>Garantía</th><th>Vence</th><th>Estado</th><th></th></tr></thead><tbody class="clientes">
-  {% for f in filas %}<tr>
-    <td><b>{{ f.cliente }}</b></td>
-    <td>{{ f.descripcion }}{% if f.tipo == 'servicio' %} <span class="pill" style="background:#6b7280;color:#fff">Servicio</span>{% endif %}{% if f.nota %}<div class="mut" style="font-size:12px">{{ f.nota }}</div>{% endif %}</td>
-    <td>{{ f.serie or '' }}</td>
-    <td>{{ fmt_fecha(f.inicio) }}</td>
-    <td>{% if f.cantidad %}{{ f.cantidad }} {{ UNIDADES[f.unidad] }}{% else %}<span class="mut">—</span>{% endif %}</td>
-    <td>{{ fmt_fecha(f.vence) if f.vence else '' }}</td>
-    <td>{% if f.estado == 'vencida' %}<span class="pill" style="background:#b91c1c;color:#fff">Vencida hace {{ -f.faltan }} d</span>
-      {% elif f.estado == 'porvencer' %}<span class="pill" style="background:#b45309;color:#fff">Vence en {{ f.faltan }} d</span>
-      {% elif f.estado == 'vigente' %}<span class="pill" style="background:#15803d;color:#fff">Vigente</span>
-      {% else %}<span class="pill" style="background:#6b7280;color:#fff">Sin garantía</span>{% endif %}</td>
-    <td style="white-space:nowrap"><button class="btn" onclick='garForm({{ f|tojson }})'>Editar</button> <button class="btn bad" onclick='garEliminar({{ f.id }}, {{ f.descripcion|tojson }})'>Eliminar</button></td>
-  </tr>
-  {% else %}<tr><td colspan="8" class="mut">No hay garantías para mostrar.</td></tr>{% endfor %}</tbody></table></div>
+  {% for gr in grupos %}
+  <div class="gar-cli" style="margin:14px 0 0;border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+    <div class="row" style="justify-content:space-between;padding:8px 12px;background:rgba(128,128,128,.14)">
+      <div><b style="font-size:16px">{{ gr.cliente }}</b> <span class="mut">· {{ gr.filas|length }} {{ 'producto o servicio' if gr.filas|length == 1 else 'productos y servicios' }}</span></div>
+      <button class="btn pri" onclick='garForm(null, {{ gr.cliente|tojson }})'>+ Agregar producto</button>
+    </div>
+    <div class="tabla-wrap"><table style="margin:0"><thead><tr><th>Producto / servicio</th><th>N° de serie</th><th>Desde</th><th>Garantía</th><th>Vence</th><th>Estado</th><th></th></tr></thead><tbody class="clientes">
+    {% for f in gr.filas %}<tr>
+      <td>{{ f.descripcion }}{% if f.tipo == 'servicio' %} <span class="pill" style="background:#6b7280;color:#fff">Servicio</span>{% endif %}{% if f.nota %}<div class="mut" style="font-size:12px">{{ f.nota }}</div>{% endif %}</td>
+      <td>{{ f.serie or '' }}</td>
+      <td>{{ fmt_fecha(f.inicio) }}</td>
+      <td>{% if f.cantidad %}{{ f.cantidad }} {{ UNIDADES[f.unidad] if f.cantidad != 1 else {'dias': 'día', 'meses': 'mes', 'anios': 'año'}[f.unidad] }}{% else %}<span class="mut">—</span>{% endif %}</td>
+      <td>{{ fmt_fecha(f.vence) if f.vence else '' }}</td>
+      <td>{% if f.estado == 'vencida' %}<span class="pill" style="background:#b91c1c;color:#fff">Vencida hace {{ -f.faltan }} d</span>
+        {% elif f.estado == 'porvencer' %}<span class="pill" style="background:#b45309;color:#fff">Vence en {{ f.faltan }} d</span>
+        {% elif f.estado == 'vigente' %}<span class="pill" style="background:#15803d;color:#fff">Vigente</span>
+        {% else %}<span class="pill" style="background:#6b7280;color:#fff">Sin garantía</span>{% endif %}</td>
+      <td style="white-space:nowrap"><button class="btn" onclick='garForm({{ f|tojson }})'>Editar</button> <button class="btn bad" onclick='garEliminar({{ f.id }}, {{ f.descripcion|tojson }})'>Eliminar</button></td>
+    </tr>{% endfor %}</tbody></table></div>
+  </div>
+  {% else %}<p class="mut" style="margin-top:14px">No hay garantías para mostrar.</p>{% endfor %}
 </div>
 <datalist id="gar-clientes">{% for n in nombres %}<option value="{{ n }}">{% endfor %}</datalist>
 <datalist id="gar-productos">{% for n in productos %}<option value="{{ n }}">{% endfor %}</datalist>

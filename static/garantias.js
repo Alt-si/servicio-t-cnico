@@ -13,11 +13,11 @@ function garBloque(g, n, ultimo) {
       <div class="gar-vence mut" style="flex:1;font-size:13px;padding-bottom:8px"></div>
     </div></div>`;
 }
-function garForm(g) {
+function garForm(g, cliente) {
   g = g || null;
-  const m = modal(`<h2>${g ? 'Editar garantía' : 'Nueva garantía'}</h2><div id="gar-err" class="msg error" style="display:none"></div>
+  const m = modal(`<h2>${g ? 'Editar garantía' : (cliente ? 'Agregar producto a ' + esc(cliente) : 'Nueva garantía')}</h2><div id="gar-err" class="msg error" style="display:none"></div>
     <label>Cliente * <span class="mut" style="font-weight:400">(elegí uno cargado o escribí el nombre)</span></label>
-    <input id="gar-cli" list="gar-clientes" autocomplete="off" value="${esc(g ? g.cliente : '')}" placeholder="Empezá a escribir el nombre…">
+    <input id="gar-cli" list="gar-clientes" autocomplete="off" value="${esc(g ? g.cliente : (cliente || ''))}" placeholder="Empezá a escribir el nombre…">
     <label>Garantía desde *</label><input id="gar-ini" type="date" value="${g ? g.inicio : GAR_HOY}">
     <div id="gar-items">${garBloque(g, 1)}</div>
     ${g ? '' : '<button type="button" class="btn" id="gar-mas" style="margin-top:4px">＋ Agregar otro producto o servicio</button>'}
@@ -59,7 +59,7 @@ function garForm(g) {
     if (!j.ok) { const e = q('#gar-err'); e.textContent = j.error; e.style.display = 'block'; return; }
     location.reload();
   };
-  setTimeout(() => q('#gar-cli').focus(), 50);
+  setTimeout(() => (cliente ? q('.gar-desc') : q('#gar-cli')).focus(), 50);
 }
 function garEliminar(id, nombre) {
   confirmar(`¿Eliminar la garantía de ${nombre}?`).then(async ok => {

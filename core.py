@@ -237,6 +237,7 @@ MODULOS = {
     "ventas": ("Ventas", "Caja simple: código de barras o buscador, descuenta stock y registra la forma de pago. Requiere Control de stock."),
     "facturacion": ("Facturación (AFIP)", "Facturas electrónicas con una o varias cuentas de AFIP y presupuestos no válidos como factura. Botón «Facturar» en la agenda de clientes. Requiere Clientes."),
     "cuentacorriente": ("Cuenta corriente", "Lo que te deben los clientes (a cobrar) y lo que debés a proveedores (a pagar): vencimientos, pagos parciales y atrasos."),
+    "garantias": ("Garantías", "Asociá productos y servicios a tus clientes con número de serie y tiempo de garantía; avisa cuáles están por vencer."),
     "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
     "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
 }

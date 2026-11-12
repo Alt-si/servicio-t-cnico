@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block cuerpo %}
+<div class="card">
+  <div class="row"><h1 style="margin:0">Garantías</h1><div class="der row"><button class="btn pri" onclick="garForm()">+ Nueva garantía</button></div></div>
+  <p class="mut" style="margin:6px 0 0">Asociá productos y servicios a un cliente, con número de serie y el tiempo de garantía.</p>
+  <div class="resumen-stock" style="margin-top:12px">
+    <div><span class="mut">Vigentes</span><b>{{ resumen.vigente + resumen.porvencer }}</b></div>
+    <div><span class="mut" style="color:#b45309">Vencen en 30 días</span><b style="color:#b45309">{{ resumen.porvencer }}</b></div>
+    <div><span class="mut" style="color:#b91c1c">Vencidas</span><b style="color:#b91c1c">{{ resumen.vencida }}</b></div>
+    <div><span class="mut">Sin garantía</span><b>{{ resumen.sin }}</b></div>
+  </div>
+  <form method="get" class="row" style="margin:12px 0">
+    <select name="e" onchange="this.form.submit()" style="width:auto" title="Mostrar">
+      {% for k, n in (('vigentes', 'Vigentes'), ('porvencer', 'Vencen en 30 días'), ('vencidas', 'Vencidas'), ('todas', 'Todas')) %}<option value="{{ k }}" {{ 'selected' if e == k }}>{{ n }}</option>{% endfor %}
+    </select>
+    <input name="q" value="{{ q }}" placeholder="Buscar por cliente, producto, servicio o número de serie" style="flex:1;min-width:200px"><button class="btn">Buscar</button>
+  </form>
+  <div class="tabla-wrap"><table><thead><tr><th>Cliente</th><th>Producto / servicio</th><th>N° de serie</th><th>Desde</th><th>Garantía</th><th>Vence</th><th>Estado</th><th></th></tr></thead><tbody class="clientes">
+  {% for f in filas %}<tr>
+    <td><b>{{ f.cliente }}</b></td>
+    <td>{{ f.descripcion }}{% if f.tipo == 'servicio' %} <span class="pill" style="background:#6b7280;color:#fff">Servicio</span>{% endif %}{% if f.nota %}<div class="mut" style="font-size:12px">{{ f.nota }}</div>{% endif %}</td>
+    <td>{{ f.serie or '' }}</td>
+    <td>{{ fmt_fecha(f.inicio) }}</td>
+    <td>{% if f.cantidad %}{{ f.cantidad }} {{ UNIDADES[f.unidad] }}{% else %}<span class="mut">—</span>{% endif %}</td>
+    <td>{{ fmt_fecha(f.vence) if f.vence else '' }}</td>
+    <td>{% if f.estado == 'vencida' %}<span class="pill" style="background:#b91c1c;color:#fff">Vencida hace {{ -f.faltan }} d</span>
+      {% elif f.estado == 'porvencer' %}<span class="pill" style="background:#b45309;color:#fff">Vence en {{ f.faltan }} d</span>
+      {% elif f.estado == 'vigente' %}<span class="pill" style="background:#15803d;color:#fff">Vigente</span>
+      {% else %}<span class="pill" style="background:#6b7280;color:#fff">Sin garantía</span>{% endif %}</td>
+    <td style="white-space:nowrap"><button class="btn" onclick='garForm({{ f|tojson }})'>Editar</button> <button class="btn bad" onclick='garEliminar({{ f.id }}, {{ f.descripcion|tojson }})'>Eliminar</button></td>
+  </tr>
+  {% else %}<tr><td colspan="8" class="mut">No hay garantías para mostrar.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+<datalist id="gar-clientes">{% for n in nombres %}<option value="{{ n }}">{% endfor %}</datalist>
+<datalist id="gar-productos">{% for n in productos %}<option value="{{ n }}">{% endfor %}</datalist>
+{% endblock %}
+{% block js %}<script>window.GAR_HOY = "{{ hoy }}";</script><script src="{{ url_for('static', filename='garantias.js') }}"></script>{% endblock %}

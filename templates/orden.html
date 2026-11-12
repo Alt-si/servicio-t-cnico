@@ -79,6 +79,7 @@
 {% block js %}
 <script src="{{ url_for('static', filename='cobros.js') }}"></script>
 <script src="{{ url_for('static', filename='repuestos.js') }}"></script>
+{% if gar_ordenes() %}<script src="{{ url_for('static', filename='garantias.js') }}"></script>{% endif %}
 <script>
 const ORDEN = {{ ({
   'id': o.id if o else None, 'estado': o.estado if o else None, 'resp': o.presupuesto_respuesta if o else None,
@@ -87,7 +88,7 @@ const ORDEN = {{ ({
   'equipo_txt': equipo_txt if o else '', 'empresa': marca.nombre, 'cliente_nombre': nombre_completo if o else '',
   'ventas': 'ventas' in modulos, 'formas': formas|default([]), 'saldo': saldo|default(0), 'rep_total': rep_total|default(0), 'sena': (o.sena_monto if o else None),
   'monto': o.presupuesto_monto if o else None, 'detalle': (o.presupuesto_detalle or '') if o else '',
-  'imposible': (o.imposible_reparar if o else 0), 'imposible_motivo': ((o.imposible_motivo or '') if o else ''), 'extra': extras if extras is defined else []
+  'gar': gar_ordenes(), 'imposible': (o.imposible_reparar if o else 0), 'imposible_motivo': ((o.imposible_motivo or '') if o else ''), 'extra': extras if extras is defined else []
 }) | tojson }};
 </script>
 <script src="{{ url_for('static', filename='orden.js') }}"></script>

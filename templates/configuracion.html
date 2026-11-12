@@ -61,6 +61,15 @@
     <button class="btn pri">Guardar</button></form></div>
 {% endif %}
 
+{% if 'garantias' in modulos %}
+<div class="card" id="garantias"><h1>Garantías</h1>
+  <form method="post" action="{{ url_for('configuracion_garantias') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input type="checkbox" name="ordenes" value="1" {{ 'checked' if gar_ordenes() }}> Mostrar el botón «Garantía» en las órdenes (carga la garantía del trabajo y de los repuestos)</label>
+    {% if 'ventas' in modulos %}<label style="display:flex;align-items:center;gap:8px;margin:6px 0"><input type="checkbox" name="ventas" value="1" {{ 'checked' if gar_ventas() }}> Mostrar el botón «Garantía» en las ventas (carga la garantía de los productos vendidos)</label>{% endif %}
+    <p class="mut">Lo que cargues se suma a las garantías del cliente en la sección Garantías.</p>
+    <button class="btn pri">Guardar</button></form></div>
+{% endif %}
+
 {% if 'recordatorios' in modulos %}
 <div class="card" id="recordatorios"><h1>Recordatorios</h1>
 <form method="post" action="{{ url_for('configuracion_recordatorios') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">

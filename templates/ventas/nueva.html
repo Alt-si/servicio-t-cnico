@@ -29,4 +29,4 @@
   </div>
 </div>
 {% endblock %}
-{% block js %}<script src="{{ url_for('static', filename='ventas.js') }}"></script>{% endblock %}
+{% block js %}<script src="{{ url_for('static', filename='ventas.js') }}"></script>{% if gar_ventas() %}<script src="{{ url_for('static', filename='garantias.js') }}"></script>{% endif %}{% endblock %}

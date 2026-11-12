@@ -20,6 +20,10 @@ def crear_tablas(con):
             vence TEXT, nota TEXT, creado TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS ix_garantias_cliente ON garantias(cliente);
     """)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(garantias)")}
+    for c in ("orden_id", "venta_id"):
+        if c not in cols:
+            con.execute(f"ALTER TABLE garantias ADD COLUMN {c} INTEGER")
 
 
 def sumar(inicio, cantidad, unidad):
@@ -123,6 +127,8 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
             if msg:
                 return error(msg)
             filas.append(f)
+        orden_id = d.get("orden_id") if isinstance(d.get("orden_id"), int) else None
+        venta_id = d.get("venta_id") if isinstance(d.get("venta_id"), int) else None
         with db() as con:
             cid = None
             if "clientes" in g.modulos:      # si el nombre es de un cliente cargado, queda asociado a su ficha
@@ -138,9 +144,47 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                             (cid, cliente, t, desc, serie, ini, cant, uni, vence, nota, gid))
             else:
                 for t, desc, serie, ini, cant, uni, vence in filas:
-                    gid = con.execute("INSERT INTO garantias (cliente_id, cliente, tipo, descripcion, serie, inicio, cantidad, unidad, vence, nota, creado) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                                      (cid, cliente, t, desc, serie, ini, cant, uni, vence, nota, core.ahora())).lastrowid
+                    gid = con.execute("INSERT INTO garantias (cliente_id, cliente, tipo, descripcion, serie, inicio, cantidad, unidad, vence, nota, creado, orden_id, venta_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                                      (cid, cliente, t, desc, serie, ini, cant, uni, vence, nota, core.ahora(), orden_id, venta_id)).lastrowid
         return jsonify(ok=True, id=gid, cantidad=len(filas))
+
+    @app.route("/api/garantias/clientes")
+    @login_requerido
+    @modulo_requerido("garantias")
+    def api_garantias_clientes():
+        with db() as con:
+            return jsonify(ok=True, nombres=nombres_clientes(con))
+
+    @app.route("/api/garantias/sugerencia")
+    @login_requerido
+    @modulo_requerido("garantias")
+    def api_garantias_sugerencia():
+        """Datos para precargar la garantía desde una orden (repuestos y trabajo) o desde una venta (productos vendidos)."""
+        oid, vid = request.args.get("orden", type=int), request.args.get("venta", type=int)
+        items, cliente = [], ""
+        with db() as con:
+            if oid:
+                o = con.execute("SELECT * FROM ordenes WHERE id=?", (oid,)).fetchone()
+                if not o:
+                    return error("No existe la orden.", 404)
+                c = con.execute("SELECT * FROM clientes WHERE id=?", (o["cliente_id"],)).fetchone()
+                cliente = core.nombre_natural(c).upper() if c else ""
+                if "stock" in g.modulos:
+                    items += [dict(tipo="producto", descripcion=r["nombre"]) for r in con.execute("SELECT nombre FROM orden_repuestos WHERE orden_id=? ORDER BY id", (oid,))]
+                trabajo = " ".join((o["presupuesto_detalle"] or "").split())[:200]
+                items.append(dict(tipo="servicio", descripcion=(trabajo or "REPARACIÓN")))
+                ya = {(r["descripcion"] or "").upper() for r in con.execute("SELECT descripcion FROM garantias WHERE orden_id=?", (oid,))}
+            elif vid:
+                items = [dict(tipo="producto", descripcion=r["nombre"]) for r in con.execute("SELECT nombre FROM venta_items WHERE venta_id=? ORDER BY id", (vid,))]
+                if not items:
+                    return error("No existe la venta.", 404)
+                ya = {(r["descripcion"] or "").upper() for r in con.execute("SELECT descripcion FROM garantias WHERE venta_id=?", (vid,))}
+            else:
+                return error("Falta la orden o la venta.")
+        items = [dict(i, descripcion=U(i["descripcion"])) for i in items]
+        cargados = [i["descripcion"] for i in items if i["descripcion"] in ya]
+        items = [i for i in items if i["descripcion"] not in ya]
+        return jsonify(ok=True, cliente=cliente, items=items, cargados=cargados, orden_id=oid, venta_id=vid)
 
     @app.route("/api/garantias/<int:gid>/eliminar", methods=["POST"])
     @login_requerido

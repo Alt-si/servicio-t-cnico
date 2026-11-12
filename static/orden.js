@@ -375,6 +375,7 @@ function botones() {
     await ofrecerWhatsApp('La orden está lista: ¿avisar al cliente por WhatsApp?', ORDEN.wa, textoListo(ORDEN.equipo_txt));
     location = '/ordenes';
   });
+  if (ORDEN.gar && ['Listo para retirar', 'Equipo retirado'].includes(est)) add('Garantía', 'ok', () => garDesde('orden', ORDEN.id));
   if (est === 'Listo para retirar') add('Enviar aviso: listo para retirar', 'wa', async () => {
     await ofrecerWhatsApp('Avisar por WhatsApp que el equipo está listo', ORDEN.wa, textoListo(ORDEN.equipo_txt));
   });

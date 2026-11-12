@@ -88,7 +88,12 @@ if ($v('#v-scan')) {
       items: carrito.map(it => ({id: it.id, cantidad: String(it.cant).replace('.', ','), manual: it.manual, precio: it.manual ? String(it.precioManual).replace('.', ',') : ''}))});
     if (!j.ok) { err.textContent = j.error; err.style.display = 'block'; return; }
     carrito = []; $v('#v-recibido').value = ''; dibujar();
-    aviso(`Venta N° ${j.id} registrada por ${money(j.total)}.` + (j.vuelto ? ` Vuelto: ${money(j.vuelto)}.` : ''));
+    const txt = `Venta N° ${j.id} registrada por ${money(j.total)}.` + (j.vuelto ? ` Vuelto: ${money(j.vuelto)}.` : '');
+    if (typeof garDesde === 'function') {
+      const c = modal(`<h2>Aviso</h2><p>${esc(txt)}</p><div class="row"><button class="btn" id="vg-gar">Garantía</button><button class="btn pri der" id="vg-ok">Aceptar</button></div>`);
+      c.querySelector('#vg-ok').onclick = cerrar;
+      c.querySelector('#vg-gar').onclick = () => { cerrar(); garDesde('venta', j.id); };
+    } else aviso(txt);
     $v('#v-scan').focus();
   };
   dibujar();
@@ -102,7 +107,8 @@ async function ventaDetalle(id) {
   const c = modal(`<h2>Venta N° ${v.id}${v.anulada ? ' (ANULADA)' : ''}</h2><div class="mut">${esc(j.fecha_txt)} · ${(j.pagos || []).length ? j.pagos.map(p => esc(p.forma) + ' ' + money(p.monto)).join(' + ') : esc(v.forma || '')}</div>
     <table style="margin-top:8px"><tbody>${j.items.map(i => `<tr><td>${esc(i.nombre)}${i.descuento_pct ? ` <span class="mut">(−${i.descuento_pct}%)</span>` : ''}</td><td>${esc(i.cant_txt)} ${esc(i.abrev || '')}</td><td style="text-align:right">${money(i.precio_unit)}</td><td style="text-align:right"><b>${money(i.subtotal)}</b></td></tr>`).join('')}</tbody></table>
     <p style="text-align:right;font-size:18px"><b>Total ${money(v.total)}</b>${v.recibido ? `<br><span class="mut" style="font-size:13px">Recibido ${money(v.recibido)} · Vuelto ${money(v.vuelto)}</span>` : ''}</p>
-    <div class="row">${v.anulada ? '' : '<button class="btn bad" id="vd-anular">Anular venta</button>'}<button class="btn der" id="vd-cerrar">Cerrar</button></div>`);
+    <div class="row">${v.anulada ? '' : '<button class="btn bad" id="vd-anular">Anular venta</button>'}${(!v.anulada && typeof garDesde === 'function') ? '<button class="btn" id="vd-gar">Garantía</button>' : ''}<button class="btn der" id="vd-cerrar">Cerrar</button></div>`);
+  const gb = c.querySelector('#vd-gar'); if (gb) gb.onclick = () => { cerrar(); garDesde('venta', id); };
   c.querySelector('#vd-cerrar').onclick = cerrar;
   const a = c.querySelector('#vd-anular');
   if (a) a.onclick = async () => {

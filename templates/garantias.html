@@ -40,4 +40,4 @@
 <datalist id="gar-clientes">{% for n in nombres %}<option value="{{ n }}">{% endfor %}</datalist>
 <datalist id="gar-productos">{% for n in productos %}<option value="{{ n }}">{% endfor %}</datalist>
 {% endblock %}
-{% block js %}<script>window.GAR_HOY = "{{ hoy }}";</script><script src="{{ url_for('static', filename='garantias.js') }}"></script>{% endblock %}
+{% block js %}<script>window.GAR_HOY = "{{ hoy }}"; window.GAR_PAGINA = true;</script><script src="{{ url_for('static', filename='garantias.js') }}"></script>{% endblock %}

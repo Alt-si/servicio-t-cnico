@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block cuerpo %}
 <div class="card">
-  <div class="row"><h1 style="margin:0">{% if edit %}Editar presupuesto N° {{ '%04d' % p.id }} · {{ p.cliente_nombre }}{% else %}Presupuesto para {{ cliente|nombre_cliente }}{% endif %}</h1><a class="btn der" href="{{ url_for('presupuesto_ver', pid=p.id) if edit else url_for('clientes') }}">← Volver</a></div>
+  <div class="row"><h1 style="margin:0">{% if edit %}Editar presupuesto N° {{ '%04d' % p.id }} · {{ p.cliente_nombre }}{% elif cliente %}Presupuesto para {{ cliente|nombre_cliente }}{% else %}Nuevo presupuesto{% endif %}</h1><a class="btn der" href="{{ url_for('presupuesto_ver', pid=p.id) if edit else url_for('clientes') }}">← Volver</a></div>
+  {% if not cliente and not edit %}
+  <div id="pc-box" style="border:1px solid var(--bd);border-radius:10px;padding:10px 12px;margin:10px 0;position:relative">
+    <label style="margin-top:0">Cliente *</label>
+    <div id="pc-sel" style="display:none" class="row"><b id="pc-nombre" style="font-size:17px"></b><a href="#" id="pc-cambiar" class="der" style="font-size:13px">Cambiar</a></div>
+    <div id="pc-buscar" class="row" style="gap:8px"><input id="pc-q" autocomplete="off" placeholder="Buscar por nombre, apellido, razón social o teléfono…" style="flex:1;min-width:200px"><button type="button" class="btn pri" id="pc-nuevo">+ Crear cliente</button></div>
+    <div id="pc-res" style="margin-top:6px"></div>
+  </div>
+  {% endif %}
   <p class="mut">Documento <b>no válido como factura</b>. Sirve para enviarle al cliente el detalle y el valor de lo presupuestado.</p>
   <div id="err" class="msg error" style="display:none"></div>
   <style>.modo-total th:nth-child(2),.modo-total td:nth-child(2),.modo-total th:nth-child(3),.modo-total td:nth-child(3),.modo-total th:nth-child(4),.modo-total td:nth-child(4){display:none}</style>
@@ -19,5 +27,5 @@
   <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">{{ "Guardar cambios" if edit else "Generar presupuesto" }}</button></div>
 </div>
 {% endblock %}
-{% block js %}<script>const FACT = {{ {'cliente_id': cliente.id, 'ri': False, 'presupuesto': True, 'edit': edit|default(none)} | tojson }};</script>
+{% block js %}{% if not cliente and not edit %}<script>const IVA={{ IVA|tojson }};</script><script src="{{ url_for('static', filename='clientes.js') }}"></script>{% endif %}<script>const FACT = {{ {'cliente_id': cliente.id if cliente else None, 'elegir': (not cliente and not edit), 'ri': False, 'presupuesto': True, 'edit': edit|default(none)} | tojson }};</script>
 <script src="{{ url_for('static', filename='facturacion.js') }}"></script>{% endblock %}

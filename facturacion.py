@@ -909,9 +909,9 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         with db() as con:
             if request.args.get("cliente", type=int):
                 cliente = con.execute("SELECT * FROM clientes WHERE id=?", (request.args.get("cliente", type=int),)).fetchone()
-        if not cliente:
-            return redirect(url_for("clientes"))
-        return render_template("facturacion/presupuesto.html", cliente=cliente, aviso_defecto=core.leer_config(g.cuenta["id"], "pres_aviso") or "")
+        if not cliente and "clientes" not in g.modulos:
+            return redirect(url_for("facturacion"))
+        return render_template("facturacion/presupuesto.html", cliente=cliente, IVA=core.IVA_OPCIONES, aviso_defecto=core.leer_config(g.cuenta["id"], "pres_aviso") or "")
 
     MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 

@@ -15,7 +15,8 @@ function clienteForm(c) {
     const d = {id: c.id};
     ['nombre','apellido','telefono','dni','ciudad','domicilio','razon_social','cuit','condicion_iva','mail'].forEach(k => d[k] = $('#f-' + k, box).value);
     const j = await api('/api/cliente', d);
-    if (j.ok) location.reload(); else { const e = $('#f-err', box); e.textContent = j.error; e.style.display = 'block'; }
+    if (j.ok && !c.id && window.alCrearCliente) { cerrar(); window.alCrearCliente(j.id, [d.nombre, d.apellido].join(' ').trim().toUpperCase() + (d.razon_social ? ' · ' + d.razon_social.toUpperCase() : '')); }
+    else if (j.ok) location.reload(); else { const e = $('#f-err', box); e.textContent = j.error; e.style.display = 'block'; }
   };
   $('#f-del', box)?.addEventListener('click', async () => {
     if (!await confirmar('¿Eliminar este cliente?')) return;

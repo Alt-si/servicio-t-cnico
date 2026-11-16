@@ -46,6 +46,7 @@ if ($f('#f-items')) {
   });
   $f('#p-guardar')?.addEventListener('click', async () => {
     mostrarErr('');
+    if (!FACT.cliente_id) return mostrarErr('Elegí el cliente o creá uno nuevo.');
     const unico = $f('#p-modo').value === 'total';
     const j = await api('/api/facturacion/presupuesto', {id: FACT.edit?.id, cliente_id: FACT.cliente_id, items: leerRenglones(), total_unico: unico ? $f('#p-total').value : '', aviso: $f('#p-aviso').value, validez: $f('#p-validez').value, nota: $f('#p-nota').value, forma_pago: $f('#p-forma').value, mostrar_precios: $f('#p-precios').checked});
     if (j.ok) location = '/facturacion/presupuesto/' + j.id + (FACT.edit ? '' : '?nuevo=1'); else mostrarErr(j.error);
@@ -57,4 +58,28 @@ if (FACT.edit) {
   const e = FACT.edit;
   $f('#p-forma').value = e.forma_pago; $f('#p-precios').checked = e.mostrar_precios; $f('#p-validez').value = /^\d{4}-\d{2}-\d{2}$/.test(e.validez) ? e.validez : ''; $f('#p-nota').value = e.nota;
   if (e.modo === 'total') { $f('#p-modo').value = 'total'; $f('#p-total').value = String(e.total).replace('.', ','); $f('#p-modo').dispatchEvent(new Event('change')); }
+}
+
+
+// Presupuesto sin cliente elegido: buscar uno cargado o crearlo en el momento
+if (FACT.elegir) {
+  const elegir = (id, nombre) => {
+    FACT.cliente_id = id; $f('#pc-nombre').textContent = nombre;
+    $f('#pc-sel').style.display = 'flex'; $f('#pc-buscar').style.display = 'none'; $f('#pc-res').innerHTML = '';
+    document.querySelector('h1').textContent = 'Presupuesto para ' + nombre;
+  };
+  window.alCrearCliente = elegir;
+  let t = null;
+  $f('#pc-q').addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const q = $f('#pc-q').value.trim(); if (q.length < 2) { $f('#pc-res').innerHTML = ''; return; }
+      const j = await api('/api/clientes/buscar?q=' + encodeURIComponent(q));
+      $f('#pc-res').innerHTML = j.ok && j.clientes.length ? j.clientes.map(c => `<a href="#" class="btn" style="display:block;text-align:left;margin:0 0 4px" data-id="${c.id}" data-n="${esc(c.mostrar)}">${esc(c.mostrar)}${c.telefono ? ' · ' + esc(c.telefono) : ''}</a>`).join('')
+        : '<span class="mut">No hay clientes con ese dato. Podés crearlo con «+ Crear cliente».</span>';
+    }, 250);
+  });
+  $f('#pc-res').addEventListener('click', e => { const a = e.target.closest('a[data-id]'); if (!a) return; e.preventDefault(); elegir(+a.dataset.id, a.dataset.n); });
+  $f('#pc-cambiar').onclick = e => { e.preventDefault(); FACT.cliente_id = null; $f('#pc-sel').style.display = 'none'; $f('#pc-buscar').style.display = 'flex'; $f('#pc-q').value = ''; $f('#pc-q').focus(); };
+  $f('#pc-nuevo').onclick = () => clienteForm();
 }

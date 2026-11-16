@@ -24,6 +24,7 @@
       <div class="desplegable">
         {% if 'ventas' in modulos %}<a href="{{ url_for('ventas') }}">🛒 Ventas</a>{% endif %}
         {% if 'facturacion' in modulos %}<a href="{{ url_for('facturacion') }}">Facturación</a>{% endif %}
+        {% if 'facturacion' in modulos %}<a href="{{ url_for('presupuesto_nuevo') }}">Presupuesto</a>{% endif %}
         {% if 'cuentacorriente' in modulos %}<a href="{{ url_for('cuenta_corriente') }}">Cuenta corriente</a>{% endif %}
         {% if 'stock' in modulos %}<a href="{{ url_for('stock') }}">Stock</a>{% endif %}
         {% if 'garantias' in modulos %}<a href="{{ url_for('garantias') }}">Garantías</a>{% endif %}

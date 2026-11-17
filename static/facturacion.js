@@ -83,3 +83,35 @@ if (FACT.elegir) {
   $f('#pc-cambiar').onclick = e => { e.preventDefault(); FACT.cliente_id = null; $f('#pc-sel').style.display = 'none'; $f('#pc-buscar').style.display = 'flex'; $f('#pc-q').value = ''; $f('#pc-q').focus(); };
   $f('#pc-nuevo').onclick = () => clienteForm();
 }
+
+
+// Presupuesto: al escribir un renglón se sugieren los productos cargados en Stock (con su precio); si no está, se escribe libre
+if (FACT.presupuesto && FACT.stock && $f('#f-items')) {
+  const panel = document.createElement('div');
+  panel.style.cssText = 'display:none;position:fixed;z-index:70;background:var(--card);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.28);padding:4px;max-height:260px;overflow:auto';
+  document.body.appendChild(panel);
+  let t = null, fila = null;
+  const ocultar = () => { panel.style.display = 'none'; };
+  document.addEventListener('click', e => { if (!panel.contains(e.target) && !e.target.classList.contains('r-desc')) ocultar(); });
+  addEventListener('scroll', ocultar, true);
+  $f('#f-items').addEventListener('input', e => {
+    if (!e.target.classList.contains('r-desc')) return;
+    const inp = e.target; fila = inp.closest('tr'); clearTimeout(t);
+    t = setTimeout(async () => {
+      const q = inp.value.trim(); if (q.length < 2) return ocultar();
+      const j = await api('/api/facturacion/productos?q=' + encodeURIComponent(q));
+      if (!j.ok || !j.items.length || inp.value.trim() !== q) return ocultar();
+      const r = inp.getBoundingClientRect();
+      panel.style.left = r.left + 'px'; panel.style.top = (r.bottom + 2) + 'px'; panel.style.width = Math.max(r.width, 320) + 'px';
+      panel.innerHTML = '<div class="mut" style="font-size:12px;padding:2px 6px">En stock — tocá uno para cargarlo, o seguí escribiendo</div>' + j.items.map(p => `<a href="#" class="btn" style="display:block;text-align:left;margin:2px 0;white-space:normal" data-p='${esc(JSON.stringify(p))}'>${esc(p.nombre)}${p.codigo ? ' · ' + esc(p.codigo) : ''}<br><small class="mut">${p.precio ? dinero(p.precio) : 'sin precio'} · hay ${p.stock} ${esc(p.abrev || '')}</small></a>`).join('');
+      panel.style.display = 'block';
+    }, 250);
+  });
+  panel.addEventListener('click', e => {
+    const a = e.target.closest('a[data-p]'); if (!a || !fila) return; e.preventDefault();
+    const p = JSON.parse(a.dataset.p);
+    fila.querySelector('.r-desc').value = p.nombre;
+    if (p.precio) fila.querySelector('.r-precio').value = String(p.precio).replace('.', ',');
+    totales(); ocultar(); fila.querySelector('.r-cant').focus(); fila.querySelector('.r-cant').select();
+  });
+}

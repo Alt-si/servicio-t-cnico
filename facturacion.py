@@ -901,6 +901,23 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
         return jsonify(ok=True)
 
     # ---------------- presupuesto no válido como factura
+    @app.route("/api/facturacion/productos")
+    @login_requerido
+    @modulo_requerido("facturacion")
+    def api_facturacion_productos():
+        """Productos cargados en Stock para sugerirlos al armar un presupuesto (no mueve stock)."""
+        if "stock" not in g.modulos:
+            return jsonify(ok=True, items=[])
+        sql = "SELECT p.*, u.abrev FROM stock_productos p JOIN stock_unidades u ON u.id=p.unidad_id WHERE p.activo=1"
+        par = []
+        for w in (request.args.get("q") or "").split()[:4]:
+            sql += " AND (p.nombre LIKE ? OR IFNULL(p.codigo,'') LIKE ? OR p.id IN (SELECT producto_id FROM stock_barras WHERE codigo LIKE ?))"
+            par += [f"%{w}%"] * 3
+        with db() as con:
+            items = [dict(id=r["id"], nombre=r["nombre"], codigo=r["codigo"], precio=r["precio"], stock=r["stock_actual"], abrev=r["abrev"])
+                     for r in con.execute(sql + " ORDER BY p.nombre COLLATE NOCASE LIMIT 8", par)]
+        return jsonify(ok=True, items=items)
+
     @app.route("/facturacion/presupuesto")
     @login_requerido
     @modulo_requerido("facturacion")

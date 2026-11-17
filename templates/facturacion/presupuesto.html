@@ -27,5 +27,5 @@
   <div class="row" style="margin-top:14px"><button class="btn pri" id="p-guardar">{{ "Guardar cambios" if edit else "Generar presupuesto" }}</button></div>
 </div>
 {% endblock %}
-{% block js %}{% if not cliente and not edit %}<script>const IVA={{ IVA|tojson }};</script><script src="{{ url_for('static', filename='clientes.js') }}"></script>{% endif %}<script>const FACT = {{ {'cliente_id': cliente.id if cliente else None, 'elegir': (not cliente and not edit), 'ri': False, 'presupuesto': True, 'edit': edit|default(none)} | tojson }};</script>
+{% block js %}{% if not cliente and not edit %}<script>const IVA={{ IVA|tojson }};</script><script src="{{ url_for('static', filename='clientes.js') }}"></script>{% endif %}<script>const FACT = {{ {'cliente_id': cliente.id if cliente else None, 'elegir': (not cliente and not edit), 'stock': ('stock' in modulos), 'ri': False, 'presupuesto': True, 'edit': edit|default(none)} | tojson }};</script>
 <script src="{{ url_for('static', filename='facturacion.js') }}"></script>{% endblock %}

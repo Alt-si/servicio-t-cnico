@@ -556,10 +556,14 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
     @modulo_requerido("facturacion")
     def facturacion():
         q = core.sin_acentos((request.args.get("q") or "").strip()).lower()
+        em = (request.args.get("em") or "").strip()
         with db() as con:
-            facs = con.execute("SELECT * FROM facturas ORDER BY id DESC" + ("" if q else " LIMIT 300")).fetchall()
-            pres = con.execute("SELECT * FROM presupuestos_doc ORDER BY id DESC" + ("" if q else " LIMIT 300")).fetchall()
+            facs = con.execute("SELECT * FROM facturas ORDER BY id DESC").fetchall()
+            pres = con.execute("SELECT * FROM presupuestos_doc ORDER BY id DESC").fetchall()
             hay = con.execute("SELECT COUNT(*) FROM afip_cuentas").fetchone()[0]
+        emisores = sorted({f["cuenta_nombre"] or "Sin cuenta" for f in facs})
+        if em:
+            facs = [f for f in facs if (f["cuenta_nombre"] or "Sin cuenta") == em]
         if q:
             def coincide(texto):
                 t = core.sin_acentos(texto).lower()
@@ -570,7 +574,29 @@ def registrar(app, login_requerido, modulo_requerido, db, U, error):
                 "prueba" if f["ambiente"] == "homologacion" else "")))]
             pres = [p for p in pres if coincide(" ".join(str(x) for x in (
                 p["cliente_nombre"], f"{p['id']:04d}", "presupuesto", core.fmt_fecha(p["fecha"]), p["fecha"][:10], f"{p['total']:.2f}")))]
-        return render_template("facturacion/lista.html", facs=facs, pres=pres, hay_cuentas=hay, TIPOS=TIPOS_CBTE, fmt_fecha=core.fmt_fecha, q=request.args.get("q") or "")
+        hoy = core.ahora()[:10]
+
+        def agrupar(filas, emisor=False):
+            """Años (el actual abierto, los anteriores en un botón) > meses (el actual abierto) > emisor."""
+            anios = {}
+            for r in filas:
+                f = (r["fecha"] or "")[:10]
+                if len(f) < 7:
+                    continue
+                m = anios.setdefault(f[:4], {}).setdefault(f[5:7], [])
+                m.append(r)
+            salida = []
+            for a in sorted(anios, reverse=True):
+                meses = []
+                for m in sorted(anios[a], reverse=True):
+                    rs = anios[a][m]
+                    if emisor:
+                        rs = sorted(rs, key=lambda r: ((r["cuenta_nombre"] or "Sin cuenta").lower(), -r["id"]))
+                    meses.append({"clave": f"{a}-{m}", "nombre": f"{MESES[int(m) - 1]} {a}", "filas": rs, "abierto": bool(q) or f"{a}-{m}" == hoy[:7],
+                                  "total": sum((-r["total"] if r["tipo_cbte"] in (3, 8, 13) else r["total"]) if emisor else r["total"] for r in rs)})
+                salida.append({"anio": a, "meses": meses, "abierto": bool(q) or a == hoy[:4], "n": sum(len(x["filas"]) for x in meses)})
+            return salida
+        return render_template("facturacion/lista.html", facs=facs, pres=pres, hay_cuentas=hay, f_anios=agrupar(facs, True), p_anios=agrupar(pres), emisores=emisores, em=em, TIPOS=TIPOS_CBTE, fmt_fecha=core.fmt_fecha, q=request.args.get("q") or "")
 
     @app.route("/facturacion/pdf/<tipo>/<int:did>")
     @login_requerido

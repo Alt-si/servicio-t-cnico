@@ -27,5 +27,5 @@
     <a class="btn" href="{{ url_for('presupuesto_nuevo', cliente=cliente.id) }}">Presupuesto no válido como factura</a></div>
 </div>
 {% endblock %}
-{% block js %}<script>const FACT = {{ {'cuenta_id': cuenta.id, 'cliente_id': cliente.id, 'ri': ri, 'alicuotas': ALICUOTAS} | tojson }};</script>
+{% block js %}<script>const FACT = {{ {'cuenta_id': cuenta.id, 'cliente_id': cliente.id, 'ri': ri, 'stock': ('stock' in modulos), 'alicuotas': ALICUOTAS} | tojson }};</script>
 <script src="{{ url_for('static', filename='facturacion.js') }}"></script>{% endblock %}

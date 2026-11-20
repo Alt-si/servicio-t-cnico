@@ -85,8 +85,8 @@ if (FACT.elegir) {
 }
 
 
-// Presupuesto: al escribir un renglón se sugieren los productos cargados en Stock (con su precio); si no está, se escribe libre
-if (FACT.presupuesto && FACT.stock && $f('#f-items')) {
+// Presupuesto y factura: al escribir un renglón se sugieren los productos cargados en Stock (con su precio); si no está, se escribe libre
+if (FACT.stock && $f('#f-items')) {
   const panel = document.createElement('div');
   panel.style.cssText = 'display:none;position:fixed;z-index:70;background:var(--card);border:1px solid var(--bd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.28);padding:4px;max-height:260px;overflow:auto';
   document.body.appendChild(panel);

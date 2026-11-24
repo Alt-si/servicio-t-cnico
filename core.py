@@ -238,7 +238,7 @@ MODULOS = {
     "facturacion": ("Facturación (AFIP)", "Facturas electrónicas con una o varias cuentas de AFIP y presupuestos no válidos como factura. Botón «Facturar» en la agenda de clientes. Requiere Clientes."),
     "cuentacorriente": ("Cuenta corriente", "Lo que te deben los clientes (a cobrar) y lo que debés a proveedores (a pagar): vencimientos, pagos parciales y atrasos."),
     "garantias": ("Garantías", "Asociá productos y servicios a tus clientes con número de serie y tiempo de garantía; avisa cuáles están por vencer."),
-    "recordatorios": ("Recordatorios", "Avisos con fecha y hora, con ventana y sonido."),
+    "recordatorios": ("Notas", "Bloc de notas para no olvidarte de nada, con aviso opcional de fecha y hora (ventana y sonido)."),
     "respaldo": ("Respaldo de datos", "Descargar copia de la base y cargar una base (en Configuración)."),
 }
 # Qué tienen habilitado las cuentas que todavía no se configuraron (las secciones nuevas arrancan apagadas).
@@ -421,8 +421,11 @@ def crear_base(cuenta_id):
         for col, tipo in (("retiro_nombre", "TEXT"), ("retiro_otra", "INTEGER NOT NULL DEFAULT 0")):      # quién retiró el equipo
             if col not in cols:
                 con.execute(f"ALTER TABLE ordenes ADD COLUMN {col} {tipo}")
-        if "ultimo_aviso" not in [r[1] for r in con.execute("PRAGMA table_info(recordatorios)")]:
-            con.execute("ALTER TABLE recordatorios ADD COLUMN ultimo_aviso TEXT")
+        cr = [r[1] for r in con.execute("PRAGMA table_info(recordatorios)")]
+        for col, tipo in (("ultimo_aviso", "TEXT"), ("autor", "TEXT"), ("editado", "TEXT"), ("editado_por", "TEXT"), ("hecho_fecha", "TEXT"), ("hecho_por", "TEXT"),
+                          ("con_aviso", "INTEGER NOT NULL DEFAULT 1"), ("color", "TEXT"), ("fijada", "INTEGER NOT NULL DEFAULT 0")):      # Notas: autor, edición, aviso opcional, color y fijado
+            if col not in cr:
+                con.execute(f"ALTER TABLE recordatorios ADD COLUMN {col} {tipo}")
 
 
 def repetir_recordatorios(cuenta_id):

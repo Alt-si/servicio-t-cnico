@@ -30,7 +30,7 @@
         {% if 'garantias' in modulos %}<a href="{{ url_for('garantias') }}">Garantías</a>{% endif %}
       </div></details>
     {% endif %}
-    {% if 'recordatorios' in modulos %}<a href="{{ url_for('recordatorios') }}" id="nav-rec" class="{{ 'act' if request.endpoint=='recordatorios' }}">Recordatorios</a>{% endif %}
+    {% if 'recordatorios' in modulos %}<a href="{{ url_for('recordatorios') }}" id="nav-rec" class="{{ 'act' if request.endpoint=='recordatorios' }}">Notas</a>{% endif %}
     <a href="{{ url_for('configuracion') }}" class="{{ 'act' if request.endpoint=='configuracion' }}">Configuración</a>
     {% if cuenta.es_admin %}<a href="{{ url_for('admin') }}" class="{{ 'act' if request.endpoint=='admin' }}">Cuentas</a>{% endif %}
     <button type="button" id="tema" title="Modo oscuro">◐</button>

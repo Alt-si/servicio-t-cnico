@@ -111,19 +111,19 @@ function siguienteAviso() {
   mostrando = true;
   const r = colaAvisos.shift();
   const c = modal(`<div style="background:#f97316;color:#fff;margin:-18px -18px 12px;padding:12px 18px;border-radius:10px 10px 0 0">
-      <b style="font-size:16px">RECORDATORIO</b><br>${esc(r.cuando)}</div>
+      <b style="font-size:16px">NOTA</b><br>${esc(r.cuando)}</div>
     <p style="font-size:17px;white-space:pre-wrap">${esc(r.descripcion)}</p>
     <div class="row"><button class="btn pri" id="r-hecho">Hecho</button><button class="btn" id="r-pos">Posponer 10 min</button><button class="btn" id="r-cer">${r.repetir ? 'Cerrar (te aviso de nuevo en ' + (r.repetir % 60 ? r.repetir + ' min' : r.repetir / 60 === 1 ? '1 hora' : r.repetir / 60 + ' horas') + ')' : 'Cerrar'}</button></div>`);
   sonido();
   const fin = async (acc) => { if (acc) await api(`/api/recordatorio/${r.id}/${acc}`, {}); cerrar(); mostrando = false; revisarRecordatorios(); siguienteAviso(); };
   $('#r-hecho', c).onclick = () => fin('hecho'); $('#r-pos', c).onclick = () => fin('posponer'); $('#r-cer', c).onclick = () => fin(null);
-  try { if (window.Notification && Notification.permission === 'granted') new Notification('Recordatorio', {body: r.descripcion}); } catch (e) {}
+  try { if (window.Notification && Notification.permission === 'granted') new Notification('Nota', {body: r.descripcion}); } catch (e) {}
 }
 async function revisarRecordatorios() {
   if (!window.HAY_SESION || !window.HAY_REC) return;
   const j = await api('/api/recordatorios/avisos');
   if (!j.ok) return;
-  const n = $('#nav-rec'); if (n) n.textContent = j.pendientes ? `Recordatorios (${j.pendientes})` : 'Recordatorios';
+  const n = $('#nav-rec'); if (n) n.textContent = j.pendientes ? `Notas (${j.pendientes})` : 'Notas';
   (j.avisos || []).forEach(a => colaAvisos.push({...a, repetir: j.repetir})); siguienteAviso();
 }
 if (window.HAY_SESION && window.HAY_REC) {

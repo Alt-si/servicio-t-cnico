@@ -1184,22 +1184,44 @@ def _fecha_hora(d):
         return None
 
 
+COLORES_NOTA = ("amarillo", "verde", "azul", "rosa", "naranja", "gris")
+
+
+def _nota_dict(f):
+    d = dict(f)
+    con_aviso = bool(d.get("con_aviso")) and bool(d.get("fecha_hora"))
+    if d["hecho"]:
+        estado, texto = "hecho", (core.clasificar_recordatorio(d["fecha_hora"], 1)[1] if con_aviso else "")
+    elif con_aviso:
+        estado, texto = core.clasificar_recordatorio(d["fecha_hora"], 0)
+    else:
+        estado, texto = "nota", ""
+    return dict(id=d["id"], fecha_hora=d["fecha_hora"] if con_aviso else "", con_aviso=con_aviso, descripcion=d["descripcion"], estado=estado, texto=texto,
+                color=d.get("color") if d.get("color") in COLORES_NOTA else "amarillo", fijada=bool(d.get("fijada")), hecho=bool(d["hecho"]),
+                autor=d.get("autor") or "", creado=core.fmt_fecha(d["creado"], True) if d.get("creado") else "",
+                editado=core.fmt_fecha(d["editado"], True) if d.get("editado") else "", editado_por=d.get("editado_por") or "",
+                hecho_fecha=core.fmt_fecha(d["hecho_fecha"], True) if d.get("hecho_fecha") else "", hecho_por=d.get("hecho_por") or "")
+
+
 @app.route("/recordatorios")
+@app.route("/notas")
 @login_requerido
 @modulo_requerido("recordatorios")
 def recordatorios():
     filtro = request.args.get("ver", "pendientes")
-    sql = "SELECT * FROM recordatorios"
-    sql += {"pendientes": " WHERE hecho=0 ORDER BY fecha_hora ASC", "hechos": " WHERE hecho=1 ORDER BY fecha_hora DESC"}.get(
-        filtro, " ORDER BY hecho ASC, fecha_hora ASC")
+    q = " ".join((request.args.get("q") or "").split())
+    where, par = [], []
+    where.append({"pendientes": "hecho=0", "aviso": "hecho=0 AND con_aviso=1 AND fecha_hora<>''", "hechas": "hecho=1", "hechos": "hecho=1"}.get(filtro, "1=1"))
+    for w in q.split()[:4]:
+        where.append("(descripcion LIKE ? OR IFNULL(autor,'') LIKE ? OR IFNULL(hecho_por,'') LIKE ?)")
+        par += [f"%{w}%"] * 3
+    orden = "hecho_fecha DESC, id DESC" if filtro in ("hechas", "hechos") else \
+        "hecho ASC, fijada DESC, (con_aviso=1 AND fecha_hora<>'') DESC, CASE WHEN con_aviso=1 AND fecha_hora<>'' THEN fecha_hora END ASC, id DESC"
     with db() as con:
-        filas = con.execute(sql).fetchall()
-    items = []
-    for f in filas:
-        estado, texto = core.clasificar_recordatorio(f["fecha_hora"], f["hecho"])
-        items.append(dict(id=f["id"], fecha_hora=f["fecha_hora"], descripcion=f["descripcion"], estado=estado, texto=texto))
+        filas = con.execute(f"SELECT * FROM recordatorios WHERE {' AND '.join(where)} ORDER BY {orden}", par).fetchall()
+        cuentas = {r[0]: r[1] for r in con.execute("SELECT 'p', COUNT(*) FROM recordatorios WHERE hecho=0 UNION ALL SELECT 'h', COUNT(*) FROM recordatorios WHERE hecho=1")}
     base = core.ahora_dt()
-    return render_template("recordatorios.html", items=items, filtro=filtro,
+    return render_template("recordatorios.html", items=[_nota_dict(f) for f in filas], filtro=filtro, q=q, cuentas=cuentas, tecnicos=lista_tecnicos(), colores=COLORES_NOTA,
                            hoy=base.strftime("%Y-%m-%d"), hora_defecto=(base.replace(minute=0, second=0) + __import__("datetime").timedelta(hours=1)).strftime("%H:%M"))
 
 
@@ -1208,17 +1230,25 @@ def recordatorios():
 @modulo_requerido("recordatorios")
 def api_recordatorio_guardar():
     d = request.get_json(force=True, silent=True) or {}
-    desc = U(d.get("descripcion"))
-    fh = _fecha_hora(d)
+    desc = (d.get("descripcion") or "").strip()
+    desc = U(desc) if desc else ""
+    con_aviso = bool(d.get("con_aviso", True))
+    fh = _fecha_hora(d) if con_aviso else ""
+    color = d.get("color") if d.get("color") in COLORES_NOTA else "amarillo"
     if not desc:
-        return error("Escribí la descripción del recordatorio.")
-    if not fh:
-        return error("Fecha u hora inválida.")
+        return error("Escribí la nota.")
+    if con_aviso and not fh:
+        return error("Fecha u hora inválida (o sacá el aviso).")
     with db() as con:
+        quien = asegurar_tecnico(con, d.get("autor"))
+        if usa_tecnicos() and not quien:
+            return error("Elegí o escribí quién escribe la nota.")
         if d.get("id"):
-            con.execute("UPDATE recordatorios SET fecha_hora=?, descripcion=?, avisado=0 WHERE id=?", (fh, desc, d["id"]))
+            con.execute("UPDATE recordatorios SET fecha_hora=?, con_aviso=?, descripcion=?, color=?, avisado=0, ultimo_aviso=NULL, editado=?, editado_por=? WHERE id=?",
+                        (fh, 1 if con_aviso else 0, desc, color, core.ahora(), quien, d["id"]))
         else:
-            con.execute("INSERT INTO recordatorios (fecha_hora, descripcion, creado) VALUES (?,?,?)", (fh, desc, core.ahora()))
+            con.execute("INSERT INTO recordatorios (fecha_hora, con_aviso, descripcion, color, creado, autor) VALUES (?,?,?,?,?,?)",
+                        (fh, 1 if con_aviso else 0, desc, color, core.ahora(), quien))
     return jsonify(ok=True)
 
 
@@ -1227,14 +1257,23 @@ def api_recordatorio_guardar():
 @modulo_requerido("recordatorios")
 def api_recordatorio_accion(rid, accion):
     from datetime import timedelta
+    d = request.get_json(force=True, silent=True) or {}
     with db() as con:
+        quien = asegurar_tecnico(con, d.get("tecnico"))
+        fila = con.execute("SELECT hecho FROM recordatorios WHERE id=?", (rid,)).fetchone()
+        if not fila:
+            return error("No existe la nota.", 404)
         if accion == "alternar":
-            con.execute("UPDATE recordatorios SET hecho = 1 - hecho WHERE id=?", (rid,))
-        elif accion == "hecho":
-            con.execute("UPDATE recordatorios SET hecho=1 WHERE id=?", (rid,))
+            accion = "reabrir" if fila["hecho"] else "hecho"
+        if accion == "hecho":
+            con.execute("UPDATE recordatorios SET hecho=1, hecho_fecha=?, hecho_por=? WHERE id=?", (core.ahora(), quien, rid))
+        elif accion == "reabrir":
+            con.execute("UPDATE recordatorios SET hecho=0, hecho_fecha=NULL, hecho_por=NULL, avisado=0, ultimo_aviso=NULL WHERE id=?", (rid,))
         elif accion == "posponer":
             nuevo = (core.ahora_dt() + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M")
-            con.execute("UPDATE recordatorios SET fecha_hora=?, avisado=0 WHERE id=?", (nuevo, rid))
+            con.execute("UPDATE recordatorios SET fecha_hora=?, con_aviso=1, avisado=0 WHERE id=?", (nuevo, rid))
+        elif accion == "fijar":
+            con.execute("UPDATE recordatorios SET fijada = 1 - fijada WHERE id=?", (rid,))
         elif accion == "eliminar":
             con.execute("DELETE FROM recordatorios WHERE id=?", (rid,))
         else:
@@ -1252,7 +1291,7 @@ def api_recordatorios_avisos():
     ahora_txt = ahora.strftime("%Y-%m-%d %H:%M")
     rep = core.repetir_recordatorios(g.cuenta["id"])
     with db() as con:
-        sql = "SELECT id, fecha_hora, descripcion FROM recordatorios WHERE hecho=0 AND fecha_hora<=? AND (avisado=0"
+        sql = "SELECT id, fecha_hora, descripcion FROM recordatorios WHERE hecho=0 AND con_aviso=1 AND fecha_hora<>'' AND fecha_hora<=? AND (avisado=0"
         args = [ahora_txt]
         if rep:       # además, los ya avisados cuyo último aviso fue hace más que el intervalo
             sql += " OR ultimo_aviso IS NULL OR ultimo_aviso<=?"
@@ -1260,7 +1299,7 @@ def api_recordatorios_avisos():
         vencidos = con.execute(sql + ") ORDER BY fecha_hora LIMIT 3", args).fetchall()
         for f in vencidos:
             con.execute("UPDATE recordatorios SET avisado=1, ultimo_aviso=? WHERE id=?", (ahora_txt, f["id"]))
-        pendientes = con.execute("SELECT COUNT(*) FROM recordatorios WHERE hecho=0 AND fecha_hora<=?",
+        pendientes = con.execute("SELECT COUNT(*) FROM recordatorios WHERE hecho=0 AND con_aviso=1 AND fecha_hora<>'' AND fecha_hora<=?",
                                  (ahora_txt[:10] + " 23:59",)).fetchone()[0]
     return jsonify(ok=True, pendientes=pendientes, repetir=rep, avisos=[
         dict(id=f["id"], cuando=core.clasificar_recordatorio(f["fecha_hora"])[1].replace("VENCIDO · ", ""), descripcion=f["descripcion"])
@@ -1277,7 +1316,7 @@ def configuracion_recordatorios():
         m = 60
     m = m if m in (0, 15, 30, 60, 120, 180, 240) else 60
     core.guardar_config(g.cuenta["id"], "rec_repetir_min", m)
-    flash("Configuración de recordatorios guardada.", "ok")
+    flash("Configuración de notas guardada.", "ok")
     return redirect(url_for("configuracion") + "#recordatorios")
 
 

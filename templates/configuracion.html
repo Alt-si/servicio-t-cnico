@@ -167,7 +167,13 @@ async function tecBorrar(id, nombre, usos) {
 
 {% if 'respaldo' in modulos %}<div class="card"><h1>Respaldo de datos</h1>
   <p class="mut">Descargá una copia de toda tu información (clientes, equipos, órdenes e historial). Guardala en un lugar seguro.</p>
-  <p><a class="btn pri" href="{{ url_for('respaldo') }}">Respaldar base de datos</a></p>
+  <p><a class="btn pri" id="rs-ahora" href="{{ url_for('respaldo') }}">Respaldar base de datos</a></p>
+  <div id="rs-carp" style="display:none;margin:10px 0;padding:10px 12px;border:1px solid var(--bd);border-radius:8px">
+    <b>Ubicación de los respaldos</b>
+    <p class="mut" style="margin:4px 0 8px">Elegí la carpeta de <u>este equipo</u> (disco, pendrive, Drive/OneDrive sincronizado…) donde querés que se guarden. Se recuerda en este navegador; el sistema te puede pedir permiso al guardar.</p>
+    <div class="row" style="gap:8px;align-items:center"><span id="rs-nom" class="mut">Sin carpeta elegida (se descarga a la carpeta Descargas).</span>
+      <button type="button" class="btn" id="rs-elegir">Elegir carpeta…</button><button type="button" class="btn" id="rs-quitar" style="display:none">Quitar</button></div></div>
+  <p id="rs-nosop" class="mut" style="display:none">Para elegir la carpeta usá Chrome o Edge en la computadora. En este navegador los respaldos se descargan a la carpeta Descargas.</p>
   <p class="mut">Cada 30 días el sistema prepara un respaldo automático y te ofrece guardarlo en tu equipo (archivo <b>RspSERv</b>).
   {% if ult_resp %}Último respaldo mensual: <b>{{ ult_resp[8:10] }}/{{ ult_resp[5:7] }}/{{ ult_resp[:4] }}</b>{% if ult_resp_accion %} ({{ 'guardado en el equipo' if ult_resp_accion=='guardado' else 'no se guardó el archivo' }}){% endif %}.{% endif %}</p>
   <hr style="border:0;border-top:1px solid var(--bd);margin:16px 0">
@@ -202,4 +208,16 @@ document.getElementById('c-ok').onclick=async()=>{
 document.getElementById('k-ok').onclick=async()=>{
   const j=await api('/api/cuenta/clave',{actual:$('#k-act').value,nueva:$('#k-nue').value,repetir:$('#k-rep').value});
   if(j.ok){msg('e-cl','Clave cambiada.',1);['k-act','k-nue','k-rep'].forEach(i=>$('#'+i).value='')}else msg('e-cl',j.error)};
-</script>{% endblock %}
+</script>{% if 'respaldo' in modulos %}<script>
+(async()=>{
+  if(!RespCarpeta.soportado()){document.getElementById('rs-nosop').style.display='block';return}
+  const caja=document.getElementById('rs-carp'),nom=document.getElementById('rs-nom'),q=document.getElementById('rs-quitar'); caja.style.display='block';
+  const pintar=async()=>{const h=await RespCarpeta.leer(); nom.innerHTML=h?'Carpeta: <b>'+esc(h.name)+'</b>':'Sin carpeta elegida (se descarga a la carpeta Descargas).'; q.style.display=h?'':'none'};
+  document.getElementById('rs-elegir').onclick=async()=>{try{await RespCarpeta.elegir()}catch(e){return} pintar()};
+  q.onclick=async()=>{await RespCarpeta.quitar(); pintar()};
+  document.getElementById('rs-ahora').onclick=async(e)=>{ if(!await RespCarpeta.leer()) return; e.preventDefault();
+    const n=await RespCarpeta.guardar(); if(n) aviso('Respaldo guardado en la carpeta elegida ('+n+').'); else {aviso('No se pudo guardar en la carpeta. Se descarga normalmente.'); location.href=e.target.href}};
+  pintar();
+})();
+</script>{% endif %}
+{% endblock %}

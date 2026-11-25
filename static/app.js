@@ -199,6 +199,27 @@ document.addEventListener('input', e => {
   }
 })();
 
+// ----- Carpeta de respaldos elegida por el usuario (File System Access API: Chrome / Edge). Se recuerda en este navegador.
+const RespCarpeta = {
+  soportado: () => !!window.showDirectoryPicker,
+  _db() { return new Promise((ok, no) => { const r = indexedDB.open('respaldos', 1); r.onupgradeneeded = () => r.result.createObjectStore('c'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); }); },
+  async _op(modo, f) { const db = await this._db(); return new Promise((ok, no) => { const t = db.transaction('c', modo), r = f(t.objectStore('c')); t.oncomplete = () => ok(r.result); t.onerror = () => no(t.error); }); },
+  async leer() { try { return await this._op('readonly', s => s.get('dir' + window.CUENTA_ID)); } catch (e) { return null; } },
+  async elegir() { const h = await window.showDirectoryPicker({mode: 'readwrite', id: 'respaldos'}); await this._op('readwrite', s => s.put(h, 'dir' + window.CUENTA_ID)); return h; },
+  async quitar() { try { await this._op('readwrite', s => s.delete('dir' + window.CUENTA_ID)); } catch (e) {} },
+  // Guarda el respaldo en la carpeta elegida. Devuelve true si lo pudo guardar, false si hay que descargar normalmente.
+  async guardar() {
+    try {
+      const h = await this.leer(); if (!h) return false;
+      if ((await h.queryPermission({mode: 'readwrite'})) !== 'granted' && (await h.requestPermission({mode: 'readwrite'})) !== 'granted') return false;
+      const r = await fetch('/configuracion/respaldo'); if (!r.ok) return false;
+      const m = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || ''), nombre = m ? m[1] : 'RspSERv.zip';
+      const f = await h.getFileHandle(nombre, {create: true}), w = await f.createWritable(); await w.write(await r.blob()); await w.close();
+      return nombre;
+    } catch (e) { return false; }
+  }
+};
+
 // ----- Respaldo automático cada 30 días: se ofrece al entrar (o en el primer ingreso después de la fecha)
 async function revisarRespaldo() {
   if (!window.HAY_SESION || !window.HAY_RESP) return;
@@ -208,10 +229,18 @@ async function revisarRespaldo() {
     if ($('#modal').classList.contains('abierto')) return setTimeout(mostrar, 5000);
     const c = modal(`<h2>Respaldo mensual</h2>
       <p>Corresponde el respaldo de seguridad de tu información (clientes, equipos y órdenes). Ya se preparó una copia en el servidor.</p>
-      <p>Guardalo también en este equipo con el nombre <b>${esc(j.nombre)}</b>.</p>
+      <p>Guardalo también en este equipo con el nombre <b>${esc(j.nombre)}</b>${RespCarpeta.soportado() ? ' (en la carpeta que elegiste en Configuración, si hay una)' : ''}.</p>
       <p class="mut">Guardar el archivo o no es responsabilidad del usuario.</p>
       <div class="row" style="margin-top:12px"><a class="btn pri" id="rs-g" href="/configuracion/respaldo" download>Guardar respaldo en mi equipo</a><button class="btn" id="rs-n">No guardar</button></div>`);
-    $('#rs-g', c).onclick = async () => { await api('/api/respaldo/confirmar', {accion: 'guardado'}); setTimeout(cerrar, 400); };
+    $('#rs-g', c).onclick = async (e) => {
+      const h = RespCarpeta.soportado() ? await RespCarpeta.leer() : null;
+      if (h) {                                   // hay carpeta elegida: se guarda ahí directamente
+        e.preventDefault(); const n = await RespCarpeta.guardar();
+        if (n) { await api('/api/respaldo/confirmar', {accion: 'guardado'}); cerrar(); return aviso(`Respaldo guardado en la carpeta "${h.name}" (${n}).`); }
+        aviso('No se pudo guardar en la carpeta elegida. Se descarga normalmente.'); location.href = '/configuracion/respaldo';
+      }
+      await api('/api/respaldo/confirmar', {accion: 'guardado'}); setTimeout(cerrar, 400);
+    };
     $('#rs-n', c).onclick = async () => {
       if (!await confirmar('Si no guardás el archivo, tu información queda solo en el servidor. Es tu responsabilidad. ¿No guardar?')) return mostrar();
       await api('/api/respaldo/confirmar', {accion: 'omitido'}); cerrar();
